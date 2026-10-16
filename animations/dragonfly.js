@@ -30,7 +30,7 @@ const TONES = ['#060504', '#0a0807', '#0f0d0b', '#15120f', '#1c1814', '#24201b',
 const FILM = [0.06, 0.09, 0.13, 0.18, 0.24, 0.31, 0.39, 0.48].map((alpha) => `rgba(20,16,12,${alpha})`);
 const PALETTE = TONES.concat(FILM);
 const SEAM = '#2b2620'; // between the shell's triangles
-const SHELL = 0, VEIN = 1, MEMBRANE = 2;
+const SHELL = 0, VEIN = 1, MEMBRANE = 2, EYE = 3; // kinds of triangle
 
 // ---------------------------------------------------------------------------
 // The model. Units: about 100 from head to tail. +y points to the head, +x to
@@ -67,7 +67,7 @@ function girth(u) {
 
 // Body parts, drawn in `layer` order from the back (0) to the front.
 function bodyParts() {
-  const eye = (x) => ({ group: x < 0 ? 'eyeL' : 'eyeR', layer: 5, surface: ellipsoid([x * 3.0, 13.9, 2.2], [x * 0.8, 0.3, 0.52], [0, 0, 1], [5.2, 5.2, 4.9]) });
+  const eye = (x) => ({ group: x < 0 ? 'eyeL' : 'eyeR', layer: 5, kind: EYE, surface: ellipsoid([x * 3.0, 13.9, 2.2], [x * 0.8, 0.3, 0.52], [0, 0, 1], [5.2, 5.2, 4.9]) });
   return [
     { group: 'abdomen', layer: 0, surface: tube(spine, girth, 0.94) },
     { group: 'thorax', layer: 3, surface: ellipsoid([0, -0.4, 0.6], [0, 1, 0], [1, 0, 0], [8.4, 6.0, 5.4]) },
@@ -255,7 +255,7 @@ export function mountDragonfly(el, options = {}) {
           if (j === index || parts[j].layer < part.layer) continue;
           if (parts[j].surface.inside(p, parts[j].layer === part.layer ? a * 0.45 : 0)) return;
         }
-        items.push({ p, e1, e2, n: nrm, kind: SHELL, rig: 0, layer: part.layer, group: part.group });
+        items.push({ p, e1, e2, n: nrm, kind: part.kind ?? SHELL, rig: 0, layer: part.layer, group: part.group });
       });
     });
     for (const line of claspers()) {
@@ -306,7 +306,7 @@ export function mountDragonfly(el, options = {}) {
         const d = sub(t.p, best.c), u = dot(d, best.S), v = dot(d, best.C), l = Math.hypot(u, v) || 1;
         start = add(best.c, add(scaled(best.S, (u / l) * best.r), scaled(best.C, (v / l) * best.r)));
       } else start = add(best.c, scaled(unit(sub(t.p, best.c)), best.r * 0.8));
-      const jitter = t.kind === SHELL ? 0.18 : t.kind === VEIN ? 0.3 : 0.5;
+      const jitter = [0.18, 0.3, 0.5, 0.1][t.kind];
       const ns = unit(add(t.n, scaled(unit([rand() - 0.5, rand() - 0.5, rand() - 0.5]), jitter * rand())));
       tri.p.set(t.p, i * 3); tri.e1.set(t.e1, i * 3); tri.e2.set(t.e2, i * 3); tri.ng.set(t.n, i * 3); tri.ns.set(ns, i * 3);
       tri.s.set(start, i * 3);
@@ -433,8 +433,9 @@ export function mountDragonfly(el, options = {}) {
       let sy = M[k9 + 3] * nx + M[k9 + 4] * ny + M[k9 + 5] * nz;
       let sz = M[k9 + 6] * nx + M[k9 + 7] * ny + M[k9 + 8] * nz;
       // A settled facet of the shell that faces away is hidden.
-      if (kind === SHELL && u >= 1 && ax * by - ay * bx < -0.08) continue;
-      if (kind !== SHELL && sz < 0) {
+      const solid = kind === SHELL || kind === EYE;
+      if (solid && u >= 1 && ax * by - ay * bx < -0.08) continue;
+      if (!solid && sz < 0) {
         sx = -sx; sy = -sy; sz = -sz;
       }
       const l = Math.hypot(sx, sy, sz) || 1;
@@ -451,7 +452,7 @@ export function mountDragonfly(el, options = {}) {
       // In the sharpen style, triangles arrive as round dots and only then sharpen.
       const round = style.sharpen && u < 1 ? 1 - smooth(clamp((u - 0.55) / 0.45, 0, 1)) : 0;
       roundedTriangle(p, corner, round);
-      if (kind === SHELL && u >= 1) {
+      if (solid && u >= 1) {
         const mx = (corner[0] + corner[2] + corner[4]) / 3, my = (corner[1] + corner[3] + corner[5]) / 3;
         for (let v = 0; v < 6; v += 2) {
           corner[v] = mx + (corner[v] - mx) * grow;
@@ -565,12 +566,13 @@ export function mountDragonfly(el, options = {}) {
 }
 
 // How bright a facet looks: a little diffuse light and a sharp gloss for the
-// shell and veins, a faint sheen for the membrane. Returns a PALETTE index.
+// shell and veins, a glassy glint for the eyes and a faint sheen for the
+// membrane. Returns a PALETTE index.
 function shade(nx, ny, nz, kind, bias = 0) {
   const d = Math.max(0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]);
   const h = Math.max(0, nx * HALF[0] + ny * HALF[1] + nz * HALF[2]);
   if (kind === MEMBRANE) return TONES.length + clamp(Math.floor(h ** 6 * 3) + bias, 0, FILM.length - 1);
-  const gloss = kind === SHELL ? 0.9 * h ** 30 : 0.55 * h ** 18;
+  const gloss = kind === SHELL ? 0.9 * h ** 30 : kind === EYE ? 1.1 * h ** 70 + 0.25 * h ** 6 : 0.55 * h ** 18;
   const I = 0.01 + 0.12 * d + gloss;
   return clamp(Math.round(I * (TONES.length - 1)) + bias, 0, TONES.length - 1);
 }
