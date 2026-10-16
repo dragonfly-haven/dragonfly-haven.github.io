@@ -21,52 +21,31 @@
 </head>
 <body>
   <h1>Dragonfly</h1>
-  <nav id="styles"></nav>
-  <p class="note" id="about"></p>
+  <nav><a href="index.html">all animations</a></nav>
+  <p class="note">A deep black dragonfly in tiny dashes, seen a little from the side, that beats its wings and does nothing else.</p>
 
   <h2>At site sizes</h2>
   <div class="sizes" id="sizes"></div>
 
-  <h2>Three ways to do the wings</h2>
-  <div class="sizes" id="wings"></div>
-
-  <div class="controls" style="justify-content: flex-start; margin-top: 2rem">
-    <button id="soften">Make round</button>
-    <button id="sharpen">Make sharp</button>
-  </div>
+  <h2>Close up</h2>
+  <div class="sizes" id="large"></div>
 
   <script type="module">
-    import { mountDragonfly, DRAGONFLY_STYLES } from './dragonfly.js';
+    import { mountDragonfly } from './dragonfly.js';
 
     const params = new URLSearchParams(location.search);
-    const style = params.get('style') || 'crystallise';
-    document.getElementById('styles').innerHTML = Object.keys(DRAGONFLY_STYLES)
-      .map((s) => `<a href="?style=${s}"${s === style ? ' aria-current="page"' : ''}>${s}</a>`)
-      .join('') + '<a href="index.html">all options</a>';
-    document.getElementById('about').textContent = {
-      crystallise: 'Glossy beads and round cells crack into triangles in a wave from the body outwards, once. Hover over a dragonfly to soften it again.',
-      shatter: 'Glossy beads and round cells burst into triangles that swirl into place, then melt back now and then. Hover to soften it.',
-      sharpen: 'Glossy beads and round cells break into round dots that drift into place and then sharpen into triangles, now and then reversing. Hover to soften it.',
-    }[style];
-
-    const flies = [];
-    const add = (row, px, label, options = {}) => {
+    const add = (row, px, label) => {
       const figure = document.createElement('figure');
       figure.innerHTML = `<div style="width:${px}px"></div><figcaption><strong>${label}</strong></figcaption>`;
       document.getElementById(row).append(figure);
-      const fly = mountDragonfly(figure.querySelector('div'), { style, ...options });
+      const fly = mountDragonfly(figure.querySelector('div'));
       if (params.has('t')) fly.advance(Number(params.get('t')));
-      flies.push(fly);
     };
     add('sizes', 88, '88 px, smallest on the site');
     add('sizes', 150, '150 px, largest on the site today');
     add('sizes', 200, '200 px');
     add('sizes', 240, '240 px');
-    add('wings', 240, 'A. Open lace', { cell: 4.2 });
-    add('wings', 240, 'B. Fine lace', { cell: 3.2 });
-    add('wings', 240, 'C. Smoky', { cell: 3.2, film: 1.4 });
-    document.getElementById('soften').onclick = () => flies.forEach((f) => f.soften());
-    document.getElementById('sharpen').onclick = () => flies.forEach((f) => f.sharpen());
+    add('large', 480, '480 px');
   </script>
 </body>
 </html>
