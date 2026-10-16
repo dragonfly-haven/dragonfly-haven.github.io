@@ -193,7 +193,7 @@ export function mountDragonfly(el, options = {}) {
   let P = calm ? 1 : 0, goal = 1, wait = o.delay, clock = 0, hovered = false;
   // Now and then the wings beat a few times, as if to hold position.
   const flutter = random(o.seed + 17);
-  let burst = 5 + flutter() * 4, odd = false;
+  let burst = 5 + flutter() * 4, odd = false, fresh = true;
 
   // Per-frame rig transforms, model to camera: 0 is the body, 1 to 4 the wings.
   const rigM = new Float32Array(5 * 9), rigT = new Float32Array(5 * 3);
@@ -235,6 +235,7 @@ export function mountDragonfly(el, options = {}) {
     oy = view.height / 2 + ((y0 + y1) / 2) * scale;
     side = triangleSize(view.ratio) / scale; // a triangle's side in model units
     sample();
+    fresh = true;
   }
 
   // Tiles the body and wings with triangles, and gives each one a place to
@@ -322,28 +323,33 @@ export function mountDragonfly(el, options = {}) {
 
   function tick(dt, render = true) {
     if (!tri) return;
+    // Without motion it is drawn once, and again only after a resize.
+    if (calm) {
+      if (render && fresh) {
+        draw();
+        fresh = false;
+      }
+      return;
+    }
     clock += dt;
     // While it only hovers, every other frame is enough.
-    const settled = P === goal && wait <= 0 && clock < burst - 0.1;
-    if (settled && (odd = !odd)) render = false;
-    if (!calm) {
-      if (hovered) {
+    if (P === goal && wait <= 0 && clock < burst - 0.1 && (odd = !odd)) render = false;
+    if (hovered) {
+      goal = 0;
+      wait = 0;
+    } else if (wait > 0) wait -= dt;
+    else if (P === goal) {
+      if (goal === 0) {
+        goal = 1;
+        wait = 1.6;
+      } else if (loops) {
         goal = 0;
-        wait = 0;
-      } else if (wait > 0) wait -= dt;
-      else if (P === goal) {
-        if (goal === 0) {
-          goal = 1;
-          wait = 1.6;
-        } else if (loops) {
-          goal = 0;
-          wait = 6;
-        }
+        wait = 6;
       }
-      if (wait <= 0 && P !== goal) {
-        const step = dt / o.duration;
-        P = goal > P ? Math.min(goal, P + step) : Math.max(goal, P - step);
-      }
+    }
+    if (wait <= 0 && P !== goal) {
+      const step = dt / o.duration;
+      P = goal > P ? Math.min(goal, P + step) : Math.max(goal, P - step);
     }
     if (render) draw();
   }
