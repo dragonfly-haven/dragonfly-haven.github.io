@@ -21,9 +21,10 @@ const LIGHT = unit([-0.45, 0.6, 0.66]);
 const HALF = unit([LIGHT[0], LIGHT[1], LIGHT[2] + 1]);
 
 // Wing beats: beats a second; swing either side of the middle (radians) for
-// the hind and fore wings; how far above flat the middle is; and how far the
-// forewings lag the hindwings, as a share of a beat.
-const BEAT = 1.5, SWING = [0.5, 0.44], RAISE = 0.1, LAG = 0.25;
+// the hind and fore wings; how far above flat the middle is; how far the
+// forewings lag the hindwings, as a share of a beat; and how far each wing
+// twists about its span, leading edge down on the way down and up on the way up.
+const BEAT = 1.5, SWING = [0.5, 0.44], RAISE = 0.1, LAG = 0.25, TWIST = 0.3;
 
 // ---------------------------------------------------------------------------
 // The model. Units: about 100 from head to tail. +y points to the head, +x to
@@ -167,7 +168,7 @@ function wingFrame({ spec, side }) {
   let N = cross(S, C);
   if (N[2] < 0) N = scaled(N, -1);
   const root = [side * spec.root[0], spec.root[1], spec.root[2]];
-  return { root, S, C, N, hinge: unit(cross(S, N)) };
+  return { root, side, S, C, N, hinge: unit(cross(S, N)) };
 }
 
 // ---------------------------------------------------------------------------
@@ -223,9 +224,10 @@ export function mountDragonfly(el, options = {}) {
     return [ox + x * k, oy - y * k];
   }
 
-  // A wing's rotation and shift, model to camera, swung `angle` about its hinge.
-  function rig(i, angle) {
-    const f = frames[i], R = axisAngle(f.hinge, angle);
+  // A wing's rotation and shift, model to camera: twisted `twist` about its
+  // span, then swung `angle` about its hinge.
+  function rig(i, angle, twist = 0) {
+    const f = frames[i], R = mul(axisAngle(f.hinge, angle), axisAngle(f.S, twist * -f.side));
     return [mul(G, R), apply(G, sub(f.root, apply(R, f.root)))];
   }
 
@@ -309,8 +311,8 @@ export function mountDragonfly(el, options = {}) {
     // seen edge on would clot into a black blade, so it fades as it turns away.
     const near = [], far = [];
     WINGS.forEach((w, i) => {
-      const beat = calm ? 0 : Math.sin(TAU * (BEAT * clock - (w.pair ? LAG : 0)));
-      const [M, T] = rig(i, RAISE + SWING[w.pair] * beat);
+      const phase = TAU * (BEAT * clock - (w.pair ? LAG : 0));
+      const [M, T] = calm ? rig(i, RAISE) : rig(i, RAISE + SWING[w.pair] * Math.sin(phase), TWIST * Math.cos(phase));
       const N = frames[i].N, facing = Math.abs(M[6] * N[0] + M[7] * N[1] + M[8] * N[2]);
       const path = new Path2D();
       const { p, d } = wings[i];
