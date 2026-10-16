@@ -29,7 +29,6 @@ const TONES = ['#060504', '#0a0807', '#0f0d0b', '#15120f', '#1c1814', '#24201b',
 // The wing membrane, a faint warm film.
 const FILM = [0.06, 0.09, 0.13, 0.18, 0.24, 0.31, 0.39, 0.48].map((alpha) => `rgba(20,16,12,${alpha})`);
 const PALETTE = TONES.concat(FILM);
-const SEAM = '#2b2620'; // between the shell's triangles
 const SHELL = 0, VEIN = 1, MEMBRANE = 2, EYE = 3; // kinds of triangle
 
 // ---------------------------------------------------------------------------
@@ -132,7 +131,7 @@ const FOREWING = {
     { rank: 3, long: true, pts: SUBCOSTA },
     { rank: 3, long: true, pts: [[0.3, 0.55], [0.4, 0.7], [0.5, 0.86], [0.55, 0.99]] },
   ],
-  stigma: [[0.8, 0.012], [0.875, 0.02], [0.872, 0.095], [0.797, 0.088]],
+  stigma: [[0.785, 0.01], [0.885, 0.022], [0.882, 0.115], [0.782, 0.105]],
 };
 
 const HINDWING = {
@@ -152,7 +151,7 @@ const HINDWING = {
     { rank: 3, pts: [[0.06, 0.72], [0.13, 0.78], [0.18, 0.92], [0.12, 1.02], [0.07, 0.95], [0.06, 0.72]] }, // anal loop
     { rank: 3, long: true, pts: SUBCOSTA },
   ],
-  stigma: [[0.8, 0.012], [0.87, 0.02], [0.868, 0.09], [0.797, 0.084]],
+  stigma: [[0.785, 0.01], [0.88, 0.022], [0.877, 0.11], [0.782, 0.1]],
 };
 
 // The four wings: which spec, which side, which rig (for flapping) and layer.
@@ -382,9 +381,6 @@ export function mountDragonfly(el, options = {}) {
     const R = side / SQRT3; // a triangle's circumradius, in model units
     const paths = Array.from({ length: 6 }, () => []);
     const path = (layer, tone) => paths[layer][tone] || (paths[layer][tone] = new Path2D());
-    // Settled shell triangles sit on a slightly larger dark copy of themselves, so
-    // the seams between them read as fine dark lines and the body stays deep black.
-    const under = Array.from({ length: 6 }, () => new Path2D()), grow = PITCH * 1.04;
     const f = 3 / 100, z = clock * 0.2;
     const q = [0, 0, 0, 0], E1 = [0, 0, 0], E2 = [0, 0, 0], NS = [0, 0, 0], corner = new Float64Array(6);
 
@@ -441,7 +437,9 @@ export function mountDragonfly(el, options = {}) {
       const l = Math.hypot(sx, sy, sz) || 1;
       const tone = shade(sx / l, sy / l, sz / l, kind, tri.bias[i]);
       const p = path(tri.layer[i], tone);
-      const r = R * size;
+      // The shell's triangles grow to close their seams as they settle, so the
+      // body reads as deep black glass and only its lit facets show.
+      const r = R * size * (solid ? 1 + (PITCH * 1.08 - 1) * clamp((u - 0.7) / 0.3, 0, 1) : 1);
       for (let v = 0; v < 3; v++) {
         const cs = v === 0 ? 1 : -0.5, sn = v === 0 ? 0 : v === 1 ? 0.8660254 : -0.8660254;
         const px = cx + (ax * cs + bx * sn) * r, py = cy + (ay * cs + by * sn) * r, pz = cz + (az * cs + bz * sn) * r;
@@ -452,20 +450,10 @@ export function mountDragonfly(el, options = {}) {
       // In the sharpen style, triangles arrive as round dots and only then sharpen.
       const round = style.sharpen && u < 1 ? 1 - smooth(clamp((u - 0.55) / 0.45, 0, 1)) : 0;
       roundedTriangle(p, corner, round);
-      if (solid && u >= 1) {
-        const mx = (corner[0] + corner[2] + corner[4]) / 3, my = (corner[1] + corner[3] + corner[5]) / 3;
-        for (let v = 0; v < 6; v += 2) {
-          corner[v] = mx + (corner[v] - mx) * grow;
-          corner[v + 1] = my + (corner[v + 1] - my) * grow;
-        }
-        roundedTriangle(under[tri.layer[i]], corner, 0);
-      }
     }
 
     for (let layer = 0; layer < 6; layer++) {
       drawRound(ctx, layer, span);
-      ctx.fillStyle = SEAM;
-      ctx.fill(under[layer]);
       const row = paths[layer];
       for (let t = 0; t < PALETTE.length; t++) {
         if (!row[t]) continue;
@@ -856,14 +844,15 @@ function wingTriangles(spec, a, { film, cell }, rand, emit) {
   // The root, where the wing joins the thorax.
   fill(outline.filter(([s]) => s < L * 0.05).concat([[L * 0.05, chordAt(trail, L * 0.05)], [L * 0.05, chordAt(lead, L * 0.05)]]));
 
-  // The membrane: a film of fainter triangles between the veins, `film` from 0 (clear) to 1 (smoky).
-  if (film > 0) {
-    const g = a * (2.2 - film * 0.9), row = g * 0.866;
-    for (let r = 0, c = -W * 0.1; c < W * 1.5; r++, c += row) {
-      for (let s = ((r & 1) * g) / 2; s < L; s += g) {
-        const ang = rand() * TAU;
-        put(s + (rand() - 0.5) * g * 0.4, c + (rand() - 0.5) * row * 0.4, Math.cos(ang), Math.sin(ang), MEMBRANE, Math.round(film * 4), a * 0.85);
-      }
+  // The membrane: a film of fainter triangles between the veins, `film` from 0
+  // (clear) to 1 (smoky), and always a little smoky towards the root.
+  const g = a * 1.3, row = g * 0.866;
+  for (let r = 0, c = -W * 0.1; c < W * 1.5; r++, c += row) {
+    for (let s = ((r & 1) * g) / 2; s < L; s += g) {
+      const smoke = Math.max(film, 1.2 * clamp(1 - s / (L * 0.16), 0, 1) ** 1.5);
+      if (rand() > smoke * 0.8) continue;
+      const ang = rand() * TAU;
+      put(s + (rand() - 0.5) * g * 0.4, c + (rand() - 0.5) * row * 0.4, Math.cos(ang), Math.sin(ang), MEMBRANE, Math.round(smoke * 4), a * 0.85);
     }
   }
 
