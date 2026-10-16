@@ -305,12 +305,14 @@ export function mountDragonfly(el, options = {}) {
     ctx.strokeStyle = INK;
     ctx.lineWidth = dash.width;
     ctx.lineCap = 'butt';
-    // Wings on the far side go behind the body, the near ones in front.
-    const near = new Path2D(), far = new Path2D();
+    // Wings on the far side go behind the body, the near ones in front. A wing
+    // seen edge on would clot into a black blade, so it fades as it turns away.
+    const near = [], far = [];
     WINGS.forEach((w, i) => {
       const beat = calm ? 0 : Math.sin(TAU * (BEAT * clock - (w.pair ? LAG : 0)));
       const [M, T] = rig(i, RAISE + SWING[w.pair] * beat);
-      const path = M[6] * w.side > 0 ? near : far; // its side faces us
+      const N = frames[i].N, facing = Math.abs(M[6] * N[0] + M[7] * N[1] + M[8] * N[2]);
+      const path = new Path2D();
       const { p, d } = wings[i];
       for (let j = 0; j < p.length; j += 3) {
         const a = project(M, T, [p[j] - d[j], p[j + 1] - d[j + 1], p[j + 2] - d[j + 2]]);
@@ -318,10 +320,18 @@ export function mountDragonfly(el, options = {}) {
         path.moveTo(a[0], a[1]);
         path.lineTo(b[0], b[1]);
       }
+      (M[6] * w.side > 0 ? near : far).push([path, 0.3 + 0.7 * smooth(clamp(facing / 0.45, 0, 1))]);
     });
-    ctx.stroke(far);
+    const wingsOf = (list) => {
+      for (const [path, alpha] of list) {
+        ctx.globalAlpha = alpha;
+        ctx.stroke(path);
+      }
+      ctx.globalAlpha = 1;
+    };
+    wingsOf(far);
     ctx.stroke(body);
-    ctx.stroke(near);
+    wingsOf(near);
   }
 
   return {
@@ -534,13 +544,14 @@ function wingDashes(spec, L, rand, emit) {
   for (const v of spec.veins.filter((vein) => vein.rank <= rank)) along(smoothPath(v.pts.map(([s, c]) => [s * length, c * W]), 6), v.rank ? [-L * 0.15, L * 0.15] : [-L * 0.3, 0, L * 0.3]);
   along(trail.slice().reverse(), [-L * 0.25, -L * 0.6]); // the trailing edge
 
-  // The membrane: dashes across the wing, the way its cross veins run.
+  // The membrane: dashes across the wing, the way its cross veins run, thinning
+  // out towards the root so the wing's base doesn't clot when seen edge on.
   const rowGap = L;
   for (let s = rowGap / 2; s < length; s += rowGap) {
     const c0 = chordAt(lead, s), c1 = chordAt(trail, s);
     if (c0 == null || c1 == null) continue;
-    const shift = rand() * L * 1.35;
-    for (let c = c0 + shift; c < c1; c += L * 1.35) put(s + (rand() - 0.5) * L * 0.2, c, 0, 1, L * 0.45);
+    const shift = rand() * L * 1.35, keep = smooth(clamp((s / length - 0.05) / 0.15, 0, 1));
+    for (let c = c0 + shift; c < c1; c += L * 1.35) if (rand() < keep) put(s + (rand() - 0.5) * L * 0.2, c, 0, 1, L * 0.45);
   }
 }
 
