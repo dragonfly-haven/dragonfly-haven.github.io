@@ -32,9 +32,12 @@
     const evolution = mountEvolution(document.getElementById('evolution'), {
       ...tune,
       start: Number(params.get('stage') || 1) - 1,
-      onStage: (i, title) => (label.textContent = `${i + 1}. ${title}`),
+      onStage: (i, title) => (label.textContent = title ? `${i + 1}. ${title}` : 'Drifting dust'),
     });
-    const show = () => (label.textContent = `${evolution.stage + 1}. ${evolution.titles[evolution.stage] ?? ''}`);
+    const show = () => {
+      const title = evolution.titles[evolution.stage];
+      label.textContent = title ? `${evolution.stage + 1}. ${title}` : 'Drifting dust';
+    };
     evolution.loaded.then(() => {
       show();
       if (params.has('t')) {

@@ -31,7 +31,7 @@ const MOTION = {
 
 const DEFAULTS = {
   motifs: new URL('./motifs/manifest.json', import.meta.url).href, // a manifest, or motifs already loaded
-  hold: 3.2, // seconds each drawing rests
+  hold: 3.4, // seconds each drawing rests
   move: 3.8, // seconds each change takes
   fit: 0.94, // share of the shorter side a drawing fills
   dash: null, // dash length in CSS px; by default as fine as the screen allows
@@ -40,6 +40,7 @@ const DEFAULTS = {
   gpu: true, // false draws on a 2D canvas, as where WebGL2 is missing
   seed: 1,
   onStage: null, // called with (index, title) as each drawing settles
+  dusk: 1.6, // seconds the last drawing rests as drifting dust before the first gathers again; 0 to skip
 };
 
 const STRIDE = 16; // floats per dash in a planned move, see sketch-gl.js
@@ -47,7 +48,7 @@ const CAP = 52000; // most dashes in one drawing; denser drawings get wider gaps
 const CROSSFADE = 1.5; // seconds, between drawings when reduced motion is preferred
 const GRID = 50; // cells across the stage, for keeping dust off the drawing
 
-// Loads the drawings a manifest lists, in order, as [{ title, slug, sketch }].
+// Loads the drawings a manifest lists, in order, as [{ title, slug, hold, sketch }].
 export async function loadMotifs(url = DEFAULTS.motifs) {
   const base = new URL(url, document.baseURI);
   const manifest = await (await fetch(base)).json();
@@ -57,7 +58,8 @@ export async function loadMotifs(url = DEFAULTS.motifs) {
   return Promise.all(list.map(async (m) => {
     const file = m.file || m.svg || m.src || `${String(m.order).padStart(2, '0')}-${m.slug}.svg`;
     const text = await (await fetch(new URL(file, base))).text();
-    return { title: m.title || m.slug, slug: m.slug, sketch: readSketch(text) };
+    // `hold` is how long the drawing rests, relative to the others
+    return { title: m.title || m.slug, slug: m.slug, hold: Number(m.hold) > 0 ? Number(m.hold) : 1, sketch: readSketch(text) };
   }));
 }
 
@@ -72,7 +74,7 @@ export function mountEvolution(el, options = {}) {
   let motifs = null;
   let frame = null; // sizes for the current canvas
   let queue = [], samples = new Map();
-  let N = 0, dust = 0, cur = null, seeds = null, data = null, job = null, ready = null;
+  let N = 0, dust = 0, cur = null, seeds = null, data = null, job = null, ready = null, swirl = 1;
   let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false, frames = 0;
 
   let gpu = null;
@@ -163,6 +165,7 @@ export function mountEvolution(el, options = {}) {
   // Lays out a drawing for all N dashes: its own, a halo of dust around it, and
   // any dashes left over hidden among its lines.
   function arrange(s, rnd) {
+    if (s === motifs.length) return scattered(rnd);
     const p = samples.get(s);
     const m = p.n, motes = Math.min(N - m, dust), out = layout(N), pool = p.dust.length / 2;
     for (let j = 0; j < N; j++) {
@@ -189,6 +192,22 @@ export function mountEvolution(el, options = {}) {
     return out;
   }
 
+  // Every dash as drifting dust, between the last drawing and the first.
+  function scattered(rnd) {
+    const out = layout(N);
+    for (let j = 0; j < N; j++) {
+      const [x, y] = galaxy(rnd);
+      out.x[j] = Math.hypot(x, y) * (1 + rnd() * 0.15);
+      out.y[j] = Math.atan2(y, x) - MOTION.spin * clock;
+      out.z[j] = 0.6;
+      out.w[j] = 1;
+      const star = rnd() < 0.04;
+      out.s[j] = star ? 1 + rnd() * 0.5 : 0.35 + rnd() * 0.45;
+      out.c[j] = star ? 7 : 4 + Math.floor(rnd() * 4);
+    }
+    return out;
+  }
+
   // Plans the move to drawing `s`, pairing every dash with a place in it.
   // A generator, so the work can be spread over the frames of a pause.
   function* planning(s) {
@@ -205,8 +224,10 @@ export function mountEvolution(el, options = {}) {
     }
     const d = new Float32Array(N * STRIDE);
     const after = layout(N); // where each dash rests once the move is done
+    let travel = 0;
     for (let i = 0; i < N; i++) {
       const j = match[i], at = i * STRIDE;
+      travel += Math.hypot(bx[j] - ax[i], by[j] - ay[i]);
       const sweep = cur.w[i] && next.w[j] ? rand() : ((ax[i] * dx + ay[i] * dy - lo) / (hi - lo || 1)) * 0.8 + rand() * 0.2;
       d[at] = cur.x[i]; d[at + 1] = cur.y[i]; d[at + 2] = cur.z[i]; d[at + 3] = cur.w[i];
       d[at + 4] = next.x[j]; d[at + 5] = next.y[j]; d[at + 6] = next.z[j]; d[at + 7] = next.w[j];
@@ -214,7 +235,9 @@ export function mountEvolution(el, options = {}) {
       d[at + 12] = MOTION.spread * sweep; d[at + 13] = seeds[i]; d[at + 14] = cur.a[i]; d[at + 15] = next.a[j];
       for (const key of 'xyzwsca') after[key][i] = next[key][j];
     }
-    return { stage: s, data: d, after };
+    // Drawings that rhyme barely move, so they melt into each other calmly;
+    // far-apart ones get the full swirl.
+    return { stage: s, data: d, after, swirl: clamp(travel / N / 32, 0.3, 1.1) };
   }
 
   // Works on a plan for up to `budget` ms; returns the move once it is ready.
@@ -239,6 +262,7 @@ export function mountEvolution(el, options = {}) {
     if (calm) return;
     data = move.data;
     cur = move.after;
+    swirl = move.swirl;
     if (gpu) gpu.load(data, N);
   }
 
@@ -255,15 +279,15 @@ export function mountEvolution(el, options = {}) {
       if (phase === 'move' && t >= (calm ? CROSSFADE : o.move)) {
         phase = 'hold';
         t = 0;
-        if (o.onStage) o.onStage(target, motifs[target].title);
+        if (o.onStage) o.onStage(target, motifs[target]?.title ?? '');
       } else if (phase === 'hold') {
-        const next = (target + 1) % motifs.length;
+        const next = following(target);
         if (!ready && !job) {
           if (calm) ready = { stage: next };
           else job = planning(next);
         }
         if (job) ready = work(5);
-        if (ready && t >= (calm ? 8 : o.hold)) {
+        if (ready && t >= (calm ? 8 : rest(target))) {
           begin(ready);
           ready = null;
         }
@@ -271,6 +295,21 @@ export function mountEvolution(el, options = {}) {
     }
     // While a drawing rests it moves slowly, so every other frame is enough.
     if (render && (phase !== 'hold' || (frames++ & 1) === 0)) draw();
+  }
+
+  // The stop after `s`: the next drawing, or after the last one a spell of
+  // drifting dust (stop motifs.length) from which the first gathers again.
+  function following(s) {
+    const M = motifs.length;
+    if (s >= M) return 0;
+    return s === M - 1 && o.dusk > 0 && !calm ? M : (s + 1) % M;
+  }
+
+  // How long stop `s` rests: the drawing's own share of the hold, or the dust's spell.
+  function rest(s) {
+    if (s >= motifs.length) return o.dusk;
+    const weight = Number(motifs[s].hold);
+    return o.hold * (weight > 0 ? weight : 1);
   }
 
   // The first move: from scattered, invisible dust into the first drawing.
@@ -302,7 +341,7 @@ export function mountEvolution(el, options = {}) {
       const f = phase === 'move' ? smooth(clamp(t / CROSSFADE, 0, 1)) : 1;
       return drawStatic(f < 1 ? [[samples.get(last), 1 - f], [samples.get(target), f]] : [[samples.get(target), 1]]);
     }
-    const progress = phase === 'move' ? t / o.move : phase === 'hold' ? 1 + t / o.hold : 0;
+    const progress = phase === 'move' ? t / o.move : phase === 'hold' ? 1 + t / rest(target) : 0;
     if (gpu) {
       gpu.draw(view, {
         u_progress: progress,
@@ -310,10 +349,10 @@ export function mountEvolution(el, options = {}) {
         u_clock: clock,
         u_step: 1 / 60,
         u_spread: MOTION.spread,
-        u_swirl: MOTION.swirl,
+        u_swirl: MOTION.swirl * swirl,
         u_breath: MOTION.breath,
         u_freq: MOTION.freq,
-        u_twist: MOTION.twist * (target % 2 ? 1 : -1),
+        u_twist: MOTION.twist * swirl * (target % 2 ? 1 : -1),
         u_spin: MOTION.spin,
         u_centre: [view.width / 2, view.height / 2],
         u_view: [view.width, view.height],
@@ -333,7 +372,7 @@ export function mountEvolution(el, options = {}) {
     ctx.clearRect(0, 0, width, height);
     if (!data) return;
     if (!cpu.x || cpu.x.length !== N) for (const key in cpu) cpu[key] = key === 'c' ? new Uint8Array(N) : new Float32Array(N);
-    const unit = frame.unit, cx = width / 2, cy = height / 2, twist = MOTION.twist * (target % 2 ? 1 : -1);
+    const unit = frame.unit, cx = width / 2, cy = height / 2, twist = MOTION.twist * swirl * (target % 2 ? 1 : -1);
     for (let i = 0; i < N; i++) {
       const d = i * STRIDE;
       const u = clamp(progress * (1 + MOTION.spread) - data[d + 12], 0, 1), e = smooth(u);
@@ -342,7 +381,7 @@ export function mountEvolution(el, options = {}) {
       place(data, d + 4, clock);
       let x = fx + (at[0] - fx) * e, y = fy + (at[1] - fy) * e;
       curl(noise, x * MOTION.freq, y * MOTION.freq, clock * 0.08, c2);
-      const flight = Math.sin(Math.PI * u), amp = MOTION.breath + MOTION.swirl * flight;
+      const flight = Math.sin(Math.PI * u), amp = MOTION.breath + MOTION.swirl * swirl * flight;
       x += c2[0] * amp;
       y += c2[1] * amp;
       const a = (twist * flight) / (1 + (x * x + y * y) / 3600);
