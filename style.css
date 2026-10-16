@@ -117,28 +117,35 @@ main {
   margin-top: 1em;
 }
 
-.lead {
-  font-size: 1.4rem;
-  line-height: 1.4;
-}
-
 .names {
-  margin-top: 2.5rem;
+  margin-top: 2rem;
   padding: 0;
   list-style: none;
   font-weight: 500;
 }
 
-.about a {
-  color: inherit;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.2em;
-  white-space: nowrap;
+.contact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-top: 2rem;
 }
 
-.about a:hover,
-.about a:focus-visible {
-  text-decoration-thickness: 2px;
+.mail {
+  padding: 0.3em 1em;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.mail:hover,
+.mail:focus-visible {
+  background: var(--ink);
+  color: var(--ivory);
 }
 
 @media (max-width: 760px) {
