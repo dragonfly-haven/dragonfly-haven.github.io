@@ -89,14 +89,14 @@ function limbs() {
   const legs = [
     // hip, knee, ankle, claw: the front pair reaches forward under the head,
     // the others fold back under the thorax
-    [[1.2, 7.6, -2.2], [2.2, 11.4, -4.4], [1.8, 8.4, -6.8], [1.9, 11.2, -7.6]],
-    [[1.6, 4.2, -4.8], [3.0, 7.0, -8.0], [2.6, 1.2, -9.6], [2.7, 3.4, -11.0]],
-    [[1.8, 1.0, -5.6], [3.4, 3.6, -9.4], [3.0, -3.6, -10.4], [3.1, -1.6, -12.2]],
+    [[1.0, 8.6, -1.6], [1.8, 11.4, -3.8], [1.4, 9.0, -5.6], [1.5, 11.0, -6.3]],
+    [[1.4, 5.2, -4.2], [2.6, 8.2, -6.2], [2.2, 4.4, -7.9], [2.3, 6.6, -8.7]],
+    [[1.6, 2.2, -5.2], [3.0, 5.4, -7.4], [2.6, 0.6, -9.2], [2.7, 3.0, -10.2]],
   ];
   for (const x of [-1, 1]) {
     for (const leg of legs) {
       const pts = leg.map(([a, b, c]) => [x * a, b, c]);
-      out.push({ pts: pts.slice(0, 2), rows: 1 }); // thigh
+      out.push({ pts: pts.slice(0, 2), rows: 2 }); // thigh
       out.push({ pts: pts.slice(1, 3), rows: 1, spines: true }); // shin
       out.push({ pts: pts.slice(2), rows: 1 }); // foot
     }
