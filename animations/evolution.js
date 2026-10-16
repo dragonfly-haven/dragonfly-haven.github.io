@@ -61,7 +61,7 @@ export function mountEvolution(el, options = {}) {
   let frame = null; // sizes for the current canvas
   let queue = [], samples = new Map();
   let N = 0, cur = null, seeds = null, data = null, job = null, ready = null;
-  let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false;
+  let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false, frames = 0;
 
   let gpu = null;
   const wantGpu = !flat && o.gpu !== false;
@@ -296,7 +296,8 @@ export function mountEvolution(el, options = {}) {
         }
       }
     }
-    if (render) draw();
+    // While a stage rests it moves slowly, so every other frame is enough.
+    if (render && (phase !== 'hold' || (frames++ & 1) === 0)) draw();
   }
 
   // The first move: from scattered, invisible dust into the first stage.

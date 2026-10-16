@@ -940,12 +940,7 @@ export const STAGES = [
     align: 1,
     // The mind as pure geometry: a mesh of nodes and edges, reaching out into the stars.
     paint(g) {
-      const rand = random(20);
-      const pts = HEAD.slice();
-      for (let tries = 0; pts.length < HEAD.length + 46 && tries < 4000; tries++) {
-        const x = 50 + rand() * 112, y = 22 + rand() * 162;
-        if (inside(HEAD, x, y) && pts.every(([px, py]) => Math.hypot(px - x, py - y) > 12)) pts.push([x, y]);
-      }
+      const pts = meshPoints();
       const edges = new Set();
       for (const t of delaunay(pts)) {
         const cx = (pts[t[0]][0] + pts[t[1]][0] + pts[t[2]][0]) / 3, cy = (pts[t[0]][1] + pts[t[1]][1] + pts[t[2]][1]) / 3;
@@ -963,9 +958,23 @@ export const STAGES = [
       }
       pts.forEach(([x, y], i) => disc(g, x, y, i < HEAD.length ? 2.2 : 2.8));
     },
-    light: false,
+    // the nodes catch the light like small stars; the edges lie flat
+    relief(g) {
+      meshPoints().forEach(([x, y], i) => dome(g, x, y, i < HEAD.length ? 2.6 : 3.2, 0.12));
+    },
   },
 ];
+
+// The nodes of the AI's mesh: the head's outline, then points spread inside it.
+function meshPoints() {
+  const rand = random(20);
+  const pts = HEAD.slice();
+  for (let tries = 0; pts.length < HEAD.length + 46 && tries < 4000; tries++) {
+    const x = 50 + rand() * 112, y = 22 + rand() * 162;
+    if (inside(HEAD, x, y) && pts.every(([px, py]) => Math.hypot(px - x, py - y) > 12)) pts.push([x, y]);
+  }
+  return pts;
+}
 
 // The cells of a hollow ball, back to front, each with its place on the sphere (z, 1 = nearest).
 function blastula() {
