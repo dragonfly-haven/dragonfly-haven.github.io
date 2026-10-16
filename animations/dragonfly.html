@@ -22,30 +22,31 @@
 <body>
   <h1>Dragonfly</h1>
   <nav><a href="index.html">all animations</a></nav>
-  <p class="note">A deep black dragonfly in tiny dashes, seen a little from the side, that beats its wings and does nothing else.</p>
+  <p class="note">A deep black dragonfly in tiny dashes, seen from above and a little from the side. It keeps still until you hover over it, then beats its wings.</p>
 
   <h2>At site sizes</h2>
   <div class="sizes" id="sizes"></div>
 
-  <h2>Close up</h2>
+  <h2>Close up, and beating as when hovered</h2>
   <div class="sizes" id="large"></div>
 
   <script type="module">
     import { mountDragonfly } from './dragonfly.js';
 
     const params = new URLSearchParams(location.search);
-    const add = (row, px, label) => {
+    const add = (row, px, label, options) => {
       const figure = document.createElement('figure');
       figure.innerHTML = `<div style="width:${px}px"></div><figcaption><strong>${label}</strong></figcaption>`;
       document.getElementById(row).append(figure);
-      const fly = mountDragonfly(figure.querySelector('div'));
+      const fly = mountDragonfly(figure.querySelector('div'), options);
       if (params.has('t')) fly.advance(Number(params.get('t')));
     };
     add('sizes', 88, '88 px, smallest on the site');
     add('sizes', 150, '150 px, largest on the site today');
     add('sizes', 200, '200 px');
     add('sizes', 240, '240 px');
-    add('large', 480, '480 px');
+    add('large', 480, '480 px, hover to beat');
+    add('large', 240, 'always beating', { beat: true });
   </script>
 </body>
 </html>

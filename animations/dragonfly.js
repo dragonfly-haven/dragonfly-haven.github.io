@@ -1,8 +1,9 @@
-// A deep black dragonfly drawn in tiny dashes, like the evolution animation,
-// that beats its wings and does nothing else. It is modelled in 3D and seen a
-// little from the side: rings of dashes wrap its body like the hatching of a
-// pen drawing, dashes trace and shade its wings, and the wings swing about
-// their roots as it flies.
+// A deep black dragonfly drawn in tiny dashes, like the evolution animation.
+// It is modelled in 3D and seen from above and a little from the side: rings
+// of dashes wrap its body like the hatching of a pen drawing, and dashes trace
+// and shade its wings. It keeps still until the pointer is over it, or over
+// the link it sits in, or that link has keyboard focus; then it beats its
+// wings, and settles again afterwards.
 //
 //   import { mountDragonfly } from './animations/dragonfly.js';
 //   mountDragonfly(document.getElementById('dragonfly'));
@@ -174,21 +175,37 @@ function wingFrame({ spec, side }) {
 // ---------------------------------------------------------------------------
 
 export function mountDragonfly(el, options = {}) {
-  const o = { rotate: -1.2, tilt: 0.12, roll: 0.85, fit: 0.97, seed: 3, ...options };
+  // `beat: true` keeps it beating its wings, for previews.
+  const o = { rotate: -0.7, tilt: 0.15, roll: 0.4, fit: 0.97, seed: 3, beat: false, ...options };
   const calm = reducedMotion();
   const frames = WINGS.map(wingFrame);
   const parts = bodyParts();
-  // Model to camera: rolled to show the left flank, turned in the picture plane, tipped back.
+  // Model to camera: rolled a little to show the left flank, turned in the picture plane, tipped back.
   const G = mul(rotX(-o.tilt), mul(rotZ(-o.rotate), rotY(o.roll)));
 
   let scale = 1, ox = 0, oy = 0, dash = dashSize(1), half = 1;
   let body = null; // the still body, as one path in canvas pixels
   let wings = []; // per wing: dash centres and half dashes in model units
-  let clock = 0;
+  // The beat: its clock, how strongly the wings beat now (0 still, 1 full), and
+  // what keeps them beating; the frame loop runs only while they move.
+  let clock = 0, swing = 0, hovered = false, focused = false, loop = null;
+  const beating = () => !calm && (o.beat || hovered || focused);
 
   const surface = mountCanvas(el, build);
-  const loop = animate(el, tick);
   surface.measure();
+
+  // Hovering with a mouse or pen, or keyboard focus on the link, starts the beat;
+  // on touch screens it stays still.
+  const host = el.closest('a, button') || el;
+  const wake = () => beating() && !loop && (loop = animate(el, tick));
+  const events = {
+    pointerenter: (e) => e.pointerType !== 'touch' && ((hovered = true), wake()),
+    pointerleave: () => (hovered = false),
+    focusin: () => ((focused = true), wake()),
+    focusout: () => (focused = false),
+  };
+  for (const [type, handler] of Object.entries(events)) host.addEventListener(type, handler);
+  wake();
 
   function build(view) {
     // Fit the dragonfly, with its wings anywhere in their beat, into the element.
@@ -294,11 +311,20 @@ export function mountDragonfly(el, options = {}) {
     });
   }
 
-  // Without motion, the drawing made on every resize, wings spread, stands.
+  // The wings ease into their beat and out of it, and once they rest the loop stops.
   function tick(dt) {
-    if (!body || calm) return;
+    if (!body) return;
+    const on = beating();
+    swing = on ? Math.min(1, swing + dt / 0.35) : Math.max(0, swing - dt / 0.6);
     clock += dt;
     draw();
+    if (!on && swing === 0 && loop) {
+      // Stopped once this frame is over, as it has already asked for the next.
+      const done = loop;
+      loop = null;
+      clock = 0;
+      queueMicrotask(() => done.destroy());
+    }
   }
 
   function draw() {
@@ -312,7 +338,7 @@ export function mountDragonfly(el, options = {}) {
     const near = [], far = [];
     WINGS.forEach((w, i) => {
       const phase = TAU * (BEAT * clock - (w.pair ? LAG : 0));
-      const [M, T] = calm ? rig(i, RAISE) : rig(i, RAISE + SWING[w.pair] * Math.sin(phase), TWIST * Math.cos(phase));
+      const [M, T] = rig(i, RAISE + swing * SWING[w.pair] * Math.sin(phase), swing * TWIST * Math.cos(phase));
       const N = frames[i].N, facing = Math.abs(M[6] * N[0] + M[7] * N[1] + M[8] * N[2]);
       const path = new Path2D();
       const { p, d } = wings[i];
@@ -337,13 +363,15 @@ export function mountDragonfly(el, options = {}) {
   }
 
   return {
-    // Runs the animation forward by `seconds` at once (for previews and tests).
+    // Runs the beat forward by `seconds` at once (for previews and tests).
     advance(seconds) {
+      if (beating()) swing = 1;
       clock += seconds;
       draw();
     },
     destroy() {
-      loop.destroy();
+      if (loop) loop.destroy();
+      for (const [type, handler] of Object.entries(events)) host.removeEventListener(type, handler);
       surface.destroy();
     },
   };
