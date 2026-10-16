@@ -29,6 +29,7 @@ const TONES = ['#060504', '#0a0807', '#0f0d0b', '#15120f', '#1c1814', '#24201b',
 // The wing membrane, a faint warm film.
 const FILM = [0.06, 0.09, 0.13, 0.18, 0.24, 0.31, 0.39, 0.48].map((alpha) => `rgba(20,16,12,${alpha})`);
 const PALETTE = TONES.concat(FILM);
+const SEAM = '#2b2620'; // between the shell's triangles
 const SHELL = 0, VEIN = 1, MEMBRANE = 2;
 
 // ---------------------------------------------------------------------------
@@ -193,7 +194,7 @@ export function mountDragonfly(el, options = {}) {
   let P = calm ? 1 : 0, goal = 1, wait = o.delay, clock = 0, hovered = false;
   // Now and then the wings beat a few times, as if to hold position.
   const flutter = random(o.seed + 17);
-  let burst = 5 + flutter() * 4;
+  let burst = 5 + flutter() * 4, odd = false;
 
   // Per-frame rig transforms, model to camera: 0 is the body, 1 to 4 the wings.
   const rigM = new Float32Array(5 * 9), rigT = new Float32Array(5 * 3);
@@ -248,8 +249,12 @@ export function mountDragonfly(el, options = {}) {
     parts.forEach((part, index) => {
       mesh(part.surface, a, rand, (p, e1, e2, nrm) => {
         if (nrm[2] < -0.6) return; // never seen from above
-        // Hidden inside a part drawn over it; parts drawn together cut each other, leaving a seam.
-        for (let j = 0; j < parts.length; j++) if (j !== index && parts[j].layer >= part.layer && parts[j].surface.inside(p)) return;
+        // Hidden inside a part drawn over it. Parts drawn together cut each other
+        // only a little way in, leaving a fine seam.
+        for (let j = 0; j < parts.length; j++) {
+          if (j === index || parts[j].layer < part.layer) continue;
+          if (parts[j].surface.inside(p, parts[j].layer === part.layer ? a * 0.45 : 0)) return;
+        }
         items.push({ p, e1, e2, n: nrm, kind: SHELL, rig: 0, layer: part.layer, group: part.group });
       });
     });
@@ -316,9 +321,12 @@ export function mountDragonfly(el, options = {}) {
     });
   }
 
-  function tick(dt) {
+  function tick(dt, render = true) {
     if (!tri) return;
     clock += dt;
+    // While it only hovers, every other frame is enough.
+    const settled = P === goal && wait <= 0 && clock < burst - 0.1;
+    if (settled && (odd = !odd)) render = false;
     if (!calm) {
       if (hovered) {
         goal = 0;
@@ -338,7 +346,7 @@ export function mountDragonfly(el, options = {}) {
         P = goal > P ? Math.min(goal, P + step) : Math.max(goal, P - step);
       }
     }
-    draw();
+    if (render) draw();
   }
 
   // Hovering: the dragonfly sways and bobs a little, its wings shiver and now
@@ -374,6 +382,9 @@ export function mountDragonfly(el, options = {}) {
     const R = side / SQRT3; // a triangle's circumradius, in model units
     const paths = Array.from({ length: 6 }, () => []);
     const path = (layer, tone) => paths[layer][tone] || (paths[layer][tone] = new Path2D());
+    // Settled shell triangles sit on a slightly larger dark copy of themselves, so
+    // the seams between them read as fine dark lines and the body stays deep black.
+    const under = Array.from({ length: 6 }, () => new Path2D()), grow = PITCH * 1.04;
     const f = 3 / 100, z = clock * 0.2;
     const q = [0, 0, 0, 0], E1 = [0, 0, 0], E2 = [0, 0, 0], NS = [0, 0, 0], corner = new Float64Array(6);
 
@@ -440,10 +451,20 @@ export function mountDragonfly(el, options = {}) {
       // In the sharpen style, triangles arrive as round dots and only then sharpen.
       const round = style.sharpen && u < 1 ? 1 - smooth(clamp((u - 0.55) / 0.45, 0, 1)) : 0;
       roundedTriangle(p, corner, round);
+      if (kind === SHELL && u >= 1) {
+        const mx = (corner[0] + corner[2] + corner[4]) / 3, my = (corner[1] + corner[3] + corner[5]) / 3;
+        for (let v = 0; v < 6; v += 2) {
+          corner[v] = mx + (corner[v] - mx) * grow;
+          corner[v + 1] = my + (corner[v + 1] - my) * grow;
+        }
+        roundedTriangle(under[tri.layer[i]], corner, 0);
+      }
     }
 
     for (let layer = 0; layer < 6; layer++) {
       drawRound(ctx, layer, span);
+      ctx.fillStyle = SEAM;
+      ctx.fill(under[layer]);
       const row = paths[layer];
       for (let t = 0; t < PALETTE.length; t++) {
         if (!row[t]) continue;
@@ -533,7 +554,8 @@ export function mountDragonfly(el, options = {}) {
     },
     // Runs the animation forward by `seconds` at once (for previews and tests).
     advance(seconds) {
-      for (let s = 0; s < seconds; s += 1 / 60) tick(1 / 60);
+      for (let s = 0; s < seconds; s += 1 / 60) tick(1 / 60, false);
+      draw();
     },
     destroy() {
       loop.destroy();
@@ -592,9 +614,10 @@ function ellipsoid(c, axis, side, r) {
       return [c[0] + a[0] * ca + b[0] * cb + w[0] * sw, c[1] + a[1] * ca + b[1] * cb + w[1] * sw, c[2] + a[2] * ca + b[2] * cb + w[2] * sw];
     },
     out: (p) => sub(p, c),
-    inside(p) {
+    // Whether p lies inside, at least `depth` below the surface (roughly).
+    inside(p, depth = 0) {
       const d = sub(p, c);
-      return (dot(d, a) / r[0]) ** 2 + (dot(d, b) / r[1]) ** 2 + (dot(d, w) / r[2]) ** 2 < 1;
+      return (dot(d, a) / (r[0] - depth)) ** 2 + (dot(d, b) / (r[1] - depth)) ** 2 + (dot(d, w) / (r[2] - depth)) ** 2 < 1;
     },
   };
 }
@@ -613,9 +636,9 @@ function tube(path, radius, flat = 1) {
       return [p[0] + s[0] * x + up[0] * y, p[1] + s[1] * x + up[1] * y, p[2] + s[2] * x + up[2] * y];
     },
     out: (p, u) => sub(p, path(u)),
-    inside(p) {
+    inside(p, depth = 0) {
       for (const u of samples) {
-        const q = path(u), r = radius(u);
+        const q = path(u), r = radius(u) - depth;
         if ((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2 < r * r) return true;
       }
       return false;
