@@ -17,6 +17,7 @@
   --ink: #2b2a27;
   --muted: #6e685d;
   --faint: #d9d3c4;
+  --black: #0b0908;
 }
 
 * {
@@ -39,7 +40,30 @@ header {
   padding: 1.5rem 2rem 0;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.75rem, 1.5vw, 1.4rem);
+  color: var(--black);
+  text-decoration: none;
+}
+
+.wordmark {
+  margin-right: -0.32em; /* cancels the tracking after the last letter */
+  font-size: clamp(0.85rem, 0.55rem + 0.75vw, 1.25rem);
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.brand:focus-visible {
+  outline: 1px solid var(--black);
+  outline-offset: 0.5rem;
+}
+
 #dragonfly {
+  flex: none;
   width: clamp(88px, 11vw, 150px);
   aspect-ratio: 1;
 }
