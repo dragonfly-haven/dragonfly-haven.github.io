@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Evolution sketches</title>
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <h1>Evolution, in sketches</h1>
+  <nav><a href="sketches.html">All drawings, held still</a><a href="../">On the page</a></nav>
+  <div class="big" id="evolution"></div>
+  <div class="controls">
+    <button id="prev" aria-label="Previous drawing">‹</button>
+    <output id="label">&nbsp;</output>
+    <button id="next" aria-label="Next drawing">›</button>
+    <button id="pause">Pause</button>
+  </div>
+
+  <script type="module">
+    import { mountEvolution } from './sketch.js';
+
+    // The address can pick other drawings and tune things for comparison,
+    // e.g. ?motifs=motifs-dev/manifest.json&stage=3&dash=3
+    const params = new URLSearchParams(location.search);
+    const tune = {};
+    for (const key of ['dash', 'hold', 'move']) if (params.has(key)) tune[key] = Number(params.get(key));
+    if (params.has('motifs')) tune.motifs = params.get('motifs');
+    if (params.get('gpu') === 'off') tune.gpu = false;
+
+    const label = document.getElementById('label');
+    const evolution = mountEvolution(document.getElementById('evolution'), {
+      ...tune,
+      start: Number(params.get('stage') || 1) - 1,
+      onStage: (i, title) => (label.textContent = `${i + 1}. ${title}`),
+    });
+    const show = () => (label.textContent = `${evolution.stage + 1}. ${evolution.titles[evolution.stage] ?? ''}`);
+    evolution.loaded.then(() => {
+      show();
+      if (params.has('t')) {
+        evolution.advance(Number(params.get('t')));
+        evolution.pause();
+      }
+    });
+
+    const go = (step) => {
+      evolution.go(evolution.stage + step);
+      show();
+    };
+    document.getElementById('prev').onclick = () => go(-1);
+    document.getElementById('next').onclick = () => go(1);
+    const pause = document.getElementById('pause');
+    pause.onclick = () => {
+      const paused = pause.textContent === 'Pause';
+      paused ? evolution.pause() : evolution.play();
+      pause.textContent = paused ? 'Play' : 'Pause';
+    };
+    addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') go(-1);
+      if (e.key === 'ArrowRight') go(1);
+      if (e.key === ' ') {
+        e.preventDefault();
+        pause.click();
+      }
+    });
+  </script>
+</body>
+</html>

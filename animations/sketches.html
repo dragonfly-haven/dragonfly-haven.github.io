@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Evolution drawings</title>
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <h1>The drawings</h1>
+  <p class="note">Each drawing held still, as the dashes settle into it. <a href="sketch.html">See them flow</a>.</p>
+  <div class="grid" id="sheet" style="margin-top: 2rem"></div>
+
+  <script type="module">
+    import { mountEvolution, loadMotifs } from './sketch.js';
+
+    // ?from=5&to=8&min=540 shows a few drawings larger; ?motifs= picks another set.
+    const params = new URLSearchParams(location.search);
+    const motifs = params.get('motifs') || undefined;
+    const sheet = document.getElementById('sheet');
+    if (params.has('min')) sheet.style.gridTemplateColumns = `repeat(auto-fill, minmax(${params.get('min')}px, 1fr))`;
+    const list = await loadMotifs(motifs);
+    const first = Number(params.get('from') || 1) - 1, last = Number(params.get('to') || list.length) - 1;
+    list.forEach(({ title }, i) => {
+      if (i < first || i > last) return;
+      const figure = document.createElement('figure');
+      figure.innerHTML = `<div class="stage"></div><figcaption><strong>${i + 1}.</strong> ${title}</figcaption>`;
+      sheet.append(figure);
+      mountEvolution(figure.querySelector('.stage'), { motifs: list, still: i });
+    });
+  </script>
+</body>
+</html>
