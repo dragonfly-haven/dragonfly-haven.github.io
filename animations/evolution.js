@@ -35,7 +35,7 @@ const MOTION = {
 };
 
 const DEFAULTS = {
-  hold: 2.6, // seconds each stage rests
+  hold: 2, // seconds each stage rests
   move: 3.8, // seconds each change takes
   fit: 0.94, // share of the shorter side the stage fills
   size: null, // triangle side in CSS px; by default as fine as the screen allows

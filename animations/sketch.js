@@ -31,7 +31,7 @@ const MOTION = {
 
 const DEFAULTS = {
   motifs: new URL('./motifs/manifest.json', import.meta.url).href, // a manifest, or motifs already loaded
-  hold: 3.4, // seconds each drawing rests
+  hold: 2.6, // seconds each drawing rests
   move: 3.8, // seconds each change takes
   fit: 0.94, // share of the shorter side a drawing fills
   dash: null, // dash length in CSS px; by default as fine as the screen allows
