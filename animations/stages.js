@@ -80,6 +80,24 @@ function soft(g, x, y, r, a) {
   g.restore();
 }
 
+// The moon in the upper right of the late animal stages, waning as they go:
+// `lit` is the share of its disc in light, from 1 (full) towards 0.
+const MOON = [156, 36, 15];
+function moon(g, lit) {
+  const [x, y, r] = MOON;
+  g.save();
+  g.beginPath();
+  g.arc(x, y, r, 0, TAU);
+  g.clip();
+  faint(g, 0.62, () => disc(g, x, y, r));
+  // the shadowed part, a disc slid off to the lower left, keeps only a faint glow
+  cut(g, () => disc(g, x - r * 2.05 * lit, y + r * 0.3 * lit, r * 1.04), 0.88);
+  cut(g, () => {
+    for (const [dx, dy, cr] of [[-4, -5, 3.2], [5, 2, 2.4], [-1, 7, 1.8], [7, -7, 1.5]]) disc(g, x + dx, y + dy, cr);
+  }, 0.4);
+  g.restore();
+}
+
 // Relief: a hemisphere over radius r, `top` high at its centre (full opacity is
 // RELIEF units high, so by default a dome is as high as it is wide).
 export const RELIEF = 40;
@@ -282,16 +300,19 @@ export const STAGES = [
     // that follow the same spiral as the dust turning around every stage.
     paint(g) {
       const rand = random(3);
-      soft(g, 100, 100, 30, 1);
-      soft(g, 100, 100, 14, 1);
+      // a bright heart in a small bulge
+      soft(g, 100, 100, 26, 0.85);
+      soft(g, 100, 100, 10, 1);
       for (let arm = 0; arm < 4; arm++) {
         const main = arm % 2 === 0, base = (arm * Math.PI) / 2;
-        for (let i = 0; i < (main ? 170 : 70); i++) {
-          const t = rand() ** 0.85, r = 12 + t * 78;
-          const a = base + Math.log(r / 10) * 2.1 + (rand() - 0.5) * (0.3 + t * 0.3);
+        for (let i = 0; i < (main ? 300 : 110); i++) {
+          const t = rand() ** 0.9, r = 11 + t * 80;
+          const a = base + Math.log(r / 10) * 2.1 + (rand() - 0.5) * (0.16 + t * 0.2) * (main ? 1 : 1.6);
           const x = 100 + Math.cos(a) * r, y = 100 + Math.sin(a) * r * 0.92;
-          soft(g, x, y, (main ? 1.8 : 1.3) + rand() * rand() * 5.5, (main ? 0.6 : 0.4) + rand() * 0.4);
-          if (rand() < 0.35) disc(g, x + (rand() - 0.5) * 8, y + (rand() - 0.5) * 8, 0.7 + rand() * 1.1);
+          soft(g, x, y, (main ? 1.5 : 1.1) + rand() * rand() * 3.5, (main ? 0.55 : 0.35) + rand() * 0.4);
+          // knots where stars and matter gather
+          if (rand() < 0.3) disc(g, x + (rand() - 0.5) * 6, y + (rand() - 0.5) * 6, 0.6 + rand() * 0.9);
+          if (rand() < 0.05) soft(g, x, y, 2.4, 1);
         }
       }
       // dark lanes along the inner edge of the main arms
@@ -698,39 +719,40 @@ export const STAGES = [
   },
   {
     name: 'Bird',
-    // The dinosaurs' heirs: a bird climbing to the left, wings raised.
+    // The dinosaurs' heirs: a bird flying to the left, both wings raised in a V.
     paint(g) {
+      // the near wing rises up and back; the far one, mirrored, up and forward behind it
       const wing = () => {
-        fill(g, 'M 96 106 C 102 84, 114 60, 132 40 L 146 48 C 136 66, 128 88, 126 108 Z');
-        [[150, 10], [158, 12], [165, 17], [170, 24], [172, 33], [170, 42]].forEach(([x, y], k) => tube(g, [[132 + k * 2.6, 42 + k * 1.6], [x, y]], taper(3.2, 1.1)));
-        for (let k = 0; k < 6; k++) disc(g, 128 - k * 2.4, 100 - k * 9.5, 4.2);
+        fill(g, 'M 95 108 C 103 92, 117 72, 133 53 L 154 67 C 142 83, 130 100, 120 113 Z');
+        // primaries fanning from the wrist, overlapping at the base, parted at the tips
+        [[145, 14], [153, 13], [161, 15], [168, 19], [174, 25], [178, 33], [180, 42], [180, 52]].forEach(([x, y], k) => tube(g, [[133 + k * 2.6, 55 + k * 1.7], [x, y]], taper(4, 1.2)));
+        // secondaries along the trailing edge
+        for (let k = 0; k < 6; k++) disc(g, 121 + k * 6, 110 - k * 8.4, 4.4);
       };
-      faint(g, 0.55, () => {
+      faint(g, 0.6, () => {
         g.save();
-        g.translate(-16, 6);
+        g.translate(196, -4);
+        g.scale(-1, 1);
         wing();
         g.restore();
       });
-      for (const [x, y] of [[162, 100], [165, 107], [166, 114], [164, 121], [160, 127]]) tube(g, [[132, 112], [x, y]], taper(3, 1.5));
-      oval(g, 108, 112, 26, 12, -0.08);
-      tube(g, [[84, 104], [96, 110]], 7);
-      disc(g, 78, 103, 8.5);
-      fill(g, 'M 72 101 L 57 105 L 72 108 Z');
-      cut(g, () => {
-        tube(g, [[100, 104], [120, 50]], 4);
-      }, 0.4);
+      fill(g, 'M 128 106 L 160 99 L 156 110 L 161 121 L 128 117 Z');
+      oval(g, 100, 112, 31, 11, -0.04);
+      disc(g, 68, 106, 8.2);
+      fill(g, 'M 61 103 L 47 107.5 L 61 110 Z');
       wing();
       cut(g, () => {
-        for (let r = 0; r < 4; r++) for (let k = 0; k < 6; k++) {
+        for (let r = 0; r < 3; r++) for (let k = 0; k < 6; k++) {
           g.lineWidth = 0.8;
           g.beginPath();
-          g.arc(108 + r * 4 + k * 3.2, 98 - k * 9 - r * 2, 3.6, 0.2, Math.PI - 0.2);
+          g.arc(108 + r * 5 + k * 4, 102 - k * 8.6 - r * 2.5, 3.4, 0.2, Math.PI - 0.2);
           g.stroke();
         }
-        ring(g, 76, 101, 2.2, 0.9);
+        for (let x = 134; x < 158; x += 4.5) line(g, 0.7, 130, 111, x, 104 + (x - 134) * 0.2);
+        ring(g, 66, 104, 2.2, 0.9);
       }, 0.6);
-      disc(g, 76, 101, 1.2);
-      line(g, 1.2, 108, 123, 112, 130);
+      disc(g, 66, 104, 1.2);
+      line(g, 1.2, 104, 122, 110, 129);
     },
     bevel: 7,
   },
@@ -770,6 +792,7 @@ export const STAGES = [
       }, 0.55);
       disc(g, 43, 67, 1.1);
       disc(g, 21.5, 79, 1.4);
+      moon(g, 1);
     },
     bevel: 8,
   },
@@ -807,6 +830,7 @@ export const STAGES = [
       cut(g, () => disc(g, 58, 66, 2));
       disc(g, 58, 66, 1);
       disc(g, 76, 68, 4.5);
+      moon(g, 0.55);
     },
     bevel: 9,
   },
@@ -835,6 +859,7 @@ export const STAGES = [
         trace(g, 'M 90 64 C 96 70, 104 70, 110 64', 0.9);
         trace(g, 'M 92 84 C 98 88, 104 88, 108 84', 0.9);
       }, 0.5);
+      moon(g, 0.22);
     },
     bevel: 6,
   },

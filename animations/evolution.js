@@ -60,7 +60,7 @@ export function mountEvolution(el, options = {}) {
 
   let frame = null; // sizes for the current canvas
   let queue = [], samples = new Map();
-  let N = 0, cur = null, seeds = null, data = null, ready = null;
+  let N = 0, cur = null, seeds = null, data = null, job = null, ready = null;
   let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false;
 
   let gpu = null;
@@ -86,10 +86,11 @@ export function mountEvolution(el, options = {}) {
     const g = 2.2; // lattice spacing in mask pixels
     const S = Math.round(clamp((200 * unit * g) / spacing, 160, 720)); // mask size
     const sites = (S / g) ** 2 / 0.866;
-    frame = { view, unit, tri, S, k: S / 200, g, N: Math.round(sites * 0.3), dust: Math.round(sites * 0.045) };
+    frame = { view, unit, tri, S, k: S / 200, g, N: Math.round(sites * 0.32), dust: Math.round(sites * 0.065) };
     samples = new Map();
     queue = o.still == null ? STAGES.map((_, s) => (o.start + s) % STAGES.length) : [o.still];
     N = 0;
+    job = ready = null;
     phase = 'wait';
     if (o.still != null) {
       prepare(Infinity);
@@ -138,9 +139,9 @@ export function mountEvolution(el, options = {}) {
         const i = iy * S + ix, a = alpha[i] / 255;
         if (a < 0.03) continue;
         const shade = lit ? lit[i] : 0.6;
-        // Shadowed sides are stippled denser, and the outline is kept crisp.
+        // Shadowed sides are stippled denser, and solid outlines are kept crisp.
         let density = a * (0.48 + 0.52 * (1 - shade));
-        if (inside[i] < g * 1.6) density = Math.max(density, a * 0.92);
+        if (a > 0.5 && inside[i] < g * 1.6) density = Math.max(density, a * 0.92);
         const threshold = (c * 0.7548776662 + r * 0.5698402910) % 1;
         if (density > threshold) cand.push([x, y, i, shade, threshold / density]);
       }
@@ -157,7 +158,13 @@ export function mountEvolution(el, options = {}) {
       p.y[j] = y / k - 100;
       p.z[j] = height[i] / 20;
       p.c[j] = clamp(Math.floor((shade * 0.86 + rnd() * 0.2) * 7), 0, 6);
-      p.a[j] = turn(rnd() * TAU, -Math.PI / 2, align);
+      // Near the outline triangles follow its grain; deeper in they lie as they fall.
+      const ix = i % S;
+      const gx = inside[Math.min(i + 2, i - ix + S - 1)] - inside[Math.max(i - 2, i - ix)];
+      const gy = inside[Math.min(i + 2 * S, (S - 1) * S + ix)] - inside[Math.max(i - 2 * S, ix)];
+      const grain = Math.atan2(gy, gx) + Math.PI / 2 + (rnd() - 0.5) * 0.7;
+      const edge = clamp(1.4 - inside[i] / (g * 3), 0, 1);
+      p.a[j] = turn(turn(rnd() * TAU, grain, edge), -Math.PI / 2, align);
     });
     // Places for dust: a faint galaxy that gathers close around the form like an aura.
     const out = new Uint8Array(S * S);
@@ -171,7 +178,7 @@ export function mountEvolution(el, options = {}) {
         [x, y] = galaxy(rnd);
         const ix = Math.floor((x + 100) * k), iy = Math.floor((y + 100) * k);
         const d = ix >= 0 && iy >= 0 && ix < S && iy < S ? away[iy * S + ix] / k : 99;
-        if (d > 3 && rnd() < 0.3 + 0.7 * Math.exp(-(d - 3) / 18)) break;
+        if (d > 6 && rnd() < 0.45 + 0.55 * Math.exp(-(d - 6) / 16)) break;
       }
       p.dust[j * 2] = x;
       p.dust[j * 2 + 1] = y;
@@ -209,11 +216,12 @@ export function mountEvolution(el, options = {}) {
     return out;
   }
 
-  // Plans the move to stage `s`: pairs every triangle with a place in it.
-  function plan(s) {
+  // Plans the move to stage `s`, pairing every triangle with a place in it.
+  // A generator, so the work can be spread over the frames of a pause.
+  function* planning(s) {
     const next = arrange(s, random(o.seed + s * 977 + Math.round(clock * 10)));
     const [ax, ay] = positions(cur), [bx, by] = positions(next);
-    const match = pair(ax, ay, bx, by);
+    const match = yield* pairing(ax, ay, bx, by);
     // The change sweeps across from a side that turns with every stage.
     const dir = s * 2.39996 + 0.7, dx = Math.cos(dir), dy = Math.sin(dir);
     let lo = Infinity, hi = -Infinity;
@@ -223,30 +231,42 @@ export function mountEvolution(el, options = {}) {
       if (v > hi) hi = v;
     }
     const d = new Float32Array(N * STRIDE);
+    const after = layout(N); // where each triangle rests once the move is done
     for (let i = 0; i < N; i++) {
       const j = match[i], at = i * STRIDE;
       const sweep = cur.w[i] && next.w[j] ? rand() : ((ax[i] * dx + ay[i] * dy - lo) / (hi - lo || 1)) * 0.8 + rand() * 0.2;
-      d.set([cur.x[i], cur.y[i], cur.z[i], cur.w[i], next.x[j], next.y[j], next.z[j], next.w[j],
-        cur.s[i], next.s[j], cur.c[i], next.c[j], MOTION.spread * sweep, seeds[i], cur.a[i], next.a[j]], at);
-    }
-    // Afterwards each triangle rests where this move takes it.
-    const after = layout(N);
-    for (let i = 0; i < N; i++) {
-      const j = match[i];
+      d[at] = cur.x[i]; d[at + 1] = cur.y[i]; d[at + 2] = cur.z[i]; d[at + 3] = cur.w[i];
+      d[at + 4] = next.x[j]; d[at + 5] = next.y[j]; d[at + 6] = next.z[j]; d[at + 7] = next.w[j];
+      d[at + 8] = cur.s[i]; d[at + 9] = next.s[j]; d[at + 10] = cur.c[i]; d[at + 11] = next.c[j];
+      d[at + 12] = MOTION.spread * sweep; d[at + 13] = seeds[i]; d[at + 14] = cur.a[i]; d[at + 15] = next.a[j];
       for (const key of 'xyzwsca') after[key][i] = next[key][j];
     }
     return { stage: s, data: d, after };
   }
 
-  // Starts a planned move.
+  // Works on a plan for up to `budget` ms; returns the move once it is ready.
+  function work(budget) {
+    const t0 = performance.now();
+    for (;;) {
+      const step = job.next();
+      if (step.done) {
+        job = null;
+        return step.value;
+      }
+      if (performance.now() - t0 > budget) return null;
+    }
+  }
+
+  // Starts a planned move (with reduced motion, just the change of stage).
   function begin(move) {
     last = target;
     target = move.stage;
+    phase = 'move';
+    t = 0;
+    if (calm) return;
     data = move.data;
     cur = move.after;
     if (gpu) gpu.load(data, N);
-    phase = 'move';
-    t = 0;
   }
 
   function tick(dt, render = true) {
@@ -265,7 +285,11 @@ export function mountEvolution(el, options = {}) {
         if (o.onStage) o.onStage(target, STAGES[target].name);
       } else if (phase === 'hold') {
         const next = (target + 1) % STAGES.length;
-        if (!ready && samples.has(next)) ready = plan(next);
+        if (!ready && !job && samples.has(next)) {
+          if (calm) ready = { stage: next };
+          else job = planning(next);
+        }
+        if (job) ready = work(5);
         if (ready && t >= (calm ? 8 : o.hold)) {
           begin(ready);
           ready = null;
@@ -290,7 +314,9 @@ export function mountEvolution(el, options = {}) {
       cur.c[i] = 6;
     }
     ready = null;
-    begin(plan(target));
+    if (calm) return begin({ stage: target });
+    job = planning(target);
+    begin(work(Infinity));
   }
 
   function draw() {
@@ -382,7 +408,9 @@ export function mountEvolution(el, options = {}) {
       const s = ((index % STAGES.length) + STAGES.length) % STAGES.length;
       if (!samples.has(s)) samples.set(s, sample(STAGES[s], random(o.seed + s * 101)));
       ready = null;
-      begin(plan(s));
+      if (calm) return begin({ stage: s });
+      job = planning(s);
+      begin(work(Infinity));
     },
     pause() {
       paused = true;
@@ -460,44 +488,60 @@ function light(height, S, k) {
 
 // Pairs two equal-sized point sets so nearby points go to nearby places, a
 // quick stand-in for optimal transport: both sets are halved again and again
-// across their widest direction, and matching halves are paired.
-function pair(ax, ay, bx, by) {
+// across their widest direction, and matching halves are paired. A generator
+// that pauses every so often; it returns match, where a[i] pairs with b[match[i]].
+function* pairing(ax, ay, bx, by) {
   const n = ax.length;
   const A = new Int32Array(n), B = new Int32Array(n), match = new Int32Array(n);
   for (let i = 0; i < n; i++) A[i] = B[i] = i;
-  const ka = new Float32Array(n), kb = new Float32Array(n);
-  const dirs = [[1, 0], [0, 1], [0.7071, 0.7071], [0.7071, -0.7071]];
-  const stack = [0, n];
-  while (stack.length) {
-    const hi = stack.pop(), lo = stack.pop();
+  // every point's position across, down and along both diagonals
+  const pa = [ax, ay, new Float32Array(n), new Float32Array(n)], pb = [bx, by, new Float32Array(n), new Float32Array(n)];
+  for (let i = 0; i < n; i++) {
+    pa[2][i] = ax[i] + ay[i];
+    pa[3][i] = ax[i] - ay[i];
+    pb[2][i] = bx[i] + by[i];
+    pb[3][i] = bx[i] - by[i];
+  }
+  const reach = [1, 1, Math.SQRT1_2, Math.SQRT1_2];
+  const stack = new Int32Array(256);
+  let top = 0, done = 0;
+  stack[top++] = 0;
+  stack[top++] = n;
+  while (top) {
+    const hi = stack[--top], lo = stack[--top];
     if (hi - lo === 1) {
       match[A[lo]] = B[lo];
       continue;
     }
-    if (hi - lo < 1) continue;
+    // let the page breathe now and then
+    done += hi - lo;
+    if (done > 6000) {
+      done = 0;
+      yield;
+    }
     let best = 0, widest = -1;
     for (let d = 0; d < 4; d++) {
-      const [dx, dy] = dirs[d];
+      const ka = pa[d], kb = pb[d];
       let min = Infinity, max = -Infinity;
       for (let i = lo; i < hi; i++) {
-        const va = ax[A[i]] * dx + ay[A[i]] * dy, vb = bx[B[i]] * dx + by[B[i]] * dy;
-        min = Math.min(min, va, vb);
-        max = Math.max(max, va, vb);
+        const va = ka[A[i]], vb = kb[B[i]];
+        if (va < min) min = va;
+        if (va > max) max = va;
+        if (vb < min) min = vb;
+        if (vb > max) max = vb;
       }
-      if (max - min > widest) {
-        widest = max - min;
+      if ((max - min) * reach[d] > widest) {
+        widest = (max - min) * reach[d];
         best = d;
       }
     }
-    const [dx, dy] = dirs[best];
-    for (let i = lo; i < hi; i++) {
-      ka[A[i]] = ax[A[i]] * dx + ay[A[i]] * dy;
-      kb[B[i]] = bx[B[i]] * dx + by[B[i]] * dy;
-    }
     const mid = (lo + hi) >> 1;
-    select(A, ka, lo, hi, mid);
-    select(B, kb, lo, hi, mid);
-    stack.push(lo, mid, mid, hi);
+    select(A, pa[best], lo, hi, mid);
+    select(B, pb[best], lo, hi, mid);
+    stack[top++] = lo;
+    stack[top++] = mid;
+    stack[top++] = mid;
+    stack[top++] = hi;
   }
   return match;
 }
