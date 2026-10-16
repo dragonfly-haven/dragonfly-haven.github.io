@@ -8,7 +8,7 @@
 </head>
 <body>
   <h1>Evolution</h1>
-  <nav id="styles"></nav>
+  <nav><a href="stages.html">All twenty stages, held still</a><a href="../">On the page</a></nav>
   <div class="big" id="evolution"></div>
   <div class="controls">
     <button id="prev" aria-label="Previous stage">‹</button>
@@ -18,18 +18,18 @@
   </div>
 
   <script type="module">
-    import { mountEvolution, STAGES, STYLES } from './evolution.js';
+    import { mountEvolution, STAGES } from './evolution.js';
 
+    // Anything in the address tunes it for comparison, e.g. ?stage=11&size=2&gap=1.3
     const params = new URLSearchParams(location.search);
-    const style = params.get('style') || 'flow';
-    document.getElementById('styles').innerHTML = Object.keys(STYLES)
-      .map((s) => `<a href="?style=${s}"${s === style ? ' aria-current="page"' : ''}>${s}</a>`)
-      .join('') + '<a href="index.html">all options</a>';
+    const tune = {};
+    for (const key of ['size', 'gap', 'hold', 'move']) if (params.has(key)) tune[key] = Number(params.get(key));
+    if (params.get('gpu') === 'off') tune.gpu = false;
 
     const label = document.getElementById('label');
     const show = (i) => (label.textContent = `${i + 1}. ${STAGES[i].name}`);
     const evolution = mountEvolution(document.getElementById('evolution'), {
-      style,
+      ...tune,
       start: Number(params.get('stage') || 1) - 1,
       onStage: show,
     });

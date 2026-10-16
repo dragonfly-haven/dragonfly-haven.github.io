@@ -3,61 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Animation options</title>
+  <title>Animations</title>
   <link rel="stylesheet" href="preview.css">
-  <style>
-    .flies figure > div {
-      width: min(100%, 220px);
-      aspect-ratio: 1;
-    }
-  </style>
 </head>
 <body>
-  <h1>Animation options</h1>
-  <p class="note">Every triangle is the same tiny size in both animations. Pick a style for each; the details below can be mixed.</p>
-
-  <h2>Evolution, twenty stages from organic matter to AI</h2>
-  <div class="grid" id="evolution"></div>
-  <p class="note"><a href="stages.html">See all twenty stages held still</a></p>
-
-  <h2>Dragonfly, from round to sharp</h2>
-  <div class="grid flies" id="dragonfly"></div>
-
-  <h2>On the page</h2>
-  <p class="note">The real page with a pair mounted in place:
-    <a href="../?evolution=flow&amp;dragonfly=crystallise">flow and crystallise</a>,
-    <a href="../?evolution=murmur&amp;dragonfly=shatter">murmuration and shatter</a>,
-    <a href="../?evolution=contour&amp;dragonfly=sharpen">contour and sharpen</a>.
-    Any pair works by changing the two names in the address.</p>
+  <h1>Animations</h1>
+  <nav>
+    <a href="evolution.html">Evolution, large, with stage controls</a>
+    <a href="stages.html">The twenty stages, held still</a>
+    <a href="dragonfly.html">Dragonfly</a>
+    <a href="../">On the page</a>
+  </nav>
+  <div class="big" id="evolution"></div>
+  <p class="note" id="now" style="text-align: center; margin: 0.75rem auto 0">&nbsp;</p>
 
   <script type="module">
     import { mountEvolution, STAGES } from './evolution.js';
-    import { mountDragonfly } from './dragonfly.js';
 
-    const evolution = [
-      ['flow', 'Flow', 'Solid, softly lit forms. Triangles glide to the next form along swirling paths, in a wave across the form.'],
-      ['murmur', 'Murmuration', 'Each form dissolves into a flock that streams around in ribbons before settling into the next.'],
-      ['contour', 'Contour', 'Forms drawn in contour lines, like an engraving. The lines unspool into the next form.'],
-    ];
-    for (const [style, name, about] of evolution) {
-      const figure = document.createElement('figure');
-      figure.innerHTML = `<div class="stage"></div><figcaption><strong>${name}.</strong> ${about} <span class="now"></span> <a href="evolution.html?style=${style}">Open large</a></figcaption>`;
-      document.getElementById('evolution').append(figure);
-      const now = figure.querySelector('.now');
-      mountEvolution(figure.querySelector('.stage'), { style, onStage: (i) => (now.textContent = `Now: ${i + 1}. ${STAGES[i].name}.`) });
-    }
-
-    const flies = [
-      ['crystallise', 'Crystallise', 'Round shapes crack into triangles in a wave from the body outwards, once. Hover to soften it again.'],
-      ['shatter', 'Shatter', 'Circles burst into triangles that swirl into place, and melt back now and then.'],
-      ['sharpen', 'Sharpen', 'Circles break into round dots that drift into place, then sharpen into triangles, now and then reversing.'],
-    ];
-    for (const [style, name, about] of flies) {
-      const figure = document.createElement('figure');
-      figure.innerHTML = `<div></div><figcaption><strong>${name}.</strong> ${about} <a href="dragonfly.html?style=${style}">Open at site sizes</a></figcaption>`;
-      document.getElementById('dragonfly').append(figure);
-      mountDragonfly(figure.querySelector('div'), { style });
-    }
+    const now = document.getElementById('now');
+    mountEvolution(document.getElementById('evolution'), { onStage: (i) => (now.textContent = `${i + 1}. ${STAGES[i].name}`) });
   </script>
 </body>
 </html>

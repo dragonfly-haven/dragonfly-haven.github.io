@@ -1,8 +1,14 @@
 // Shared building blocks for the two triangle animations: the common triangle
 // size, palettes, seeded randomness, noise, shape sampling and drawing.
 
-export const TRIANGLE_SIZE = 3.2; // side of every triangle, in CSS pixels
+export const TRIANGLE_SIZE = 3.2; // side of every triangle on a standard screen, in CSS pixels
 export const TAU = Math.PI * 2;
+
+// The triangle side in CSS pixels for a screen's pixel ratio: finer on dense
+// screens, but never under 4 device pixels, below which they stop reading as triangles.
+export function triangleSize(ratio = devicePixelRatio || 1) {
+  return Math.min(TRIANGLE_SIZE, Math.max(2, 3.4 / ratio));
+}
 
 // Deep, almost black oranges, from shadow to light.
 export const EMBER = ['#1d0d02', '#281203', '#341703', '#401c04', '#4d2205', '#5b2806'];
@@ -89,15 +95,16 @@ export function curl(noise, x, y, z, out) {
 }
 
 // Fills `el` with a canvas. `measure()` sizes it and calls `onResize(view)`,
-// which happens again by itself whenever the element's size settles.
-export function mountCanvas(el, onResize) {
+// which happens again by itself whenever the element's size settles. With
+// `context: 'webgl2'`, view.ctx is that context, or null where it isn't available.
+export function mountCanvas(el, onResize, { context = '2d', attributes } = {}) {
   if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
   if (el.clientHeight < 2) el.style.aspectRatio = '1';
   const canvas = document.createElement('canvas');
   canvas.setAttribute('aria-hidden', 'true');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none';
   el.appendChild(canvas);
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext(context, attributes);
   const view = { canvas, ctx, width: 0, height: 0, ratio: 1 };
   let timer = 0;
 
@@ -109,7 +116,7 @@ export function mountCanvas(el, onResize) {
     Object.assign(view, { width, height, ratio });
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    if (context === '2d') ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     onResize(view);
   };
   const observer = new ResizeObserver(() => {
@@ -158,8 +165,9 @@ export function animate(el, tick) {
   };
 }
 
-// Paints `paint(g)`, drawn in shape units, into a w × h coverage mask at k mask pixels per unit.
-export function rasterize(paint, w, h, k) {
+// Paints `paint(g)`, drawn in shape units, into a w × h coverage mask at k mask
+// pixels per unit. With `raw`, returns the painted alpha (0 to 255) instead.
+export function rasterize(paint, w, h, k, raw = false) {
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -170,7 +178,7 @@ export function rasterize(paint, w, h, k) {
   paint(g);
   const rgba = g.getImageData(0, 0, w, h).data;
   const mask = new Uint8Array(w * h);
-  for (let i = 0; i < mask.length; i++) mask[i] = rgba[i * 4 + 3] > 127 ? 1 : 0;
+  for (let i = 0; i < mask.length; i++) mask[i] = raw ? rgba[i * 4 + 3] : rgba[i * 4 + 3] > 127 ? 1 : 0;
   return mask;
 }
 
