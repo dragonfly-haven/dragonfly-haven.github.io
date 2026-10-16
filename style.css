@@ -1,7 +1,22 @@
+@font-face {
+  font-family: "EB Garamond";
+  src: url("fonts/eb-garamond-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "EB Garamond";
+  src: url("fonts/eb-garamond-latin-500-normal.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
 :root {
   --ivory: #fffdf6;
   --ink: #2b2a27;
-  --muted: #8a8477;
+  --muted: #6e685d;
+  --faint: #d9d3c4;
 }
 
 * {
@@ -12,42 +27,123 @@
 body {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr;
   background: var(--ivory);
   color: var(--ink);
-  font: 16px/1.5 Georgia, "Times New Roman", serif;
+  font: 19px/1.6 "EB Garamond", Georgia, "Times New Roman", serif;
 }
 
 header {
-  padding: 1.5rem 2rem;
-  text-align: right;
+  display: flex;
+  justify-content: flex-end;
+  padding: 1.5rem 2rem 0;
 }
 
-.name {
-  letter-spacing: 0.04em;
+#dragonfly {
+  width: clamp(88px, 11vw, 150px);
+  aspect-ratio: 1;
 }
 
 main {
   display: grid;
-  place-items: center;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: clamp(2rem, 6vw, 6rem);
+  padding: 1rem clamp(1rem, 5vw, 5rem) 2rem;
 }
 
-canvas {
-  width: min(60vmin, 320px);
+#evolution {
+  width: min(100%, 100vh - 15rem);
   aspect-ratio: 1;
+  justify-self: center;
 }
 
-footer {
-  padding: 2rem;
-  text-align: center;
-}
-
-a {
+/* Until an animation is mounted inside them, the empty spots show a quiet outline. */
+#evolution:empty,
+#dragonfly:empty {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--faint);
   color: var(--muted);
-  text-decoration: none;
-  border-bottom: 1px solid currentColor;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
-a:hover {
+#evolution:empty::after {
+  content: "Evolution animation";
+}
+
+#dragonfly:empty {
+  border-radius: 50%;
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+}
+
+#dragonfly:empty::after {
+  content: "Dragonfly";
+}
+
+.about {
+  max-width: 32rem;
+}
+
+.about p + p {
+  margin-top: 1em;
+}
+
+.lead {
+  font-size: 1.4rem;
+  line-height: 1.4;
+}
+
+.names {
+  margin-top: 2.5rem;
+  padding: 0;
+  list-style: none;
+  font-weight: 500;
+}
+
+.contact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.address {
+  color: var(--muted);
+}
+
+.button {
+  padding: 0.35em 1.15em;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
   color: var(--ink);
+  text-decoration: none;
+  letter-spacing: 0.03em;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.button:hover,
+.button:focus-visible {
+  background: var(--ink);
+  color: var(--ivory);
+}
+
+@media (max-width: 760px) {
+  header {
+    padding: 1rem 1rem 0;
+  }
+
+  main {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+    padding: 1rem 1rem 3rem;
+  }
+
+  #evolution {
+    width: min(100%, 60vh);
+  }
 }
