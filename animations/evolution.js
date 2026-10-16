@@ -22,58 +22,73 @@ export const STYLES = {
 };
 
 const FAINT = 0.22; // density of faint areas (bells, cytoplasm) relative to solid ones
+const CROSSFADE = 1.5; // seconds, between stages when reduced motion is preferred
 
 export function mountEvolution(el, options = {}) {
-  const o = { style: 'flow', hold: 2.6, move: 2.8, fit: 0.94, gap: 1.45, spare: 'hide', start: 0, still: null, seed: 1, onStage: null, ...options };
+  const o = { style: 'flow', hold: 2.6, move: 2.8, fit: 0.94, gap: 1.45, start: 0, still: null, seed: 1, onStage: null, ...options };
   const style = STYLES[o.style] || STYLES.flow;
-  const calm = reducedMotion();
+  const calm = reducedMotion(); // then forms crossfade in place instead of moving
   const noise = noise3(o.seed);
   const rand = random(o.seed * 7919);
   const c2 = [0, 0];
 
-  let stages = [], n = 0, scale = 1;
+  let frame = null; // sizes for the current canvas
+  let queue = [], sampled = new Map(), stages = [], n = 0;
   let X, Y, A, S, C, VX, VY, from, delay;
-  let target = o.start, phase = 'move', t = 0, clock = 0, paused = false;
+  let target = o.start, last = o.start, phase = 'move', t = 0, clock = 0, paused = false;
 
   const surface = mountCanvas(el, build);
   const loop = o.still == null ? animate(el, tick) : null;
   surface.measure();
 
+  // Sizes everything to the canvas. The stages themselves are sampled a few
+  // per frame, so a freshly loaded page stays responsive meanwhile.
   function build(view) {
-    scale = Math.min(view.width, view.height) * o.fit;
-    const ox = (view.width - scale) / 2, oy = (view.height - scale) / 2;
+    const scale = Math.min(view.width, view.height) * o.fit;
     const size = Math.round(clamp(scale / 1.25, 160, 640)); // mask resolution
-    const k = size / 200, px = scale / size;
-    const gap = (TRIANGLE_SIZE * o.gap) / px;
-    const which = o.still == null ? STAGES.map((_, s) => s) : [o.still];
-    const sampled = which.map((s) => sample(STAGES[s], size, k, gap, random(o.seed + s * 101)));
-    n = Math.max(...sampled.map((p) => p.x.length));
-    const span = Math.max(view.width, view.height);
-    const arranged = sampled.map((p, j) => arrange(p, ox, oy, px, span, view, random(o.seed + which[j] * 211)));
+    const px = scale / size; // CSS pixels per mask pixel
+    frame = { view, scale, size, px, ox: (view.width - scale) / 2, oy: (view.height - scale) / 2, gap: (TRIANGLE_SIZE * o.gap) / px };
+    queue = o.still == null ? STAGES.map((_, s) => s) : [o.still];
+    sampled = new Map();
+    stages = [];
+    if (o.still != null) {
+      prepare(Infinity);
+      draw();
+    }
+  }
 
+  // Samples queued stages for up to `budget` ms; once all are in, lays out the particles.
+  function prepare(budget) {
+    const t0 = performance.now();
+    while (queue.length && performance.now() - t0 < budget) {
+      const s = queue.shift();
+      sampled.set(s, sample(STAGES[s], random(o.seed + s * 101)));
+    }
+    if (queue.length) return false;
+    n = Math.max(...[...sampled.values()].map((p) => p.x.length));
+    stages = STAGES.map((_, s) => (sampled.has(s) ? arrange(sampled.get(s), random(o.seed + s * 211)) : null));
     X = new Float32Array(n); Y = new Float32Array(n); A = new Float32Array(n); S = new Float32Array(n);
     C = new Uint8Array(n); VX = new Float32Array(n); VY = new Float32Array(n); delay = new Float32Array(n);
-
-    if (o.still != null) {
-      const p = arranged[0];
-      X.set(p.x); Y.set(p.y); A.set(p.a); S.set(p.s); C.set(p.c);
-      draw();
-      return;
+    if (o.still != null || calm) {
+      show(stages[o.still ?? target]);
+      return true;
     }
-    stages = arranged;
     // Start scattered and invisible, then condense into the first form.
+    const { view, scale } = frame;
     for (let i = 0; i < n; i++) {
       const r = Math.sqrt(rand()) * scale * 0.55, a = rand() * TAU;
       X[i] = view.width / 2 + Math.cos(a) * r;
       Y[i] = view.height / 2 + Math.sin(a) * r;
       A[i] = rand() * TAU;
+      S[i] = 0;
     }
     begin(target);
-    if (calm) settle();
+    return true;
   }
 
   // Samples one stage into points (in mask pixels) with a colour and a resting angle.
-  function sample(stage, size, k, gap, rnd) {
+  function sample(stage, rnd) {
+    const { size, gap } = frame, k = size / 200;
     const dense = rasterize(stage.paint, size, size, k);
     const faint = stage.faint ? rasterize(stage.faint, size, size, k) : null;
     if (faint) for (let i = 0; i < faint.length; i++) if (dense[i]) faint[i] = 0;
@@ -100,15 +115,15 @@ export function mountEvolution(el, options = {}) {
   }
 
   // Pads a stage to n points and sorts them along a Hilbert curve, so particle i
-  // always travels between nearby regions of consecutive forms.
-  function arrange(p, ox, oy, px, span, view, rnd) {
+  // always travels between nearby regions of consecutive forms. Padding points
+  // sit invisibly on top of real ones, so extra triangles grow out of the form.
+  function arrange(p, rnd) {
+    const { ox, oy, px, view } = frame, span = Math.max(view.width, view.height);
     const m = p.x.length;
     const tx = new Float32Array(n), ty = new Float32Array(n), ta = new Float32Array(n), ts = new Float32Array(n), tc = new Uint8Array(n);
     for (let j = 0; j < n; j++) {
       if (j < m) {
         tx[j] = ox + p.x[j] * px; ty[j] = oy + p.y[j] * px; ta[j] = p.a[j]; ts[j] = 1; tc[j] = p.c[j];
-      } else if (o.spare === 'dust') {
-        tx[j] = rnd() * view.width; ty[j] = rnd() * view.height; ta[j] = rnd() * TAU; ts[j] = 0.42; tc[j] = 0;
       } else {
         const q = Math.floor(rnd() * m);
         tx[j] = tx[q] + (rnd() - 0.5) * 3; ty[j] = ty[q] + (rnd() - 0.5) * 3; ta[j] = ta[q]; ts[j] = 0; tc[j] = tc[q];
@@ -128,7 +143,11 @@ export function mountEvolution(el, options = {}) {
 
   // Starts the move from wherever the triangles are now to stage `index`.
   function begin(index) {
+    last = target;
     target = index;
+    phase = 'move';
+    t = 0;
+    if (calm) return;
     from = { x: X.slice(), y: Y.slice(), a: A.slice(), s: S.slice(), c: C.slice() };
     // The change sweeps across the form, from a side that turns with every stage.
     const dir = index * 2.39996 + 0.7, dx = Math.cos(dir), dy = Math.sin(dir);
@@ -140,49 +159,37 @@ export function mountEvolution(el, options = {}) {
       if (p > hi) hi = p;
     }
     for (let i = 0; i < n; i++) delay[i] = style.spread * (((delay[i] - lo) / (hi - lo || 1)) * 0.8 + rand() * 0.2);
-    phase = 'move';
-    t = 0;
   }
 
-  // With reduced motion, forms simply appear in place.
-  function settle() {
-    const B = stages[target];
+  function show(B) {
     X.set(B.x); Y.set(B.y); A.set(B.a); S.set(B.s); C.set(B.c);
-    phase = 'hold';
-    t = 0;
   }
 
   function tick(dt) {
-    if (!stages.length) return;
+    if (!frame || (!stages.length && !prepare(8))) return;
     if (!paused) {
       t += dt;
       clock += dt;
-      if (phase === 'move' && t >= o.move) {
+      const hold = calm ? 8 : o.hold, move = calm ? CROSSFADE : o.move;
+      if (phase === 'move' && t >= move) {
         phase = 'hold';
         t = 0;
+        if (calm) show(stages[target]);
         if (o.onStage) o.onStage(target, STAGES[target].name);
-      } else if (phase === 'hold' && t >= (calm ? o.hold + o.move : o.hold)) {
-        begin((target + 1) % STAGES.length);
-        if (calm) {
-          settle();
-          if (o.onStage) o.onStage(target, STAGES[target].name);
-        }
-      }
+      } else if (phase === 'hold' && t >= hold) begin((target + 1) % STAGES.length);
     }
-    if (calm) {
-      draw();
-      return;
+    if (!calm) {
+      if (style.motion === 'flock') flock(dt);
+      else glide();
     }
-    if (style.motion === 'flock') flock(dt);
-    else glide();
     draw();
   }
 
   function glide() {
-    const B = stages[target];
+    const B = stages[target], { scale } = frame;
     const moving = phase === 'move';
     const T = moving ? t / o.move : 1;
-    const f = 2.6 / scale, z = clock * 0.08;
+    const f = 2 / scale, z = clock * 0.08;
     const swirl = style.swirl * scale * 0.5, breath = 0.0035 * scale;
     for (let i = 0; i < n; i++) {
       const u = moving ? clamp(T * (1 + style.spread) - delay[i], 0, 1) : 1;
@@ -202,7 +209,7 @@ export function mountEvolution(el, options = {}) {
   }
 
   function flock(dt) {
-    const B = stages[target];
+    const B = stages[target], { scale } = frame;
     const { width, height } = surface.view;
     const moving = phase === 'move';
     const T = moving ? t / o.move : 1;
@@ -242,6 +249,15 @@ export function mountEvolution(el, options = {}) {
   function draw() {
     const { ctx, width, height } = surface.view;
     ctx.clearRect(0, 0, width, height);
+    if (calm && phase === 'move' && stages.length) {
+      const f = smooth(clamp(t / CROSSFADE, 0, 1));
+      for (const [B, alpha] of [[stages[last], 1 - f], [stages[target], f]]) {
+        ctx.globalAlpha = alpha;
+        drawTriangles(ctx, n, B.x, B.y, B.a, B.s, B.c, EMBER);
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
     drawTriangles(ctx, n, X, Y, A, S, C, EMBER);
   }
 
@@ -250,9 +266,7 @@ export function mountEvolution(el, options = {}) {
       return target;
     },
     go(index) {
-      if (!stages.length) return;
-      begin(((index % STAGES.length) + STAGES.length) % STAGES.length);
-      if (calm) settle();
+      if (stages.length) begin(((index % STAGES.length) + STAGES.length) % STAGES.length);
     },
     pause() {
       paused = true;
