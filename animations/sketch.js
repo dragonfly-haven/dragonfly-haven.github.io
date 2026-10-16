@@ -459,10 +459,11 @@ function lay(sketch, scale, step, rnd) {
   const x = [], y = [], a = [], z = [], s = [], c = [];
   for (const { points, weight } of sketch.lines) {
     const w = clamp(weight, 0.5, 4);
-    // heavier lines: bolder, darker and slightly closer dashes, always with gaps between
-    const gap = step * clamp(1.4 - 0.08 * (w - 1), 1.18, 1.5);
-    const thick = 0.75 + 0.45 * (w - 1);
-    const shade = clamp(4.3 - 0.9 * (w - 1), 0, 6);
+    // Like the dragonfly's engraving: one dash width throughout, fine lines as
+    // open rows of dashes, heavier ones packed tight into near-solid strokes.
+    const gap = step * clamp(1.35 - 0.24 * (w - 1), 0.85, 1.5);
+    const thick = 1 + 0.2 * (w - 1);
+    const shade = clamp(3.6 - 0.6 * (w - 1), 1, 5);
     // a little unevenness, as from a hand: fine lines wobble, every dash differs in length
     const wobble = w < 1.6 ? 0.22 : 0;
     const put = (px, py, angle) => {
@@ -471,7 +472,7 @@ function lay(sketch, scale, step, rnd) {
       y.push(py + Math.cos(angle) * off);
       a.push(angle + (rnd() - 0.5) * 0.12);
       z.push(thick);
-      s.push(0.8 + rnd() * 0.4);
+      s.push(0.85 + rnd() * 0.3);
       c.push(clamp(Math.round(shade + (rnd() - 0.5) * 1.2), 0, 6));
     };
     let along = rnd() * gap, total = 0, placed = 0;
