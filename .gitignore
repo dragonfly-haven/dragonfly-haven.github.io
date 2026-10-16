@@ -1,0 +1,17 @@
+# Local tool and editor settings
+.claude/
+.idea/
+.vscode/
+.mcp.json
+
+# Secrets and environment
+.env
+.env.*
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,53 @@
+:root {
+  --ivory: #fffdf6;
+  --ink: #2b2a27;
+  --muted: #8a8477;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--ivory);
+  color: var(--ink);
+  font: 16px/1.5 Georgia, "Times New Roman", serif;
+}
+
+header {
+  padding: 1.5rem 2rem;
+  text-align: right;
+}
+
+.name {
+  letter-spacing: 0.04em;
+}
+
+main {
+  display: grid;
+  place-items: center;
+}
+
+canvas {
+  width: min(60vmin, 320px);
+  aspect-ratio: 1;
+}
+
+footer {
+  padding: 2rem;
+  text-align: center;
+}
+
+a {
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+
+a:hover {
+  color: var(--ink);
+}
