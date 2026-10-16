@@ -1,0 +1,121 @@
+/* Shared look for the animation preview pages. */
+
+@font-face {
+  font-family: "EB Garamond";
+  src: url("../fonts/eb-garamond-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --ivory: #fffdf6;
+  --ink: #2b2a27;
+  --muted: #6e685d;
+  --faint: #e6e0d2;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  background: var(--ivory);
+  color: var(--ink);
+  font: 18px/1.5 "EB Garamond", Georgia, serif;
+  padding: 2rem clamp(1rem, 4vw, 3rem) 4rem;
+}
+
+h1 {
+  font-weight: 400;
+  font-size: 1.6rem;
+}
+
+h2 {
+  font-weight: 400;
+  font-size: 1.25rem;
+  margin: 2.5rem 0 1rem;
+}
+
+p.note {
+  color: var(--muted);
+  max-width: 44rem;
+  margin-top: 0.4rem;
+}
+
+a {
+  color: var(--ink);
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.2rem;
+  margin-top: 0.8rem;
+  color: var(--muted);
+}
+
+nav a[aria-current] {
+  text-decoration: none;
+  border-bottom: 1px solid var(--ink);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 2rem 1.5rem;
+}
+
+figure {
+  display: grid;
+  gap: 0.5rem;
+}
+
+figure .stage {
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+figcaption {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+figcaption strong {
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.big {
+  width: min(100%, 78vh);
+  aspect-ratio: 1;
+  margin: 1.5rem auto 0;
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.controls output {
+  min-width: 12rem;
+  text-align: center;
+}
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: none;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  padding: 0.1em 0.9em;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--ink);
+  color: var(--ivory);
+}

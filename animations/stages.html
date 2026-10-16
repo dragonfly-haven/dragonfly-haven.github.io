@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Evolution stages</title>
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <h1>The twenty stages</h1>
+  <p class="note">Each stage held still, drawn the way the chosen style draws it.</p>
+  <nav id="styles"></nav>
+  <div class="grid" id="sheet" style="margin-top: 2rem"></div>
+
+  <script type="module">
+    import { mountEvolution, STAGES, STYLES } from './evolution.js';
+
+    const params = new URLSearchParams(location.search);
+    const style = params.get('style') || 'flow';
+    const first = Number(params.get('from') || 1) - 1, last = Number(params.get('to') || STAGES.length) - 1;
+    document.getElementById('styles').innerHTML = Object.keys(STYLES)
+      .map((s) => `<a href="?style=${s}"${s === style ? ' aria-current="page"' : ''}>${s}</a>`)
+      .join('');
+
+    const sheet = document.getElementById('sheet');
+    if (params.has('min')) sheet.style.gridTemplateColumns = `repeat(auto-fill, minmax(${params.get('min')}px, 1fr))`;
+    STAGES.forEach((stage, i) => {
+      if (i < first || i > last) return;
+      const figure = document.createElement('figure');
+      figure.innerHTML = `<div class="stage"></div><figcaption><strong>${i + 1}.</strong> ${stage.name}</figcaption>`;
+      sheet.append(figure);
+      mountEvolution(figure.querySelector('.stage'), { style, still: i });
+    });
+  </script>
+</body>
+</html>

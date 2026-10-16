@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Evolution animation</title>
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <h1>Evolution</h1>
+  <nav id="styles"></nav>
+  <div class="big" id="evolution"></div>
+  <div class="controls">
+    <button id="prev" aria-label="Previous stage">‹</button>
+    <output id="label">&nbsp;</output>
+    <button id="next" aria-label="Next stage">›</button>
+    <button id="pause">Pause</button>
+  </div>
+
+  <script type="module">
+    import { mountEvolution, STAGES, STYLES } from './evolution.js';
+
+    const params = new URLSearchParams(location.search);
+    const style = params.get('style') || 'flow';
+    document.getElementById('styles').innerHTML = Object.keys(STYLES)
+      .map((s) => `<a href="?style=${s}"${s === style ? ' aria-current="page"' : ''}>${s}</a>`)
+      .join('') + '<a href="index.html">all options</a>';
+
+    const label = document.getElementById('label');
+    const show = (i) => (label.textContent = `${i + 1}. ${STAGES[i].name}`);
+    const evolution = mountEvolution(document.getElementById('evolution'), {
+      style,
+      start: Number(params.get('stage') || 1) - 1,
+      onStage: show,
+    });
+    show(evolution.stage);
+    if (params.has('t')) {
+      evolution.advance(Number(params.get('t')));
+      evolution.pause();
+    }
+
+    const go = (step) => {
+      evolution.go(evolution.stage + step);
+      show(evolution.stage);
+    };
+    document.getElementById('prev').onclick = () => go(-1);
+    document.getElementById('next').onclick = () => go(1);
+    const pause = document.getElementById('pause');
+    pause.onclick = () => {
+      const paused = pause.textContent === 'Pause';
+      paused ? evolution.pause() : evolution.play();
+      pause.textContent = paused ? 'Play' : 'Pause';
+    };
+    addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') go(-1);
+      if (e.key === 'ArrowRight') go(1);
+      if (e.key === ' ') {
+        e.preventDefault();
+        pause.click();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Animations on the site</title>
+  <style>
+    html, body, iframe {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: #fffdf6;
+    }
+  </style>
+</head>
+<body>
+  <!-- The real page, with the chosen animation styles mounted into it. -->
+  <iframe id="site" src="../index.html" title="The site with its animations"></iframe>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const evolution = params.get('evolution') || 'flow';
+    const dragonfly = params.get('dragonfly') || 'crystallise';
+    const frame = document.getElementById('site');
+    frame.addEventListener('load', () => {
+      const doc = frame.contentDocument;
+      const script = doc.createElement('script');
+      script.type = 'module';
+      script.textContent = `
+        import { mountEvolution } from './animations/evolution.js';
+        import { mountDragonfly } from './animations/dragonfly.js';
+        const e = document.getElementById('evolution'), d = document.getElementById('dragonfly');
+        if (e && !e.firstChild) mountEvolution(e, { style: ${JSON.stringify(evolution)} });
+        if (d && !d.firstChild) mountDragonfly(d, { style: ${JSON.stringify(dragonfly)} });`;
+      doc.body.append(script);
+    });
+  </script>
+</body>
+</html>
