@@ -17,7 +17,7 @@
   --ink: #2b2a27;
   --muted: #6e685d;
   --black: #0b0908;
-  --fly: clamp(72px, 9vw, 120px); /* the dragonfly's size, which the evolution leaves room for */
+  --fly: clamp(61px, 7.65vw, 102px); /* the dragonfly's size, which the evolution leaves room for */
 }
 
 * {

@@ -3,7 +3,7 @@
 // of dashes wrap its body like the hatching of a pen drawing, and dashes trace
 // and shade its wings. It keeps still until the pointer is over it, or over
 // the link it sits in, or that link has keyboard focus; then it beats its
-// wings, and settles again afterwards.
+// wings, and settles again afterwards. Its form can be varied (see FORM).
 //
 //   import { mountDragonfly } from './animations/dragonfly.js';
 //   mountDragonfly(document.getElementById('dragonfly'));
@@ -31,47 +31,70 @@ const BEAT = 1.5, SWING = [0.5, 0.44], RAISE = 0.1, LAG = 0.25, TWIST = 0.3;
 // The model. Units: about 100 from head to tail. +y points to the head, +x to
 // the dragonfly's right and +z up out of its back; the thorax sits about the origin.
 
+// The dragonfly's form, as on the page. Options to mountDragonfly can vary any
+// of it, as the alternatives in dragonflies.html do.
+const FORM = {
+  tail: 1, // length of the abdomen
+  girth: 1, // its thickness
+  flat: 1, // its width over its depth: above 1, broad and flat as in skimmers
+  club: 0, // how much it swells towards its end, as in clubtails
+  eyes: 1, // size of the eyes
+  eyeGap: 0, // how far apart they sit
+  wing: 1, // length of the wings
+  chord: 1, // their breadth
+  flare: 1, // how far the base of the hindwings flares back
+  sweep: [-0.17, 0.16], // how far the hind and fore wings sweep back or forward
+  dihedral: [0.03, 0.04], // and rise from their roots
+  weight: 1, // thickness of the dashes
+  cell: 3.2, // size of the cells in the wings, in dash lengths
+  texture: 'cells', // what fills the wings between their veins: 'cells', 'cross' or 'hatch'
+};
+
 const SEGMENTS = [2.4, 6.0, 8.6, 8.4, 8.4, 8.2, 7.8, 6.6, 5.0, 3.4]; // abdomen, S1 to S10
 const GIRTH = [3.0, 3.25, 1.95, 1.8, 1.85, 1.9, 2.0, 2.1, 2.0, 1.7]; // radius at each segment's middle
-const ABDOMEN = SEGMENTS.reduce((a, b) => a + b, 0);
-const MIDDLES = [], JOINTS = [];
-for (let y = 0, k = 0; k < SEGMENTS.length; y += SEGMENTS[k++]) {
-  MIDDLES.push(y + SEGMENTS[k] / 2);
-  if (k) JOINTS.push(y);
-}
 
-// The abdomen leaves the back of the thorax and droops a little towards the tail.
-const spine = (u) => [0, -4.5 - u * ABDOMEN, 0.6 - 3 * u * u];
-
-function girth(u) {
-  const d = u * ABDOMEN;
-  let r = GIRTH[0];
-  if (d >= MIDDLES[9]) r = GIRTH[9];
-  else if (d > MIDDLES[0]) {
-    let k = 0;
-    while (MIDDLES[k + 1] < d) k++;
-    r = GIRTH[k] + (GIRTH[k + 1] - GIRTH[k]) * smooth((d - MIDDLES[k]) / (MIDDLES[k + 1] - MIDDLES[k]));
+// The dragonfly of a given form: its body parts, its thin parts and its wings.
+function model(f) {
+  const segments = SEGMENTS.map((s) => s * f.tail);
+  const abdomen = segments.reduce((a, b) => a + b, 0);
+  const middles = [], joints = [];
+  for (let y = 0, k = 0; k < segments.length; y += segments[k++]) {
+    middles.push(y + segments[k] / 2);
+    if (k) joints.push(y);
   }
-  let near = Infinity;
-  for (const j of JOINTS) near = Math.min(near, Math.abs(d - j));
-  r *= 1 - 0.14 * Math.exp(-((near / 0.7) ** 2)); // pinched where segments meet
-  const end = ABDOMEN - d;
-  if (end < 1.4) r *= Math.sqrt(Math.max(0, 1 - (1 - end / 1.4) ** 2)); // rounded tip
-  return r;
-}
 
-// Body parts as surfaces. Each is hatched with rings of dashes around its
-// first axis; `layer` orders parts from the back, and a part hides whatever
-// of the parts behind it lies inside it.
-function bodyParts() {
-  const eye = (x) => ellipsoid([x * 2.9, 14.4, 2.3], [[x * 4.6, 0, 0], [0, 5.4, 0.8], [0, -0.9, 5.1]]);
+  // The abdomen leaves the back of the thorax and droops a little towards the tail.
+  const spine = (u) => [0, -4.5 - u * abdomen, 0.6 - 3 * u * u];
+  const girth = (u) => {
+    const d = u * abdomen;
+    let r = GIRTH[0];
+    if (d >= middles[9]) r = GIRTH[9];
+    else if (d > middles[0]) {
+      let k = 0;
+      while (middles[k + 1] < d) k++;
+      r = GIRTH[k] + (GIRTH[k + 1] - GIRTH[k]) * smooth((d - middles[k]) / (middles[k + 1] - middles[k]));
+    }
+    let near = Infinity;
+    for (const j of joints) near = Math.min(near, Math.abs(d - j));
+    r *= 1 - 0.14 * Math.exp(-((near / 0.7) ** 2)); // pinched where segments meet
+    if (f.club) r *= 1 + f.club * Math.exp(-(((d - middles[7]) / (segments[7] * 1.4)) ** 2)); // a club about S8
+    const end = abdomen - d;
+    if (end < 1.4) r *= Math.sqrt(Math.max(0, 1 - (1 - end / 1.4) ** 2)); // rounded tip
+    return r * f.girth * f.flat;
+  };
+
+  // Body parts as surfaces. Each is hatched with rings of dashes around its
+  // first axis; `layer` orders parts from the back, and a part hides whatever
+  // of the parts behind it lies inside it.
+  const e = f.eyes;
+  const eye = (x) => ellipsoid([x * (2.9 + f.eyeGap), 14.4, 2.3], [[x * 4.6 * e, 0, 0], [0, 5.4 * e, 0.8 * e], [0, -0.9 * e, 5.1 * e]]);
   // Pale lines left in the hatching: where the abdomen's segments meet, and
   // the two sutures that run down the thorax's flank.
-  const joint = (p) => JOINTS.some((j) => Math.abs(-4.5 - p[1] - j) < 0.12);
+  const joint = (p) => joints.some((j) => Math.abs(-4.5 - p[1] - j) < 0.12);
   const suture = (p) => Math.abs(p[0]) > 1.4 && [-1.7, 1.5].some((k) => Math.abs(0.891 * (p[1] - 1.4) + 0.453 * (p[2] - 0.4) - k) < 0.2);
-  return [
-    { layer: 0, surface: tube(spine, girth, 1.08), skip: joint },
-    { layer: 0, surface: ellipsoid([0, -11.6, -2.6], [[0, 2.4, 0], [1.1, 0, 0], [0, 0, 1.3]]) }, // genital lobe under S2
+  const parts = [
+    { layer: 0, surface: tube(spine, girth, 1.08 / f.flat), skip: joint },
+    { layer: 0, surface: ellipsoid([0, -4.5 - 7.1 * f.tail, -2.6], [[0, 2.4, 0], [1.1, 0, 0], [0, 0, 1.3]]) }, // genital lobe under S2
     // The thorax leans back: legs at the front of its underside, wings on top behind.
     { layer: 2, surface: ellipsoid([0, 1.4, 0.4], [[0, 7.0, 0], [5.7, 0, 0], [0, -3.2, 6.3]]), skip: suture },
     { layer: 2, surface: ellipsoid([0, 9.4, 0.3], [[0, 1.9, 0], [2.8, 0, 0], [0, 0, 2.4]]) }, // prothorax
@@ -81,11 +104,34 @@ function bodyParts() {
     { layer: 4, surface: eye(-1) },
     { layer: 4, surface: eye(1) },
   ];
+
+  // The wings, scaled and swept as the form asks; the hindwings' base flares
+  // back by stretching whatever lies behind the main chord.
+  const flare = (pts) => (f.flare === 1 ? pts : pts.map(([s, c]) => [s, c > 1 ? 1 + (c - 1) * f.flare : c]));
+  const shaped = (spec, pair) => ({
+    ...spec,
+    length: spec.length * f.wing,
+    chord: spec.chord * f.chord,
+    sweep: f.sweep[pair],
+    dihedral: f.dihedral[pair],
+    trail: pair ? spec.trail : flare(spec.trail),
+    veins: pair ? spec.veins : spec.veins.map((v) => ({ ...v, pts: flare(v.pts) })),
+  });
+  const hind = shaped(HINDWING, 0), fore = shaped(FOREWING, 1);
+  const wings = [
+    { spec: hind, side: -1, pair: 0 },
+    { spec: hind, side: 1, pair: 0 },
+    { spec: fore, side: -1, pair: 1 },
+    { spec: fore, side: 1, pair: 1 },
+  ];
+
+  return { parts, limbs: limbs(spine(1)), wings, frames: wings.map(wingFrame) };
 }
 
 // Thin parts drawn as lines of dashes: legs folded under the thorax as in
-// flight, with spines on their shins; the antennae; and the tail's claspers.
-function limbs() {
+// flight, with spines on their shins; the antennae; and the tail's claspers,
+// at the end of the abdomen.
+function limbs(end) {
   const out = [];
   const legs = [
     // hip, knee, ankle, claw: the front pair reaches forward under the head,
@@ -103,7 +149,6 @@ function limbs() {
     }
     out.push({ pts: [[x * 0.9, 19.2, 1.6], [x * 1.3, 20.6, 3.0], [x * 1.6, 21.6, 3.6]], rows: 1 }); // antenna
   }
-  const end = spine(1);
   for (const x of [-1, 1]) out.push({ pts: [[x * 0.4, end[1] + 0.6, end[2] + 0.5], [x * 0.9, end[1] - 2.6, end[2] + 0.7], [x * 1.1, end[1] - 5.6, end[2] + 0.4]], rows: 2 }); // upper claspers
   out.push({ pts: [[0, end[1] + 0.4, end[2] - 0.6], [0, end[1] - 2.2, end[2] - 0.9], [0, end[1] - 3.6, end[2] - 0.4]], rows: 1 }); // lower clasper
   return out;
@@ -118,7 +163,7 @@ const R45 = [[0.22, 0.2], [0.36, 0.3], [0.5, 0.42], [0.62, 0.6], [0.72, 0.8], [0
 const IR2 = [[0.36, 0.21], [0.52, 0.29], [0.66, 0.38], [0.78, 0.5], [0.88, 0.64], [0.93, 0.74]];
 
 const FOREWING = {
-  root: [2.3, 0.9, 6.0], length: 65, chord: 13, sweep: 0.16, dihedral: 0.04,
+  root: [2.3, 0.9, 6.0], length: 65, chord: 13,
   lead: [[0, 0.16], [0.03, 0.07], [0.1, 0.015], [0.25, 0], [0.47, 0.012], [0.65, 0.006], [0.82, 0.012], [0.91, 0.032], [0.965, 0.08], [0.993, 0.16], [1, 0.25]],
   trail: [[1, 0.25], [0.994, 0.36], [0.97, 0.5], [0.92, 0.64], [0.84, 0.77], [0.72, 0.88], [0.56, 0.96], [0.4, 0.99], [0.26, 0.94], [0.15, 0.8], [0.08, 0.6], [0.035, 0.42], [0, 0.3]],
   veins: [
@@ -135,7 +180,7 @@ const FOREWING = {
 };
 
 const HINDWING = {
-  root: [2.3, -4.1, 5.6], length: 63, chord: 12.6, sweep: -0.17, dihedral: 0.03,
+  root: [2.3, -4.1, 5.6], length: 63, chord: 12.6,
   lead: [[0, 0.14], [0.03, 0.06], [0.1, 0.012], [0.25, 0], [0.45, 0.012], [0.65, 0.006], [0.82, 0.012], [0.91, 0.032], [0.965, 0.08], [0.993, 0.16], [1, 0.25]],
   trail: [[1, 0.25], [0.994, 0.36], [0.97, 0.49], [0.92, 0.62], [0.84, 0.73], [0.72, 0.83], [0.58, 0.9], [0.46, 0.95], [0.36, 1.03], [0.26, 1.16], [0.17, 1.28], [0.1, 1.33], [0.05, 1.26], [0.02, 1.0], [0, 0.5]],
   veins: [
@@ -152,14 +197,6 @@ const HINDWING = {
   stigma: [0.79, 0.88],
 };
 
-// The four wings, and which pair (hind 0, fore 1) each belongs to.
-const WINGS = [
-  { spec: HINDWING, side: -1, pair: 0 },
-  { spec: HINDWING, side: 1, pair: 0 },
-  { spec: FOREWING, side: -1, pair: 1 },
-  { spec: FOREWING, side: 1, pair: 1 },
-];
-
 // A wing's root and its axes: S along the span, C back along the chord, N up
 // out of it, and the hinge it swings about.
 function wingFrame({ spec, side }) {
@@ -175,18 +212,16 @@ function wingFrame({ spec, side }) {
 // ---------------------------------------------------------------------------
 
 export function mountDragonfly(el, options = {}) {
-  // `beat: true` keeps it beating its wings, for previews. `texture` is what
-  // fills the wings between their veins: 'cells', 'cross' or 'hatch'.
-  const o = { rotate: -0.7, tilt: 0.15, roll: 0.4, fit: 0.97, seed: 3, beat: false, texture: 'cells', ...options };
+  // `beat: true` keeps it beating its wings, for previews; any key of FORM varies its form.
+  const o = { rotate: -0.7, tilt: 0.15, roll: 0.4, fit: 0.97, seed: 3, beat: false, ...FORM, ...options };
   const calm = reducedMotion();
-  const frames = WINGS.map(wingFrame);
-  const parts = bodyParts();
+  const { parts, limbs, wings, frames } = model(o);
   // Model to camera: rolled a little to show the left flank, turned in the picture plane, tipped back.
   const G = mul(rotX(-o.tilt), mul(rotZ(-o.rotate), rotY(o.roll)));
 
   let scale = 1, ox = 0, oy = 0, dash = dashSize(1), half = 1;
   let body = null; // the still body, as one path in canvas pixels
-  let wings = []; // per wing: dash centres and half dashes in model units
+  let strokes = []; // per wing: dash centres and half dashes in model units
   let job = null; // a layout under way
   // The beat: its clock, how strongly the wings beat now (0 still, 1 full), and
   // what keeps them beating; the frame loop runs only while they move.
@@ -248,8 +283,8 @@ export function mountDragonfly(el, options = {}) {
       y0 = Math.min(y0, q[1] * k); y1 = Math.max(y1, q[1] * k);
     };
     for (const part of parts) for (let u = 0; u <= 1; u += 1 / 12) for (let v = 0; v < 1; v += 1 / 12) extend(apply(G, part.surface.at(u, v)));
-    for (const limb of limbs()) for (const p of limb.pts) extend(apply(G, p));
-    WINGS.forEach((w, i) => {
+    for (const limb of limbs) for (const p of limb.pts) extend(apply(G, p));
+    wings.forEach((w, i) => {
       for (const angle of [RAISE - SWING[w.pair], RAISE, RAISE + SWING[w.pair]]) {
         const [M, T] = rig(i, angle);
         for (const [s, c] of w.spec.lead.concat(w.spec.trail)) extend(add(apply(M, wingPoint(frames[i], s * w.spec.length, c * w.spec.chord)), T));
@@ -313,7 +348,7 @@ export function mountDragonfly(el, options = {}) {
         stroke(p, dir);
       });
     }
-    for (const limb of limbs()) {
+    for (const limb of limbs) {
       const line = smoothPath(limb.pts, 4);
       for (let r = 0; r < limb.rows; r++) {
         const lift = (r - (limb.rows - 1) / 2) * B * 0.4;
@@ -336,9 +371,9 @@ export function mountDragonfly(el, options = {}) {
     // The wings, worked out flat and then placed on each wing.
     const thorax = parts.filter((part) => part.layer === 2);
     const laid = [];
-    for (const [i, w] of WINGS.entries()) {
+    for (const [i, w] of wings.entries()) {
       const f = frames[i], centres = [], dirs = [];
-      yield* wingDashes(w.spec, L, rand, o.texture, (s, c, ds, dc) => {
+      yield* wingDashes(w.spec, L, rand, o.texture, o.cell, (s, c, ds, dc) => {
         const p = wingPoint(f, s, c);
         if (thorax.some((part) => part.surface.inside(p))) return;
         centres.push(...p);
@@ -349,7 +384,7 @@ export function mountDragonfly(el, options = {}) {
       yield;
     }
     body = path;
-    wings = laid;
+    strokes = laid;
   }
 
   // The wings ease into their beat and out of it, and once they rest the loop stops.
@@ -376,17 +411,17 @@ export function mountDragonfly(el, options = {}) {
     const { ctx, width, height } = surface.view;
     ctx.clearRect(0, 0, width, height);
     ctx.strokeStyle = INK;
-    ctx.lineWidth = dash.width;
+    ctx.lineWidth = dash.width * o.weight;
     ctx.lineCap = 'butt';
     // Wings on the far side go behind the body, the near ones in front. A wing
     // seen edge on would clot into a black blade, so it fades as it turns away.
     const near = [], far = [];
-    WINGS.forEach((w, i) => {
+    wings.forEach((w, i) => {
       const phase = TAU * (BEAT * clock - (w.pair ? LAG : 0));
       const [M, T] = rig(i, RAISE + swing * SWING[w.pair] * Math.sin(phase), swing * TWIST * Math.cos(phase));
       const N = frames[i].N, facing = Math.abs(M[6] * N[0] + M[7] * N[1] + M[8] * N[2]);
       const path = new Path2D();
-      const { p, d } = wings[i];
+      const { p, d } = strokes[i];
       for (let j = 0; j < p.length; j += 3) {
         const a = project(M, T, [p[j] - d[j], p[j + 1] - d[j + 1], p[j + 2] - d[j + 2]]);
         const b = project(M, T, [p[j] + d[j], p[j + 1] + d[j + 1], p[j + 2] + d[j + 2]]);
@@ -586,11 +621,11 @@ function insidePolygon(poly, x, y) {
 // lies along, for dashes `L` long. Bolder parts come first and win where two
 // would crowd each other: the stigma, the leading edge, the veins, the
 // trailing edge, then the texture between the veins, one of
-//   'cells': a lace of small cells, as most of a real wing is;
+//   'cells': a lace of small cells, `cell` dash lengths across, as most of a real wing is;
 //   'cross': cross veins running across the wing like the rungs of a ladder;
 //   'hatch': short dashes scattered across the wing, the way cross veins run.
 // Yields between parts so the work can be spread out.
-function* wingDashes(spec, L, rand, texture, emit) {
+function* wingDashes(spec, L, rand, texture, cell, emit) {
   const W = spec.chord, length = spec.length;
   const { lead, trail, outline } = wingOutline(spec);
   const widest = Math.max(...outline.map(([s]) => (chordAt(trail, s) ?? 0) - (chordAt(lead, s) ?? 0)));
@@ -652,7 +687,7 @@ function* wingDashes(spec, L, rand, texture, emit) {
       for (let c = c0 + L * (0.6 + 0.4 * rand()); c < c1 - L * 0.3; c += L * 1.08) put(s + lean * (c - c0), c, lean, 1, L * 0.4);
     }
   } else {
-    for (const [p, q] of yield* cellEdges(lead, trail, length, widest, L * 3.2, rand)) {
+    for (const [p, q] of yield* cellEdges(lead, trail, length, widest, L * cell, rand)) {
       if (keep((p[0] + q[0]) / 2) > 0.5) walk([p, q], L * 1.08, L * 0.54, (pt, t) => put(pt[0], pt[1], t[0], t[1], L * 0.4));
     }
   }

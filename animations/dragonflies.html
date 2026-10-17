@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dragonfly options</title>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    /* The site's own styles give the wordmark, the dragonfly's size and the
+       text; this page only lays the options out side by side. */
+    body {
+      display: block;
+      min-height: 0;
+      padding: 2rem clamp(1rem, 4vw, 3rem) 4rem;
+    }
+
+    h1 {
+      font-weight: 400;
+      font-size: 1.6rem;
+    }
+
+    .note {
+      max-width: 44rem;
+      margin-top: 0.4rem;
+      color: var(--muted);
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .option {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.4rem 1.25rem;
+      padding: 1.25rem 1.5rem 1.5rem;
+      border: 1px solid #e9e3d5;
+      border-radius: 4px;
+    }
+
+    .option.now {
+      border-style: dashed;
+    }
+
+    .top {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      min-height: var(--fly);
+    }
+
+    .name {
+      font-size: 1.15rem;
+    }
+
+    .name b {
+      display: inline-block;
+      min-width: 1.6em;
+      font-weight: 500;
+    }
+
+    .fly {
+      flex: none;
+      width: var(--fly);
+      aspect-ratio: 1;
+    }
+
+    .zoom {
+      display: block;
+      width: clamp(150px, 16vw, 190px);
+      aspect-ratio: 1;
+    }
+
+    .about {
+      align-self: center;
+    }
+
+    .about .what {
+      margin-top: 0.6rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <h1>Dragonfly options</h1>
+  <p class="note">Eight slight variations on the dragonfly, each in the header beside the wordmark, at its new size, over a line of the page's text. Hover over one to see its wings beat. The current dragonfly comes first for comparison.</p>
+
+  <div class="options" id="options"></div>
+
+  <script type="module">
+    import { mountDragonfly } from './dragonfly.js';
+
+    const OPTIONS = [
+      ['Now', 'The dragonfly on the page today.', {}],
+      ['Slender', 'Like a hawker: a longer, slimmer tail, narrower wings and bigger eyes.', { tail: 1.12, girth: 0.82, wing: 1.05, chord: 0.86, eyes: 1.1, eyeGap: -0.3 }],
+      ['Stout', 'Like a skimmer: a shorter, broad, flat tail and broader wings that flare at the base.', { tail: 0.74, girth: 1.2, flat: 1.7, chord: 1.14, flare: 1.5, wing: 0.96 }],
+      ['Clubtail', 'Eyes set apart, and a tail that swells towards its end.', { eyes: 0.78, eyeGap: 1.7, club: 0.9 }],
+      ['From above', 'Seen straight from above, so both sides match.', { roll: 0, tilt: 0 }],
+      ['Open wings', 'The fore and hind wings spread further apart, like an X.', { sweep: [-0.36, 0.34] }],
+      ['Fine line', 'Finer dashes and smaller cells, like a fine engraving.', { weight: 0.72, cell: 2.6 }],
+      ['Bold line', 'Heavier dashes and larger cells, so it reads darker when small.', { weight: 1.5, cell: 3.8 }],
+      ['Cross veins', 'Cross veins like the rungs of a ladder instead of the lace of cells.', { texture: 'cross' }],
+    ];
+
+    const text = 'We all hope to one day become ‘living fossils’. Until then we’re interested in making sure the next years go well.';
+    const list = document.getElementById('options');
+    OPTIONS.forEach(([name, what, form], n) => {
+      const option = document.createElement('section');
+      option.className = n ? 'option' : 'option now';
+      option.id = n ? `option-${n}` : 'now';
+      option.innerHTML = `
+        <div class="top">
+          <span class="name">${n ? `<b>${n}</b>` : ''}${name}</span>
+          <a class="brand" href="#${option.id}"><span class="wordmark">Dragonfly</span><div class="fly" aria-hidden="true"></div></a>
+        </div>
+        <a class="zoom" href="#${option.id}" aria-hidden="true" tabindex="-1"></a>
+        <div class="about"><p>${text}</p><p class="what">${what}</p></div>`;
+      list.append(option);
+      mountDragonfly(option.querySelector('.fly'), form);
+      mountDragonfly(option.querySelector('.zoom'), form);
+    });
+  </script>
+</body>
+</html>
