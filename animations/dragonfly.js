@@ -118,7 +118,7 @@ const R45 = [[0.22, 0.2], [0.36, 0.3], [0.5, 0.42], [0.62, 0.6], [0.72, 0.8], [0
 const IR2 = [[0.36, 0.21], [0.52, 0.29], [0.66, 0.38], [0.78, 0.5], [0.88, 0.64], [0.93, 0.74]];
 
 const FOREWING = {
-  root: [2.3, 0.9, 6.0], length: 65, chord: 13, sweep: 0.1, dihedral: 0.04,
+  root: [2.3, 0.9, 6.0], length: 65, chord: 13, sweep: 0.16, dihedral: 0.04,
   lead: [[0, 0.16], [0.03, 0.07], [0.1, 0.015], [0.25, 0], [0.47, 0.012], [0.65, 0.006], [0.82, 0.012], [0.91, 0.032], [0.965, 0.08], [0.993, 0.16], [1, 0.25]],
   trail: [[1, 0.25], [0.994, 0.36], [0.97, 0.5], [0.92, 0.64], [0.84, 0.77], [0.72, 0.88], [0.56, 0.96], [0.4, 0.99], [0.26, 0.94], [0.15, 0.8], [0.08, 0.6], [0.035, 0.42], [0, 0.3]],
   veins: [
@@ -131,11 +131,11 @@ const FOREWING = {
     { rank: 2, pts: [[0.04, 0.46], [0.1, 0.56], [0.16, 0.72], [0.22, 0.9], [0.25, 1.0]] }, // cubitus
     { rank: 2, pts: [[0.11, 0.42], [0.2, 0.47], [0.14, 0.62], [0.11, 0.42]] }, // discoidal triangle
   ],
-  stigma: [[0.785, 0.01], [0.885, 0.022], [0.882, 0.115], [0.782, 0.105]],
+  stigma: [0.79, 0.885], // the pterostigma, between these fractions of the length
 };
 
 const HINDWING = {
-  root: [2.3, -4.1, 5.6], length: 63, chord: 12.6, sweep: -0.09, dihedral: 0.03,
+  root: [2.3, -4.1, 5.6], length: 63, chord: 12.6, sweep: -0.17, dihedral: 0.03,
   lead: [[0, 0.14], [0.03, 0.06], [0.1, 0.012], [0.25, 0], [0.45, 0.012], [0.65, 0.006], [0.82, 0.012], [0.91, 0.032], [0.965, 0.08], [0.993, 0.16], [1, 0.25]],
   trail: [[1, 0.25], [0.994, 0.36], [0.97, 0.49], [0.92, 0.62], [0.84, 0.73], [0.72, 0.83], [0.58, 0.9], [0.46, 0.95], [0.36, 1.03], [0.26, 1.16], [0.17, 1.28], [0.1, 1.33], [0.05, 1.26], [0.02, 1.0], [0, 0.5]],
   veins: [
@@ -149,7 +149,7 @@ const HINDWING = {
     { rank: 2, pts: [[0.02, 0.6], [0.05, 0.8], [0.09, 1.05], [0.12, 1.34]] }, // anal vein
     { rank: 2, pts: [[0.06, 0.72], [0.13, 0.78], [0.18, 0.92], [0.12, 1.02], [0.07, 0.95], [0.06, 0.72]] }, // anal loop
   ],
-  stigma: [[0.785, 0.01], [0.88, 0.022], [0.877, 0.11], [0.782, 0.1]],
+  stigma: [0.79, 0.88],
 };
 
 // The four wings, and which pair (hind 0, fore 1) each belongs to.
@@ -284,11 +284,14 @@ export function mountDragonfly(el, options = {}) {
   function* sample() {
     const rand = random(o.seed);
     const L = half / 0.45; // a dash's length in model units
+    // On a small emblem a dash grows long for the body's girth and fuzzes its
+    // outline, so the body keeps its dashes to a length that suits it.
+    const B = Math.min(L, 2.6);
     const T0 = [0, 0, 0];
     const path = new Path2D();
     // Like a hand's, every dash is a little longer or shorter than the next.
     const stroke = (p, dir) => {
-      const h = half * (0.85 + 0.3 * rand());
+      const h = B * 0.45 * (0.85 + 0.3 * rand());
       const a = project(G, T0, add(p, scaled(dir, -h))), b = project(G, T0, add(p, scaled(dir, h)));
       path.moveTo(a[0], a[1]);
       path.lineTo(b[0], b[1]);
@@ -297,11 +300,11 @@ export function mountDragonfly(el, options = {}) {
     // The body: rings of dashes around each part, thinned where the light
     // catches it, as an engraver leaves a highlight.
     for (const [index, part] of parts.entries()) {
-      yield* hatch(part.surface, L * 0.17, L * 1.0, rand, (p, dir, nrm) => {
+      yield* hatch(part.surface, B * 0.17, B * 1.0, rand, (p, dir, nrm) => {
         const n = apply(G, nrm);
         if (n[2] < 0.02) return; // facing away
         for (let j = 0; j < parts.length; j++) {
-          if (j !== index && parts[j].layer >= part.layer && parts[j].surface.inside(p, parts[j].layer === part.layer ? L * 0.3 : 0)) return;
+          if (j !== index && parts[j].layer >= part.layer && parts[j].surface.inside(p, parts[j].layer === part.layer ? B * 0.3 : 0)) return;
         }
         if (part.skip && part.skip(p)) return;
         const gloss = Math.max(0, dot(n, HALF)) ** 16;
@@ -310,19 +313,19 @@ export function mountDragonfly(el, options = {}) {
       });
     }
     for (const limb of limbs()) {
-      const path = smoothPath(limb.pts, 4);
+      const line = smoothPath(limb.pts, 4);
       for (let r = 0; r < limb.rows; r++) {
-        const lift = (r - (limb.rows - 1) / 2) * L * 0.4;
-        walk(path, L * 1.1, L * 0.55 + r * L * 0.5, (p, t) => {
+        const lift = (r - (limb.rows - 1) / 2) * B * 0.4;
+        walk(line, B * 1.1, B * 0.55 + r * B * 0.5, (p, t) => {
           const side = unit(cross(t, [0, 0, 1]));
           stroke(add(p, scaled(side, lift)), t);
         });
       }
       // Short spines along the shins.
       if (limb.spines) {
-        walk(path, L * 2.2, L * 1.1, (p, t) => {
+        walk(line, B * 2.2, B * 1.1, (p, t) => {
           const out = unit(add(cross(t, [Math.sign(p[0]), 0, 0]), [0, 0, -0.3]));
-          stroke(add(p, scaled(out, half * 0.8)), out);
+          stroke(add(p, scaled(out, B * 0.36)), out);
         });
       }
     }
@@ -587,7 +590,10 @@ function* wingDashes(spec, L, rand, emit) {
   const W = spec.chord, length = spec.length;
   const { lead, trail, outline } = wingOutline(spec);
   const widest = Math.max(...outline.map(([s]) => (chordAt(trail, s) ?? 0) - (chordAt(lead, s) ?? 0)));
-  const rank = widest / L < 7 ? 0 : widest / L < 11 ? 1 : 2;
+  // How many dashes fit across the wing decides how much of it to draw: on a
+  // small emblem fewer veins, lighter edges and a sparser membrane keep it clean.
+  const across = widest / L, rank = across < 7 ? 0 : across < 11 ? 1 : 2;
+  const fine = clamp((across - 4) / 6, 0, 1); // 0 on the smallest emblem, 1 once there is room
 
   const cells = new Map();
   const crowded = (s, c, gap) => {
@@ -606,37 +612,42 @@ function* wingDashes(spec, L, rand, emit) {
     emit(s, c, ds, dc);
   };
   // Rows of dashes along a line, `offsets` across it (positive towards the
-  // trailing edge for lines that run root to tip).
-  const along = (poly, offsets, gap = L * 0.36) => {
+  // trailing edge for lines that run root to tip), `step` apart along it.
+  const along = (poly, offsets, gap = L * 0.36, step = L * 1.12) => {
     offsets.forEach((off, r) => {
-      walk(poly, L * 1.12, L * (0.56 + 0.5 * r), (p, t) => put(p[0] - t[1] * off, p[1] + t[0] * off, t[0], t[1], gap));
+      walk(poly, step, step * (0.5 + 0.45 * r), (p, t) => put(p[0] - t[1] * off, p[1] + t[0] * off, t[0], t[1], gap));
     });
   };
 
-  // The pterostigma, solid.
-  const stigma = spec.stigma.map(([s, c]) => [s * length, c * W]);
-  const s0 = Math.min(...stigma.map((p) => p[0])), s1 = Math.max(...stigma.map((p) => p[0]));
-  for (let c = 0; c < W * 0.13; c += L * 0.36) {
-    walk([[s0, c], [s1, c]], L * 1.12, L * 0.56 * (1 + (Math.round(c / (L * 0.36)) & 1)), (p) => insidePolygon(stigma, p[0], p[1]) && put(p[0], p[1], 1, 0, L * 0.3));
-  }
+  // The leading edge, bold, with the pterostigma near the tip: a block of
+  // rows packed tight under it, so it reads as a dark mark.
+  const edge = across < 6 ? [L * 0.3, L * 0.68] : [L * 0.3, L * 0.68, L * 1.06];
+  const [a, b] = spec.stigma.map((f) => f * length), below = edge[edge.length - 1];
+  along(lead.filter(([s]) => s >= a && s <= b), [0.24, 0.46, 0.68, 0.9].map((k) => below + L * k), L * 0.16, L * 0.92);
   yield;
-  along(lead, [L * 0.3, L * 0.68, L * 1.06]); // the leading edge, bold
+  along(lead, edge);
   yield;
   for (const v of spec.veins.filter((vein) => vein.rank <= rank)) {
-    along(smoothPath(v.pts.map(([s, c]) => [s * length, c * W]), 6), v.rank ? [-L * 0.15, L * 0.15] : [-L * 0.3, 0, L * 0.3]);
+    const rows = v.rank ? [-L * 0.15, L * 0.15] : across < 6 ? [0] : across < 9 ? [-L * 0.17, L * 0.17] : [-L * 0.3, 0, L * 0.3];
+    along(smoothPath(v.pts.map(([s, c]) => [s * length, c * W]), 6), rows);
     yield;
   }
-  along(trail.slice().reverse(), [-L * 0.25, -L * 0.6]); // the trailing edge
+  along(trail.slice().reverse(), across < 6 ? [-L * 0.25] : [-L * 0.25, -L * 0.6]); // the trailing edge
   yield;
 
-  // The membrane: dashes across the wing, the way its cross veins run, thinning
-  // out towards the root so the wing's base doesn't clot when seen edge on.
+  // The membrane: dashes across the wing, the way its cross veins run. They
+  // thin out towards the root, so the base doesn't clot when seen edge on,
+  // and towards the trailing edge, so the wing looks lit through; and on a
+  // small emblem they thin out overall.
   const rowGap = L;
   for (let s = rowGap / 2; s < length; s += rowGap) {
     const c0 = chordAt(lead, s), c1 = chordAt(trail, s);
     if (c0 == null || c1 == null) continue;
-    const shift = rand() * L * 1.35, keep = smooth(clamp((s / length - 0.05) / 0.15, 0, 1));
-    for (let c = c0 + shift; c < c1; c += L * 1.35) if (rand() < keep) put(s + (rand() - 0.5) * L * 0.2, c, 0, 1, L * 0.45);
+    const shift = rand() * L * 1.35, root = smooth(clamp((s / length - 0.05) / 0.15, 0, 1));
+    for (let c = c0 + shift; c < c1; c += L * 1.35) {
+      const keep = root * (0.35 + 0.65 * fine) * (1 - 0.45 * ((c - c0) / (c1 - c0 || 1)));
+      if (rand() < keep) put(s + (rand() - 0.5) * L * 0.2, c, 0, 1, L * 0.45);
+    }
   }
 }
 
