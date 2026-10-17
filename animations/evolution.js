@@ -8,7 +8,8 @@
 // lit as if it had volume, and set in a slowly turning field of golden dust.
 // Before every change the triangles of one stage are paired with places in the
 // next so that each travels a short way, and the GPU (evolution-gl.js) draws
-// their whole journey.
+// their whole journey. Changes overlap like a relay: each sweeps across a form,
+// and the next sets off before the last has quite landed, so the flow never stops.
 
 import {
   TAU, random, noise3, curl, clamp, smooth, turn, reducedMotion, triangleSize,
@@ -24,7 +25,9 @@ export const GOLD = ['#1a1206', '#2a1d07', '#3d2a08', '#523909', '#6a4a0b', '#84
 
 // How everything moves. Lengths are in stage units; a stage is 200 units across.
 const MOTION = {
-  spread: 0.55, // how much of a move the change takes to sweep across the form
+  sweep: 0.36, // share of the time between changes that one takes to sweep across a form
+  rest: 0.7, // share of that sweep each part of a form rests; under 1, the next change sets off before the last has landed
+  ramp: 0.2, // share of each flight spent speeding up, and again slowing down; triangles cruise in between
   swirl: 5.5, // units of swirl in mid flight
   twist: 0.4, // radians a form spirals about the centre in mid change, turning each way in turn
   breath: 0.45, // units of drift at rest
@@ -37,8 +40,8 @@ const MOTION = {
 
 const DEFAULTS = {
   speed: 1.4, // how fast it all plays (changes, rests, dust); the times here are at speed 1
-  hold: 0, // seconds each stage rests once formed: none, the next change starts at once
-  move: 3.6, // seconds each change takes
+  move: 3.6, // seconds from one change setting off to the next
+  hold: 0, // extra seconds each part of a form rests
   fit: 0.94, // share of the shorter side the stage fills
   size: null, // triangle side in CSS px; by default as fine as the screen allows
   gap: 1.12, // closest spacing of triangles, in triangle sizes
@@ -49,7 +52,8 @@ const DEFAULTS = {
   onStage: null,
 };
 
-const STRIDE = 16; // floats per triangle in a planned move, see evolution-gl.js
+const STRIDE = 20; // floats per triangle in a planned change, see evolution-gl.js
+const MIN_FLIGHT = 0.4; // shortest flight, as a share of the time between changes
 const CROSSFADE = 1.5; // seconds, between stages when reduced motion is preferred
 
 export function mountEvolution(el, options = {}) {
@@ -62,8 +66,8 @@ export function mountEvolution(el, options = {}) {
 
   let frame = null; // sizes for the current canvas
   let queue = [], samples = new Map();
-  let N = 0, cur = null, seeds = null, data = null, job = null, ready = null, sampler = null;
-  let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false, frames = 0;
+  let N = 0, cur = null, seeds = null, moves = [], job = null, ready = null, sampler = null;
+  let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false;
 
   // With the GPU, its context and shaders are set up over the first frames
   // (see setup), so mounting costs the page almost nothing.
@@ -86,6 +90,7 @@ export function mountEvolution(el, options = {}) {
     samples = new Map();
     queue = o.still == null ? STAGES.map((_, s) => (o.start + s) % STAGES.length) : [o.still];
     N = 0;
+    moves = [];
     job = ready = sampler = null;
     phase = 'wait';
     if (o.still != null) {
@@ -258,32 +263,57 @@ export function mountEvolution(el, options = {}) {
     return out;
   }
 
-  // Plans the move to stage `s`, pairing every triangle with a place in it.
-  // A generator, so the work can be spread over the frames of a pause.
-  function* planning(s) {
-    const next = arrange(s, random(o.seed + s * 977 + Math.round(clock * 10)));
-    const [ax, ay] = positions(cur, clock), [bx, by] = positions(next, clock);
-    const match = yield* pairing(ax, ay, bx, by);
-    // The change sweeps across from a side that turns with every stage.
-    const dir = s * 2.39996 + 0.7, dx = Math.cos(dir), dy = Math.sin(dir);
+  const period = () => o.move + o.hold; // seconds from one change setting off to the next
+  const width = () => MOTION.sweep * o.move; // seconds a change takes to sweep across a form
+  const pause = () => MOTION.rest * width() + o.hold; // seconds each part of a form rests
+
+  // Sets when each triangle of a layout will set off in the change that
+  // leaves it towards stage `s`: when that change's sweep reaches it, from a
+  // side that turns with every stage. Dust sets off at random.
+  function sweep(l, s, rnd) {
+    const W = width(), dir = s * 2.39996 + 0.7, dx = Math.cos(dir), dy = Math.sin(dir);
     let lo = Infinity, hi = -Infinity;
     for (let i = 0; i < N; i++) {
-      const v = ax[i] * dx + ay[i] * dy;
+      if (l.w[i]) continue;
+      const v = l.x[i] * dx + l.y[i] * dy;
       if (v < lo) lo = v;
       if (v > hi) hi = v;
     }
-    const d = new Float32Array(N * STRIDE);
-    const after = layout(N); // where each triangle rests once the move is done
     for (let i = 0; i < N; i++) {
-      const j = match[i], at = i * STRIDE;
-      const sweep = cur.w[i] && next.w[j] ? rand() : ((ax[i] * dx + ay[i] * dy - lo) / (hi - lo || 1)) * 0.8 + rand() * 0.2;
-      d[at] = cur.x[i]; d[at + 1] = cur.y[i]; d[at + 2] = cur.z[i]; d[at + 3] = cur.w[i];
-      d[at + 4] = next.x[j]; d[at + 5] = next.y[j]; d[at + 6] = next.z[j]; d[at + 7] = next.w[j];
-      d[at + 8] = cur.s[i]; d[at + 9] = next.s[j]; d[at + 10] = cur.c[i]; d[at + 11] = next.c[j];
-      d[at + 12] = MOTION.spread * sweep; d[at + 13] = seeds[i]; d[at + 14] = cur.a[i]; d[at + 15] = next.a[j];
+      l.d[i] = l.w[i] ? W * rnd() : W * (((l.x[i] * dx + l.y[i] * dy - lo) / (hi - lo || 1)) * 0.8 + rnd() * 0.2);
+    }
+  }
+
+  // Plans the change to stage `s`, pairing every triangle with a place in it.
+  // A generator, so the work can be spread over the frames of the change before.
+  function* planning(s) {
+    const rnd = random(o.seed + s * 977 + Math.round(clock * 10));
+    const next = arrange(s, rnd);
+    const [ax, ay] = positions(cur, clock), [bx, by] = positions(next, clock);
+    const match = yield* pairing(ax, ay, bx, by);
+    const after = layout(N); // where each triangle rests once it has landed
+    for (let i = 0; i < N; i++) {
+      const j = match[i];
       for (const key of 'xyzwsca') after[key][i] = next[key][j];
     }
-    return { stage: s, data: d, after };
+    yield;
+    // Each triangle sets off when this change's sweep reaches it, and lands in
+    // the order it will set off in the next change, a little before it does:
+    // so every part of a form rests the same short while, the next change
+    // sweeps in before this one has quite landed, and the flow never stops.
+    sweep(after, (s + 1) % STAGES.length, rnd);
+    const P = period(), lead = pause();
+    const data = new Float32Array(N * STRIDE), arrive = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const j = match[i], at = i * STRIDE;
+      arrive[i] = Math.max(P + after.d[i] - lead, cur.d[i] + MIN_FLIGHT * P);
+      data[at] = cur.x[i]; data[at + 1] = cur.y[i]; data[at + 2] = cur.z[i]; data[at + 3] = cur.w[i];
+      data[at + 4] = next.x[j]; data[at + 5] = next.y[j]; data[at + 6] = next.z[j]; data[at + 7] = next.w[j];
+      data[at + 8] = cur.s[i]; data[at + 9] = next.s[j]; data[at + 10] = cur.c[i]; data[at + 11] = next.c[j];
+      data[at + 12] = cur.a[i]; data[at + 13] = next.a[j]; data[at + 14] = seeds[i];
+      data[at + 16] = cur.d[i]; data[at + 17] = arrive[i];
+    }
+    return { stage: s, data, arrive, after };
   }
 
   // Works on a plan for up to `budget` ms; returns the move once it is ready.
@@ -299,16 +329,38 @@ export function mountEvolution(el, options = {}) {
     }
   }
 
-  // Starts a planned move (with reduced motion, just the change of stage).
-  function begin(move) {
+  // Sets a planned change off at clock time S (with reduced motion, just the change of stage).
+  function startMove(move, S) {
+    if (!calm && moves.length && o.onStage) o.onStage(target, STAGES[target].name); // the stage at its fullest
     last = target;
     target = move.stage;
-    phase = 'move';
-    t = 0;
-    if (calm) return;
-    data = move.data;
+    if (calm) {
+      phase = 'move';
+      t = 0;
+      return;
+    }
+    const P = period(), data = move.data;
+    for (let i = 0; i < N; i++) {
+      const at = i * STRIDE;
+      // A triangle shows in this change from when it landed in the last one,
+      // and never sets off before that.
+      const shown = Math.max(cur.arrive[i] - S, -1e6);
+      const depart = Math.max(data[at + 16], shown);
+      const arrive = Math.max(move.arrive[i], depart + MIN_FLIGHT * P);
+      data[at + 16] = depart;
+      data[at + 17] = arrive;
+      data[at + 18] = shown;
+      move.after.arrive[i] = S + arrive;
+    }
+    move.S = S;
+    move.twist = MOTION.twist * (move.stage % 2 ? 1 : -1);
+    // The newest change takes the buffer the oldest one used.
+    const newest = moves[moves.length - 1];
+    move.slot = newest ? 1 - newest.slot : 0;
+    if (gpu) gpu.load(move.slot, data, N);
+    moves = newest ? [newest, move] : [move];
     cur = move.after;
-    if (gpu) gpu.load(data, N);
+    phase = 'run';
   }
 
   function tick(dt, render = true) {
@@ -317,16 +369,16 @@ export function mountEvolution(el, options = {}) {
       prepare(6); // sample stages while the GPU gets ready
       return;
     }
-    if (queue.length || sampler) prepare(phase === 'move' ? 4 : 8);
+    if (queue.length || sampler) prepare(phase === 'run' ? 4 : 8);
     if (phase === 'wait') {
       if (!samples.has(target)) return render && draw();
       start();
     }
     if (phase === 'plan') {
-      // A move started out of turn (the first one, or a jump) is planned a slice per frame too.
+      // A change started out of turn (the first one, or a jump) is planned a slice per frame too.
       if (job) ready = work(8);
       if (!ready) return render && draw();
-      begin(ready);
+      startMove(ready, clock);
       ready = null;
     }
     if (!paused) {
@@ -334,27 +386,24 @@ export function mountEvolution(el, options = {}) {
       const step = calm ? dt : dt * o.speed;
       t += step;
       clock += step;
-      if (phase === 'move' && t >= (calm ? CROSSFADE : o.move)) {
-        phase = 'hold';
-        t = 0;
-        if (o.onStage) o.onStage(target, STAGES[target].name);
-      }
-      // The next move is planned while this one plays, so it can follow the moment this one settles.
-      if (phase === 'move' || phase === 'hold') {
-        const next = (target + 1) % STAGES.length;
-        if (!ready && !job && samples.has(next)) {
-          if (calm) ready = { stage: next };
-          else job = planning(next);
-        }
-        if (job) ready = work(phase === 'move' ? 3 : 8);
-        if (phase === 'hold' && ready && t >= (calm ? 8 : o.hold)) {
-          begin(ready);
+      if (calm) {
+        if (phase === 'move' && t >= CROSSFADE) {
+          phase = 'hold';
+          t = 0;
+          if (o.onStage) o.onStage(target, STAGES[target].name);
+        } else if (phase === 'hold' && t >= 8) startMove({ stage: (target + 1) % STAGES.length }, clock);
+      } else {
+        // The next change is planned while this one plays, and sets off on time.
+        const next = (target + 1) % STAGES.length, current = moves[moves.length - 1];
+        if (!ready && !job && samples.has(next)) job = planning(next);
+        if (job) ready = work(4);
+        if (ready && clock >= current.S + period()) {
+          startMove(ready, Math.max(current.S + period(), clock - step));
           ready = null;
         }
       }
     }
-    // While a stage rests it moves slowly, so every other frame is enough.
-    if (render && (phase !== 'hold' || (frames++ & 1) === 0)) draw();
+    if (render) draw();
   }
 
   // The first move: from scattered, invisible dust into the first stage.
@@ -370,81 +419,89 @@ export function mountEvolution(el, options = {}) {
       cur.w[i] = 1;
       cur.a[i] = rand() * TAU;
       cur.c[i] = 6;
+      cur.d[i] = width() * rand();
     }
     ready = null;
-    if (calm) return begin({ stage: target });
+    if (calm) return startMove({ stage: target }, clock);
     job = planning(target);
     phase = 'plan';
   }
 
   function draw() {
     const { view } = frame;
-    const progress = phase === 'move' ? t / o.move : phase === 'hold' ? 1 + t / Math.max(o.hold, 0.001) : 1;
     if (calm) {
       if (phase === 'wait') return;
       const f = phase === 'move' ? smooth(clamp(t / CROSSFADE, 0, 1)) : 1;
       return drawStatic(f < 1 ? [[samples.get(last), 1 - f], [samples.get(target), f]] : [[samples.get(target), 1]]);
     }
+    // The newest change, and the one before it until its last triangles have landed.
+    const batches = moves.map((m, k) => ({
+      slot: m.slot,
+      u_time: clock - m.S,
+      u_retired: k < moves.length - 1 ? 1 : 0,
+      u_twist: m.twist,
+    }));
     if (gpu) {
-      const yaw = MOTION.sway * Math.sin(clock * 0.11);
       gpu.draw(view, {
-        u_progress: phase === 'wait' ? 0 : progress,
-        u_previous: phase === 'move' ? Math.max(0, (t - o.speed / 60) / o.move) : progress,
         u_clock: clock,
         u_step: o.speed / 60,
-        u_spread: MOTION.spread,
+        u_ramp: MOTION.ramp,
         u_swirl: MOTION.swirl,
         u_breath: MOTION.breath,
         u_ripple: MOTION.ripple,
         u_freq: MOTION.freq,
-        u_twist: MOTION.twist * (target % 2 ? 1 : -1),
         u_spin: MOTION.spin,
-        u_yaw: yaw,
+        u_yaw: MOTION.sway * Math.sin(clock * 0.11),
         u_depth: MOTION.depth,
         u_centre: [view.width / 2, view.height / 2],
         u_view: [view.width, view.height],
         u_scale: frame.unit,
         u_size: frame.tri / Math.sqrt(3),
-      });
+      }, batches);
       return;
     }
-    drawMoving(progress);
+    drawMoving(batches);
   }
 
   // The same journey as the GPU's, worked out here when WebGL2 isn't available.
   const cpu = { x: null, y: null, a: null, s: null, c: null, px: null, py: null };
-  function drawMoving(progress) {
-    const { ctx, width, height } = surface.view;
-    ctx.clearRect(0, 0, width, height);
-    if (!data) return;
+  function drawMoving(batches) {
+    const { ctx, width: w, height: h } = surface.view;
+    ctx.clearRect(0, 0, w, h);
+    if (!N || !moves.length) return;
     if (!cpu.x || cpu.x.length !== N) for (const key in cpu) cpu[key] = key === 'c' ? new Uint8Array(N) : new Float32Array(N);
-    const u0 = frame.unit, cx = width / 2, cy = height / 2;
-    for (let i = 0; i < N; i++) {
-      const d = i * STRIDE;
-      const u = clamp((progress * (1 + MOTION.spread) - data[d + 12]) / (1 + MOTION.spread - data[d + 12]), 0, 1), e = u * u * (3 - 2 * u);
-      place(data, d, clock);
-      const fx = at[0], fy = at[1];
-      place(data, d + 4, clock);
-      let x = fx + (at[0] - fx) * e, y = fy + (at[1] - fy) * e;
-      curl(noise, x * MOTION.freq, y * MOTION.freq, clock * 0.08, c2);
-      const flight = Math.sin(Math.PI * u), amp = MOTION.breath + MOTION.swirl * flight;
-      x += c2[0] * amp;
-      y += c2[1] * amp;
-      // a slow ripple runs through every form, so even a finished one never stands still
-      const wx = Math.sin(y * 0.11 + clock * 1.3) * MOTION.ripple, wy = Math.sin(x * 0.13 - clock * 1.1) * MOTION.ripple;
-      x += wx;
-      y += wy;
-      const a = (MOTION.twist * (target % 2 ? 1 : -1) * flight) / (1 + (x * x + y * y) / 3600);
-      const tx = x * Math.cos(a) - y * Math.sin(a);
-      y = cy + (x * Math.sin(a) + y * Math.cos(a)) * u0;
-      x = cx + tx * u0;
-      const vx = x - cpu.px[i], vy = y - cpu.py[i], rest = turn(data[d + 14], data[d + 15], e);
-      cpu.a[i] = vx * vx + vy * vy > 0.04 ? turn(cpu.a[i], Math.atan2(vy, vx), 0.3) : turn(cpu.a[i], rest, 0.08);
-      cpu.px[i] = cpu.x[i] = x;
-      cpu.py[i] = cpu.y[i] = y;
-      cpu.s[i] = data[d + 8] + (data[d + 9] - data[d + 8]) * e;
-      cpu.c[i] = u < 0.5 ? data[d + 10] : data[d + 11];
-    }
+    const unit = frame.unit, cx = w / 2, cy = h / 2;
+    cpu.s.fill(0);
+    batches.forEach(({ u_time: local, u_retired: retired, u_twist: twist }, k) => {
+      const data = moves[k].data;
+      for (let i = 0; i < N; i++) {
+        const d = i * STRIDE;
+        if (local < data[d + 18] || (retired && local >= data[d + 17])) continue;
+        const u = clamp((local - data[d + 16]) / Math.max(data[d + 17] - data[d + 16], 0.001), 0, 1), e = ease(u);
+        place(data, d, clock);
+        const fx = at[0], fy = at[1];
+        place(data, d + 4, clock);
+        let x = fx + (at[0] - fx) * e, y = fy + (at[1] - fy) * e;
+        curl(noise, x * MOTION.freq, y * MOTION.freq, clock * 0.08, c2);
+        const mid = Math.sin(Math.PI * u), amp = MOTION.breath + MOTION.swirl * mid;
+        x += c2[0] * amp;
+        y += c2[1] * amp;
+        // a slow ripple runs through every form, so even a finished one never stands still
+        const wx = Math.sin(y * 0.11 + clock * 1.3) * MOTION.ripple, wy = Math.sin(x * 0.13 - clock * 1.1) * MOTION.ripple;
+        x += wx;
+        y += wy;
+        const a = (twist * mid) / (1 + (x * x + y * y) / 3600);
+        const tx = x * Math.cos(a) - y * Math.sin(a);
+        y = cy + (x * Math.sin(a) + y * Math.cos(a)) * unit;
+        x = cx + tx * unit;
+        const vx = x - cpu.px[i], vy = y - cpu.py[i], rest = turn(data[d + 12], data[d + 13], e);
+        cpu.a[i] = vx * vx + vy * vy > 0.04 ? turn(cpu.a[i], Math.atan2(vy, vx), 0.3) : turn(cpu.a[i], rest, 0.08);
+        cpu.px[i] = cpu.x[i] = x;
+        cpu.py[i] = cpu.y[i] = y;
+        cpu.s[i] = data[d + 8] + (data[d + 9] - data[d + 8]) * e;
+        cpu.c[i] = u < 0.5 ? data[d + 10] : data[d + 11];
+      }
+    });
     drawTriangles(ctx, N, cpu.x, cpu.y, cpu.a, cpu.s, cpu.c, GOLD, frame.tri);
   }
 
@@ -471,7 +528,7 @@ export function mountEvolution(el, options = {}) {
       const s = ((index % STAGES.length) + STAGES.length) % STAGES.length;
       if (!samples.has(s)) samples.set(s, finish(sample(STAGES[s], random(o.seed + s * 101))));
       ready = null;
-      if (calm) return begin({ stage: s });
+      if (calm) return startMove({ stage: s }, clock);
       job = planning(s);
       phase = 'plan';
     },
@@ -501,9 +558,21 @@ function finish(steps) {
   }
 }
 
+// Where every triangle rests, and how: x, y (or radius and angle for dust),
+// height, dust flag, size, colour and angle; plus when it sets off in the
+// change that leaves this layout (d, seconds from that change's start) and
+// when it landed here (arrive, clock seconds).
 function layout(n) {
   const f = () => new Float32Array(n);
-  return { x: f(), y: f(), z: f(), w: f(), s: f(), c: new Uint8Array(n), a: f() };
+  return { x: f(), y: f(), z: f(), w: f(), s: f(), c: new Uint8Array(n), a: f(), d: f(), arrive: new Float64Array(n).fill(-Infinity) };
+}
+
+// Speeds up over the first `ramp` of a flight, cruises, and slows down over the last.
+function ease(u) {
+  const a = MOTION.ramp, v = 1 / (1 - a);
+  if (u < a) return (v * u * u) / (2 * a);
+  if (u > 1 - a) return 1 - (v * (1 - u) * (1 - u)) / (2 * a);
+  return v * (u - a / 2);
 }
 
 // Where each triangle of a layout is at `clock`, in stage units (dust has orbited on).
