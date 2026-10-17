@@ -17,7 +17,7 @@
   --ink: #2b2a27;
   --muted: #6e685d;
   --black: #0b0908;
-  --fly: clamp(88px, 11vw, 150px); /* the dragonfly's size, which the evolution leaves room for */
+  --fly: clamp(72px, 9vw, 120px); /* the dragonfly's size, which the evolution leaves room for */
 }
 
 * {
@@ -43,14 +43,14 @@ header {
 .brand {
   display: flex;
   align-items: center;
-  gap: clamp(0.75rem, 1.5vw, 1.4rem);
+  gap: clamp(0.6rem, 1.2vw, 1.12rem);
   color: var(--black);
   text-decoration: none;
 }
 
 .wordmark {
   margin-right: -0.32em; /* cancels the tracking after the last letter */
-  font-size: clamp(0.85rem, 0.55rem + 0.75vw, 1.25rem);
+  font-size: clamp(0.75rem, 0.44rem + 0.6vw, 1rem);
   font-weight: 500;
   letter-spacing: 0.32em;
   line-height: 1;
