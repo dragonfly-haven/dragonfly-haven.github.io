@@ -27,6 +27,9 @@
   <h2>At site sizes</h2>
   <div class="sizes" id="sizes"></div>
 
+  <h2>What fills the wings</h2>
+  <div class="sizes" id="textures"></div>
+
   <h2>Close up, and beating as when hovered</h2>
   <div class="sizes" id="large"></div>
 
@@ -45,6 +48,9 @@
     add('sizes', 96, '96 px');
     add('sizes', 120, '120 px, largest on the site');
     add('sizes', 240, '240 px');
+    add('textures', 120, 'A. Scattered dashes', { texture: 'hatch' });
+    add('textures', 120, 'B. Cross veins', { texture: 'cross' });
+    add('textures', 120, 'C. Lace cells', { texture: 'cells' });
     add('large', 480, '480 px, hover to beat');
     add('large', 240, 'always beating', { beat: true });
   </script>

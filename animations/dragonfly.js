@@ -175,8 +175,9 @@ function wingFrame({ spec, side }) {
 // ---------------------------------------------------------------------------
 
 export function mountDragonfly(el, options = {}) {
-  // `beat: true` keeps it beating its wings, for previews.
-  const o = { rotate: -0.7, tilt: 0.15, roll: 0.4, fit: 0.97, seed: 3, beat: false, ...options };
+  // `beat: true` keeps it beating its wings, for previews. `texture` is what
+  // fills the wings between their veins: 'cells', 'cross' or 'hatch'.
+  const o = { rotate: -0.7, tilt: 0.15, roll: 0.4, fit: 0.97, seed: 3, beat: false, texture: 'cells', ...options };
   const calm = reducedMotion();
   const frames = WINGS.map(wingFrame);
   const parts = bodyParts();
@@ -337,7 +338,7 @@ export function mountDragonfly(el, options = {}) {
     const laid = [];
     for (const [i, w] of WINGS.entries()) {
       const f = frames[i], centres = [], dirs = [];
-      yield* wingDashes(w.spec, L, rand, (s, c, ds, dc) => {
+      yield* wingDashes(w.spec, L, rand, o.texture, (s, c, ds, dc) => {
         const p = wingPoint(f, s, c);
         if (thorax.some((part) => part.surface.inside(p))) return;
         centres.push(...p);
@@ -584,9 +585,12 @@ function insidePolygon(poly, x, y) {
 // Emits a wing's dashes as (s, c, ds, dc): a dash centre and the direction it
 // lies along, for dashes `L` long. Bolder parts come first and win where two
 // would crowd each other: the stigma, the leading edge, the veins, the
-// trailing edge, then a hatching of the membrane across the wing. Yields
-// between parts so the work can be spread out.
-function* wingDashes(spec, L, rand, emit) {
+// trailing edge, then the texture between the veins, one of
+//   'cells': a lace of small cells, as most of a real wing is;
+//   'cross': cross veins running across the wing like the rungs of a ladder;
+//   'hatch': short dashes scattered across the wing, the way cross veins run.
+// Yields between parts so the work can be spread out.
+function* wingDashes(spec, L, rand, texture, emit) {
   const W = spec.chord, length = spec.length;
   const { lead, trail, outline } = wingOutline(spec);
   const widest = Math.max(...outline.map(([s]) => (chordAt(trail, s) ?? 0) - (chordAt(lead, s) ?? 0)));
@@ -630,15 +634,69 @@ function* wingDashes(spec, L, rand, emit) {
   along(trail.slice().reverse(), [-L * 0.25, -L * 0.6]); // the trailing edge
   yield;
 
-  // The membrane: dashes across the wing, the way its cross veins run, thinning
-  // out towards the root so the wing's base doesn't clot when seen edge on.
-  const rowGap = L;
-  for (let s = rowGap / 2; s < length; s += rowGap) {
-    const c0 = chordAt(lead, s), c1 = chordAt(trail, s);
-    if (c0 == null || c1 == null) continue;
-    const shift = rand() * L * 1.35, keep = smooth(clamp((s / length - 0.05) / 0.15, 0, 1));
-    for (let c = c0 + shift; c < c1; c += L * 1.35) if (rand() < keep) put(s + (rand() - 0.5) * L * 0.2, c, 0, 1, L * 0.45);
+  // The texture thins out towards the root, so the wing's base doesn't clot
+  // when seen edge on.
+  const keep = (s) => smooth(clamp((s / length - 0.05) / 0.15, 0, 1));
+  if (texture === 'hatch') {
+    for (let s = L / 2; s < length; s += L) {
+      const c0 = chordAt(lead, s), c1 = chordAt(trail, s);
+      if (c0 == null || c1 == null) continue;
+      const shift = rand() * L * 1.35, k = keep(s);
+      for (let c = c0 + shift; c < c1; c += L * 1.35) if (rand() < k) put(s + (rand() - 0.5) * L * 0.2, c, 0, 1, L * 0.45);
+    }
+  } else if (texture === 'cross') {
+    for (let s = L * 0.8; s < length; s += L * 1.6) {
+      const c0 = chordAt(lead, s), c1 = chordAt(trail, s);
+      if (c0 == null || c1 == null || rand() > keep(s)) continue;
+      const lean = (rand() - 0.5) * 0.25;
+      for (let c = c0 + L * (0.6 + 0.4 * rand()); c < c1 - L * 0.3; c += L * 1.08) put(s + lean * (c - c0), c, lean, 1, L * 0.4);
+    }
+  } else {
+    for (const [p, q] of yield* cellEdges(lead, trail, length, widest, L * 3.2, rand)) {
+      if (keep((p[0] + q[0]) / 2) > 0.5) walk([p, q], L * 1.08, L * 0.54, (pt, t) => put(pt[0], pt[1], t[0], t[1], L * 0.4));
+    }
   }
+}
+
+// The edges of a wing's cells, as segments [[s, c], [s, c]]: the edges of the
+// Voronoi diagram of seeds about `cell` apart, laid in rows that follow the
+// wing from root to tip. Yields now and then, and returns the edges.
+function* cellEdges(lead, trail, length, widest, cell, rand) {
+  const rows = Math.max(2, Math.round(widest / (cell * 0.87))), seeds = [];
+  for (let j = -1; j <= rows; j++) {
+    for (let s = ((j & 1) * cell) / 2; s <= length; s += cell) {
+      const ps = clamp(s + (rand() - 0.5) * cell * 0.4, 0, length);
+      const c0 = chordAt(lead, ps), c1 = chordAt(trail, ps);
+      if (c0 == null || c1 == null) continue;
+      const f = (j + 0.5 + (j < 0 || j === rows ? 0 : (rand() - 0.5) * 0.3)) / rows;
+      seeds.push([ps, c0 + f * (c1 - c0)]);
+    }
+  }
+  const edges = [];
+  for (let i = 0; i < seeds.length; i++) {
+    if (i % 24 === 23) yield;
+    const [ax, ay] = seeds[i];
+    for (let j = i + 1; j < seeds.length; j++) {
+      const [bx, by] = seeds[j], dx = bx - ax, dy = by - ay, d2 = dx * dx + dy * dy;
+      if (d2 > (cell * 2) ** 2) continue;
+      // The bisector of i and j, cut back to where no other seed is nearer.
+      const mx = (ax + bx) / 2, my = (ay + by) / 2, l = Math.sqrt(d2), tx = -dy / l, ty = dx / l;
+      let t0 = -cell * 2, t1 = cell * 2;
+      for (let k = 0; k < seeds.length && t0 < t1; k++) {
+        if (k === i || k === j) continue;
+        const [kx, ky] = seeds[k];
+        if ((kx - mx) ** 2 + (ky - my) ** 2 > (cell * 2.5) ** 2) continue;
+        const ex = kx - ax, ey = ky - ay;
+        const base = 2 * (mx * ex + my * ey), slope = 2 * (tx * ex + ty * ey), limit = kx * kx + ky * ky - ax * ax - ay * ay;
+        if (Math.abs(slope) < 1e-9) {
+          if (base > limit) t1 = t0;
+        } else if (slope > 0) t1 = Math.min(t1, (limit - base) / slope);
+        else t0 = Math.max(t0, (limit - base) / slope);
+      }
+      if (t1 - t0 > 1e-6) edges.push([[mx + tx * t0, my + ty * t0], [mx + tx * t1, my + ty * t1]]);
+    }
+  }
+  return edges;
 }
 
 // ---------------------------------------------------------------------------
