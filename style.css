@@ -124,28 +124,19 @@ main {
   font-weight: 500;
 }
 
-.contact {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-  margin-top: 2rem;
-}
-
 .mail {
-  padding: 0.3em 1em;
-  border: 1px solid var(--ink);
-  border-radius: 999px;
   color: var(--ink);
-  text-decoration: none;
+  text-decoration-color: var(--muted);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
   white-space: nowrap;
-  transition: background-color 0.2s, color 0.2s;
+  transition: text-decoration-color 0.2s;
 }
 
 .mail:hover,
 .mail:focus-visible {
-  background: var(--ink);
-  color: var(--ivory);
+  text-decoration-color: var(--ink);
+  text-decoration-thickness: 2px;
 }
 
 @media (max-width: 760px) {
