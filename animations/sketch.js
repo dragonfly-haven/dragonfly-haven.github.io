@@ -13,7 +13,7 @@
 // (sketch-gl.js) draws their whole flight.
 
 import { random, noise3, curl, clamp, smooth, reducedMotion, triangleSize, mountCanvas, animate, insideDistance } from './core.js';
-import { readSketch } from './svg.js';
+import { parseSketch } from './svg.js';
 import { createRenderer } from './sketch-gl.js';
 
 // Dark yellows: the heaviest lines first, the palest dust last.
@@ -48,7 +48,9 @@ const CAP = 52000; // most dashes in one drawing; denser drawings get wider gaps
 const CROSSFADE = 1.5; // seconds, between drawings when reduced motion is preferred
 const GRID = 50; // cells across the stage, for keeping dust off the drawing
 
-// Loads the drawings a manifest lists, in order, as [{ title, slug, hold, sketch }].
+// Loads the drawings a manifest lists, in order, as [{ title, slug, hold, text }].
+// Each is read (into `sketch`) by the first animation that needs it, a slice
+// per frame; a list can be passed to several animations, which share the reading.
 export async function loadMotifs(url = DEFAULTS.motifs) {
   const base = new URL(url, document.baseURI);
   const manifest = await (await fetch(base)).json();
@@ -59,7 +61,7 @@ export async function loadMotifs(url = DEFAULTS.motifs) {
     const file = m.file || m.svg || m.src || `${String(m.order).padStart(2, '0')}-${m.slug}.svg`;
     const text = await (await fetch(new URL(file, base))).text();
     // `hold` is how long the drawing rests, relative to the others
-    return { title: m.title || m.slug, slug: m.slug, hold: Number(m.hold) > 0 ? Number(m.hold) : 1, sketch: readSketch(text) };
+    return { title: m.title || m.slug, slug: m.slug, hold: Number(m.hold) > 0 ? Number(m.hold) : 1, text, sketch: null };
   }));
 }
 
@@ -74,19 +76,13 @@ export function mountEvolution(el, options = {}) {
   let motifs = null;
   let frame = null; // sizes for the current canvas
   let queue = [], samples = new Map();
-  let N = 0, dust = 0, cur = null, seeds = null, data = null, job = null, ready = null, swirl = 1;
+  let N = 0, dust = 0, cur = null, seeds = null, data = null, job = null, ready = null, sampler = null, swirl = 1;
   let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false, frames = 0;
 
-  let gpu = null;
-  const wantGpu = !flat && o.gpu !== false;
-  let surface = mountCanvas(el, build, wantGpu ? { context: 'webgl2', attributes: { antialias: true, premultipliedAlpha: true } } : undefined);
-  if (wantGpu) {
-    gpu = surface.view.ctx && createRenderer(surface.view.ctx, YELLOW);
-    if (!gpu) {
-      surface.destroy();
-      surface = mountCanvas(el, build);
-    }
-  }
+  // With the GPU, its context and shaders are set up over the first frames
+  // (see setup), so mounting costs the page almost nothing.
+  let gpu = null, gpuAge = 0, wantGpu = !flat && o.gpu !== false;
+  let surface = mountCanvas(el, build, wantGpu ? { context: 'webgl2', attributes: { antialias: true, premultipliedAlpha: true }, defer: true } : undefined);
   const loop = o.still == null ? animate(el, tick) : null;
   const loaded = (Array.isArray(o.motifs) ? Promise.resolve(o.motifs) : loadMotifs(o.motifs)).then((list) => {
     motifs = list;
@@ -102,10 +98,10 @@ export function mountEvolution(el, options = {}) {
     const unit = (Math.min(view.width, view.height) * o.fit) / 200; // CSS px per stage unit
     const dash = o.dash || triangleSize(view.ratio) * 1.15; // dash length, CSS px
     // Without the GPU, longer gaps mean fewer dashes, which keeps the frame rate up.
-    frame = { view, unit, dash, width: Math.max(1 / view.ratio, dash * 0.27), gap: gpu || flat ? 1 : 1.6 };
+    frame = { view, unit, dash, width: Math.max(1 / view.ratio, dash * 0.27), gap: wantGpu || flat ? 1 : 1.6 };
     samples = new Map();
     N = 0;
-    job = ready = null;
+    job = ready = sampler = null;
     phase = 'wait';
     if (!motifs) return;
     target = last = ((target % motifs.length) + motifs.length) % motifs.length;
@@ -116,29 +112,66 @@ export function mountEvolution(el, options = {}) {
     }
   }
 
-  // Samples queued drawings for up to `budget` ms.
+  // Reads and samples queued drawings for about `budget` ms, a slice at a time.
   function prepare(budget) {
     const t0 = performance.now();
-    while (queue.length && performance.now() - t0 < budget) {
-      const s = queue.shift();
-      samples.set(s, sample(motifs[s].sketch, random(o.seed + s * 101)));
-    }
+    do {
+      if (!sampler) {
+        if (!queue.length) return;
+        const s = queue.shift();
+        sampler = { s, steps: sample(motifs[s], random(o.seed + s * 101)) };
+      }
+      const step = sampler.steps.next();
+      if (step.done) {
+        samples.set(sampler.s, step.value);
+        sampler = null;
+      }
+    } while (performance.now() - t0 < budget);
   }
 
-  // Lays dashes along every stroke of a drawing; a drawing too dense for CAP
-  // dashes is laid again with proportionally wider gaps.
-  function sample(sketch, rnd) {
-    const scale = 200 / Math.max(sketch.width, sketch.height);
+  // Sets up the GPU: the context on the first frame, after the page has
+  // painted, then the shaders, which build in the background. True once it
+  // can draw (or when it isn't used); falls back to 2D if it can't.
+  function setup() {
+    if (!wantGpu) return true;
+    if (!gpu) {
+      const gl = surface.acquire();
+      gpu = gl && createRenderer(gl, YELLOW);
+      gpuAge = 0;
+      return gpu ? false : fallback();
+    }
+    // Give the build a few frames before asking: where the browser can't
+    // tell without waiting, asking waits for the build to finish.
+    if (gpuAge++ < 3) return false;
+    if (gpu.ready) return true;
+    return gpu.failed ? fallback() : false;
+  }
+
+  function fallback() {
+    wantGpu = false;
+    gpu = null;
+    surface.destroy();
+    surface = mountCanvas(el, build);
+    surface.measure();
+    return true;
+  }
+
+  // Reads a drawing if no animation has yet, then lays dashes along every
+  // stroke; one too dense for CAP dashes is laid again with wider gaps.
+  // A generator that pauses between slices of the work.
+  function* sample(motif, rnd) {
+    if (!motif.sketch) motif.sketch = yield* parseSketch(motif.text);
+    const sketch = motif.sketch, scale = 200 / Math.max(sketch.width, sketch.height);
     for (let spread = 1; ; ) {
-      const p = lay(sketch, scale, (frame.dash * frame.gap * spread) / frame.unit, rnd);
-      if (p.n <= CAP || spread > 8) return withDust(p, rnd);
+      const p = yield* lay(sketch, scale, (frame.dash * frame.gap * spread) / frame.unit, rnd);
+      if (p.n <= CAP || spread > 8) return yield* withDust(p, rnd);
       spread *= (p.n / CAP) * 1.02;
     }
   }
 
   // Places for dust around a drawing: a faint galaxy that gathers close to the
   // drawing like an aura but keeps off its lines.
-  function withDust(p, rnd) {
+  function* withDust(p, rnd) {
     const cell = 200 / GRID, taken = new Uint8Array(GRID * GRID);
     for (let j = 0; j < p.n; j++) {
       const gx = Math.floor((p.x[j] + 100) / cell), gy = Math.floor((p.y[j] + 100) / cell);
@@ -149,6 +182,7 @@ export function mountEvolution(el, options = {}) {
     const pool = 6000;
     p.dust = new Float32Array(pool * 2);
     for (let j = 0; j < pool; j++) {
+      if (j % 2000 === 1999) yield;
       let x, y;
       for (let tries = 0; tries < 40; tries++) {
         [x, y] = galaxy(rnd);
@@ -268,10 +302,21 @@ export function mountEvolution(el, options = {}) {
 
   function tick(dt, render = true) {
     if (!frame || !motifs) return;
-    if (queue.length) prepare(8);
+    if (!setup()) {
+      prepare(6); // read and sample drawings while the GPU gets ready
+      return;
+    }
+    if (queue.length || sampler) prepare(phase === 'move' ? 4 : 8);
     if (phase === 'wait') {
-      if (queue.length || !samples.size) return render && draw();
+      if (queue.length || sampler || !samples.size) return render && draw();
       start();
+    }
+    if (phase === 'plan') {
+      // A move started out of turn (the first one, or a jump) is planned a slice per frame too.
+      if (job) ready = work(8);
+      if (!ready) return render && draw();
+      begin(ready);
+      ready = null;
     }
     if (!paused) {
       t += dt;
@@ -333,7 +378,7 @@ export function mountEvolution(el, options = {}) {
     ready = null;
     if (calm) return begin({ stage: target });
     job = planning(target);
-    begin(work(Infinity));
+    phase = 'plan';
   }
 
   function draw() {
@@ -343,7 +388,7 @@ export function mountEvolution(el, options = {}) {
       const f = phase === 'move' ? smooth(clamp(t / CROSSFADE, 0, 1)) : 1;
       return drawStatic(f < 1 ? [[samples.get(last), 1 - f], [samples.get(target), f]] : [[samples.get(target), 1]]);
     }
-    const progress = phase === 'move' ? t / o.move : phase === 'hold' ? 1 + t / rest(target) : 0;
+    const progress = phase === 'move' ? t / o.move : phase === 'hold' ? 1 + t / rest(target) : 1;
     if (gpu) {
       gpu.draw(view, {
         u_progress: progress,
@@ -431,11 +476,11 @@ export function mountEvolution(el, options = {}) {
     go(index) {
       if (!N || !motifs) return;
       const s = ((index % motifs.length) + motifs.length) % motifs.length;
-      if (!samples.has(s)) samples.set(s, sample(motifs[s].sketch, random(o.seed + s * 101)));
+      if (!samples.has(s)) samples.set(s, finish(sample(motifs[s], random(o.seed + s * 101))));
       ready = null;
       if (calm) return begin({ stage: s });
       job = planning(s);
-      begin(work(Infinity));
+      phase = 'plan';
     },
     pause() {
       paused = true;
@@ -455,11 +500,18 @@ export function mountEvolution(el, options = {}) {
   };
 }
 
-// Dashes along every stroke of a drawing, `step` stage units apart on its lightest lines.
-function lay(sketch, scale, step, rnd) {
+// Dashes along every stroke of a drawing, `step` stage units apart on its lightest
+// lines. A generator that pauses every so often.
+function* lay(sketch, scale, step, rnd) {
   const cx = sketch.width / 2, cy = sketch.height / 2;
   const x = [], y = [], a = [], z = [], s = [], c = [];
+  let done = 0;
   for (const { points, weight } of sketch.lines) {
+    done += points.length;
+    if (done > 40000) {
+      done = 0;
+      yield;
+    }
     const w = clamp(weight, 0.5, 4);
     // Like the dragonfly's engraving: one dash width throughout, fine lines as
     // open rows of dashes, heavier ones packed tight into near-solid strokes.
@@ -526,6 +578,14 @@ function drawDashes(ctx, n, d, length, width) {
 // A dash looks the same turned half way round, so angles only matter modulo pi.
 function halfTurn(d) {
   return d - Math.PI * Math.floor(d / Math.PI + 0.5);
+}
+
+// Runs a generator to its end and returns what it returns.
+function finish(steps) {
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
 }
 
 function layout(n) {

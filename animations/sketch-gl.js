@@ -164,54 +164,65 @@ void main() {
 
 const ATTRIBUTES = ['a_from', 'a_to', 'a_look', 'a_more'];
 
-function compile(gl, type, source) {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
-  return shader;
-}
-
-// Returns a renderer for a WebGL2 context, or null if the shaders won't build.
+// Returns a renderer for a WebGL2 context. Its shaders build in the
+// background where the browser allows it (KHR_parallel_shader_compile), so
+// the page never waits on them: `ready` turns true once they are built, and
+// `failed` if they won't build, in which case the caller draws in 2D instead.
 export function createRenderer(gl, palette) {
-  let program;
-  try {
-    program = gl.createProgram();
-    gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, VERTEX));
-    gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, FRAGMENT));
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
-  } catch (error) {
-    console.warn('Evolution sketches: falling back to 2D drawing.', error);
-    return null;
-  }
-
-  const uniform = {};
-  for (let i = 0, n = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS); i < n; i++) {
-    const name = gl.getActiveUniform(program, i).name.replace('[0]', '');
-    uniform[name] = gl.getUniformLocation(program, name);
-  }
-
-  const vao = gl.createVertexArray();
-  const buffer = gl.createBuffer();
-  gl.bindVertexArray(vao);
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  ATTRIBUTES.forEach((name, i) => {
-    const at = gl.getAttribLocation(program, name);
-    gl.enableVertexAttribArray(at);
-    gl.vertexAttribPointer(at, 4, gl.FLOAT, false, 64, i * 16);
-    gl.vertexAttribDivisor(at, 1);
+  const parallel = gl.getExtension('KHR_parallel_shader_compile');
+  const program = gl.createProgram();
+  const shaders = [[gl.VERTEX_SHADER, VERTEX], [gl.FRAGMENT_SHADER, FRAGMENT]].map(([type, source]) => {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    gl.attachShader(program, shader);
+    return shader;
   });
-  gl.bindVertexArray(null);
+  gl.linkProgram(program);
 
-  gl.useProgram(program);
-  gl.uniform3fv(uniform.u_palette, palette.flatMap((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)));
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  let state = 'building', count = 0;
+  const uniform = {};
+  let vao = null, buffer = null;
 
-  let count = 0;
+  // Once built: look up the inputs and set what stays the same.
+  function finish() {
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      const log = [gl.getProgramInfoLog(program), ...shaders.map((sh) => gl.getShaderInfoLog(sh))].filter(Boolean).join('\n');
+      console.warn('Evolution sketches: falling back to 2D drawing.', log);
+      state = 'failed';
+      return;
+    }
+    for (let i = 0, n = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS); i < n; i++) {
+      const name = gl.getActiveUniform(program, i).name.replace('[0]', '');
+      uniform[name] = gl.getUniformLocation(program, name);
+    }
+    vao = gl.createVertexArray();
+    buffer = gl.createBuffer();
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    ATTRIBUTES.forEach((name, i) => {
+      const at = gl.getAttribLocation(program, name);
+      gl.enableVertexAttribArray(at);
+      gl.vertexAttribPointer(at, 4, gl.FLOAT, false, 64, i * 16);
+      gl.vertexAttribDivisor(at, 1);
+    });
+    gl.bindVertexArray(null);
+    gl.useProgram(program);
+    gl.uniform3fv(uniform.u_palette, palette.flatMap((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)));
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    state = 'ready';
+  }
 
   return {
+    // Checks without waiting where the browser can tell; otherwise waits for the build.
+    get ready() {
+      if (state === 'building' && (!parallel || gl.getProgramParameter(program, parallel.COMPLETION_STATUS_KHR))) finish();
+      return state === 'ready';
+    },
+    get failed() {
+      return state === 'failed';
+    },
     // Takes the next move: 16 floats per dash, laid out as described above.
     load(data, n) {
       count = n;

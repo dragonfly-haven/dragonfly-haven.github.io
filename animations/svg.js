@@ -6,11 +6,21 @@
 //
 // Paths (every command, arcs included), lines, polylines, polygons, rects,
 // circles and ellipses are read, through nested groups and their transforms.
-// Curves are flattened to within `tolerance` units.
+// Curves are flattened to within `tolerance` units. parseSketch does the same
+// as a generator that pauses every so often, so a big drawing can be read a
+// slice per animation frame.
 
 const SKIP = new Set(['defs', 'clipPath', 'mask', 'symbol', 'marker', 'pattern', 'title', 'desc', 'metadata', 'style', 'text']);
 
 export function readSketch(text, tolerance = 1) {
+  const steps = parseSketch(text, tolerance);
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
+}
+
+export function* parseSketch(text, tolerance = 1) {
   const svg = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
   if (svg.localName !== 'svg') throw new Error('Not an SVG drawing');
   const box = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
@@ -18,9 +28,11 @@ export function readSketch(text, tolerance = 1) {
     ? box
     : [0, 0, parseFloat(svg.getAttribute('width')) || 1000, parseFloat(svg.getAttribute('height')) || 1000];
   const lines = [];
+  let done = 0;
 
-  const walk = (el, matrix, weight, stroke) => {
+  const walk = function* (el, matrix, weight, stroke) {
     for (const child of el.children) {
+      if (++done % 150 === 0) yield;
       const tag = child.localName;
       if (SKIP.has(tag) || style(child, 'display') === 'none' || style(child, 'visibility') === 'hidden') continue;
       const own = transform(child.getAttribute('transform'));
@@ -28,7 +40,7 @@ export function readSketch(text, tolerance = 1) {
       const w = parseFloat(style(child, 'stroke-width') ?? weight);
       const s = style(child, 'stroke') ?? stroke;
       if (tag === 'g' || tag === 'svg' || tag === 'a') {
-        walk(child, m, w, s);
+        yield* walk(child, m, w, s);
         continue;
       }
       if (s === 'none') continue;
@@ -44,7 +56,8 @@ export function readSketch(text, tolerance = 1) {
       }
     }
   };
-  walk(svg, [1, 0, 0, 1, -bx, -by], 1, 'black');
+  yield;
+  yield* walk(svg, [1, 0, 0, 1, -bx, -by], 1, 'black');
   return { width, height, lines };
 }
 

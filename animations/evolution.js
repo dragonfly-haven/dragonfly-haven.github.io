@@ -60,19 +60,13 @@ export function mountEvolution(el, options = {}) {
 
   let frame = null; // sizes for the current canvas
   let queue = [], samples = new Map();
-  let N = 0, cur = null, seeds = null, data = null, job = null, ready = null;
+  let N = 0, cur = null, seeds = null, data = null, job = null, ready = null, sampler = null;
   let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false, frames = 0;
 
-  let gpu = null;
-  const wantGpu = !flat && o.gpu !== false;
-  let surface = mountCanvas(el, build, wantGpu ? { context: 'webgl2', attributes: { antialias: true, premultipliedAlpha: true } } : undefined);
-  if (wantGpu) {
-    gpu = surface.view.ctx && createRenderer(surface.view.ctx, GOLD);
-    if (!gpu) {
-      surface.destroy();
-      surface = mountCanvas(el, build);
-    }
-  }
+  // With the GPU, its context and shaders are set up over the first frames
+  // (see setup), so mounting costs the page almost nothing.
+  let gpu = null, gpuAge = 0, wantGpu = !flat && o.gpu !== false;
+  let surface = mountCanvas(el, build, wantGpu ? { context: 'webgl2', attributes: { antialias: true, premultipliedAlpha: true }, defer: true } : undefined);
   const loop = o.still == null ? animate(el, tick) : null;
   surface.measure();
 
@@ -82,7 +76,7 @@ export function mountEvolution(el, options = {}) {
     const unit = (Math.min(view.width, view.height) * o.fit) / 200; // CSS px per stage unit
     const tri = o.size || triangleSize(view.ratio); // triangle side, CSS px
     // Without the GPU, wider gaps mean fewer triangles, which keeps the frame rate up.
-    const spacing = tri * o.gap * (gpu || flat ? 1 : 1.45); // CSS px between triangle centres
+    const spacing = tri * o.gap * (wantGpu || flat ? 1 : 1.45); // CSS px between triangle centres
     const g = 2.2; // lattice spacing in mask pixels
     const S = Math.round(clamp((200 * unit * g) / spacing, 160, 720)); // mask size
     const sites = (S / g) ** 2 / 0.866;
@@ -90,7 +84,7 @@ export function mountEvolution(el, options = {}) {
     samples = new Map();
     queue = o.still == null ? STAGES.map((_, s) => (o.start + s) % STAGES.length) : [o.still];
     N = 0;
-    job = ready = null;
+    job = ready = sampler = null;
     phase = 'wait';
     if (o.still != null) {
       prepare(Infinity);
@@ -99,28 +93,67 @@ export function mountEvolution(el, options = {}) {
     }
   }
 
-  // Samples queued stages for up to `budget` ms.
+  // Samples queued stages for about `budget` ms, a slice of a stage at a time.
   function prepare(budget) {
     const t0 = performance.now();
-    while (queue.length && performance.now() - t0 < budget) {
-      const s = queue.shift();
-      samples.set(s, sample(STAGES[s], random(o.seed + s * 101)));
+    do {
+      if (!sampler) {
+        if (!queue.length) return;
+        const s = queue.shift();
+        sampler = { s, steps: sample(STAGES[s], random(o.seed + s * 101)) };
+      }
+      const step = sampler.steps.next();
+      if (step.done) {
+        samples.set(sampler.s, step.value);
+        sampler = null;
+      }
+    } while (performance.now() - t0 < budget);
+  }
+
+  // Sets up the GPU: the context on the first frame, after the page has
+  // painted, then the shaders, which build in the background. True once it
+  // can draw (or when it isn't used); falls back to 2D if it can't.
+  function setup() {
+    if (!wantGpu) return true;
+    if (!gpu) {
+      const gl = surface.acquire();
+      gpu = gl && createRenderer(gl, GOLD);
+      gpuAge = 0;
+      return gpu ? false : fallback();
     }
+    // Give the build a few frames before asking: where the browser can't
+    // tell without waiting, asking waits for the build to finish.
+    if (gpuAge++ < 3) return false;
+    if (gpu.ready) return true;
+    return gpu.failed ? fallback() : false;
+  }
+
+  function fallback() {
+    wantGpu = false;
+    gpu = null;
+    surface.destroy();
+    surface = mountCanvas(el, build);
+    surface.measure();
+    return true;
   }
 
   // Stipples one stage: lattice points kept where the painted density beats an
   // ordered-dither threshold, each with a colour, a height and a resting angle.
-  function sample(stage, rnd) {
+  // A generator that pauses between its heavier steps.
+  function* sample(stage, rnd) {
     const { S, k, g } = frame;
     const alpha = rasterize(stage.paint, S, S, k, true);
+    yield;
     const cover = new Uint8Array(S * S);
     for (let i = 0; i < cover.length; i++) cover[i] = alpha[i] > 24 ? 1 : 0;
     const inside = insideDistance(cover, S, S);
+    yield;
     // Height, in stage units: painted, or rounding over `bevel` units in from the outline.
     const height = new Float32Array(S * S);
     if (stage.relief) {
       const painted = rasterize(stage.relief, S, S, k, true);
       for (let i = 0; i < height.length; i++) height[i] = (painted[i] / 255) * RELIEF;
+      yield;
     } else {
       const bevel = (stage.bevel ?? 7) * k;
       for (let i = 0; i < height.length; i++) {
@@ -128,10 +161,13 @@ export function mountEvolution(el, options = {}) {
         height[i] = Math.sqrt(1 - (1 - h) * (1 - h)) * (bevel / k);
       }
     }
+    yield;
     const lit = stage.light === false ? null : light(height, S, k);
+    yield;
     const row = g * 0.8660254;
     const cand = [];
     for (let r = 0; r * row < S; r++) {
+      if (r % 64 === 63) yield;
       for (let c = 0; (c + 0.5) * g < S; c++) {
         const x = (c + (r & 1) * 0.5 + (rnd() - 0.5) * 0.6) * g, y = (r + (rnd() - 0.5) * 0.6) * row;
         const ix = Math.floor(x), iy = Math.floor(y);
@@ -149,6 +185,7 @@ export function mountEvolution(el, options = {}) {
     // Keep room for dust: the faintest points go first when a stage is too dense.
     const cap = frame.N - Math.round(frame.dust * 0.5);
     if (cand.length > cap) cand.sort((a, b) => a[4] - b[4]).length = cap;
+    yield;
 
     const n = cand.length;
     const p = { n, x: new Float32Array(n), y: new Float32Array(n), z: new Float32Array(n), c: new Uint8Array(n), a: new Float32Array(n) };
@@ -166,13 +203,16 @@ export function mountEvolution(el, options = {}) {
       const edge = clamp(1.4 - inside[i] / (g * 3), 0, 1);
       p.a[j] = turn(turn(rnd() * TAU, grain, edge), -Math.PI / 2, align);
     });
+    yield;
     // Places for dust: a faint galaxy that gathers close around the form like an aura.
     const out = new Uint8Array(S * S);
     for (let i = 0; i < out.length; i++) out[i] = cover[i] ? 0 : 1;
     const away = insideDistance(out, S, S);
+    yield;
     const pool = frame.dust * 2;
     p.dust = new Float32Array(pool * 2);
     for (let j = 0; j < pool; j++) {
+      if (j % 3000 === 2999) yield;
       let x, y;
       for (let tries = 0; tries < 40; tries++) {
         [x, y] = galaxy(rnd);
@@ -271,10 +311,21 @@ export function mountEvolution(el, options = {}) {
 
   function tick(dt, render = true) {
     if (!frame) return;
-    if (queue.length) prepare(8);
+    if (!setup()) {
+      prepare(6); // sample stages while the GPU gets ready
+      return;
+    }
+    if (queue.length || sampler) prepare(phase === 'move' ? 4 : 8);
     if (phase === 'wait') {
       if (!samples.has(target)) return render && draw();
       start();
+    }
+    if (phase === 'plan') {
+      // A move started out of turn (the first one, or a jump) is planned a slice per frame too.
+      if (job) ready = work(8);
+      if (!ready) return render && draw();
+      begin(ready);
+      ready = null;
     }
     if (!paused) {
       t += dt;
@@ -319,12 +370,12 @@ export function mountEvolution(el, options = {}) {
     ready = null;
     if (calm) return begin({ stage: target });
     job = planning(target);
-    begin(work(Infinity));
+    phase = 'plan';
   }
 
   function draw() {
     const { view } = frame;
-    const progress = phase === 'move' ? t / o.move : 1 + t / Math.max(o.hold, 0.001);
+    const progress = phase === 'move' ? t / o.move : phase === 'hold' ? 1 + t / Math.max(o.hold, 0.001) : 1;
     if (calm) {
       if (phase === 'wait') return;
       const f = phase === 'move' ? smooth(clamp(t / CROSSFADE, 0, 1)) : 1;
@@ -409,11 +460,11 @@ export function mountEvolution(el, options = {}) {
     go(index) {
       if (!N) return;
       const s = ((index % STAGES.length) + STAGES.length) % STAGES.length;
-      if (!samples.has(s)) samples.set(s, sample(STAGES[s], random(o.seed + s * 101)));
+      if (!samples.has(s)) samples.set(s, finish(sample(STAGES[s], random(o.seed + s * 101))));
       ready = null;
       if (calm) return begin({ stage: s });
       job = planning(s);
-      begin(work(Infinity));
+      phase = 'plan';
     },
     pause() {
       paused = true;
@@ -431,6 +482,14 @@ export function mountEvolution(el, options = {}) {
       surface.destroy();
     },
   };
+}
+
+// Runs a generator to its end and returns what it returns.
+function finish(steps) {
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
 }
 
 function layout(n) {

@@ -97,15 +97,16 @@ export function curl(noise, x, y, z, out) {
 // Fills `el` with a canvas. `measure()` sizes it and calls `onResize(view)`,
 // which happens again by itself whenever the element's size settles. With
 // `context: 'webgl2'`, view.ctx is that context, or null where it isn't available.
-export function mountCanvas(el, onResize, { context = '2d', attributes } = {}) {
+// With `defer`, the context is only created by `acquire()`, so a costly one
+// (WebGL) can wait until after the page's first paint.
+export function mountCanvas(el, onResize, { context = '2d', attributes, defer = false } = {}) {
   if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
   if (el.clientHeight < 2) el.style.aspectRatio = '1';
   const canvas = document.createElement('canvas');
   canvas.setAttribute('aria-hidden', 'true');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none';
   el.appendChild(canvas);
-  const ctx = canvas.getContext(context, attributes);
-  const view = { canvas, ctx, width: 0, height: 0, ratio: 1 };
+  const view = { canvas, ctx: defer ? null : canvas.getContext(context, attributes), width: 0, height: 0, ratio: 1 };
   let timer = 0;
 
   const measure = () => {
@@ -116,7 +117,7 @@ export function mountCanvas(el, onResize, { context = '2d', attributes } = {}) {
     Object.assign(view, { width, height, ratio });
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
-    if (context === '2d') ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    if (context === '2d' && view.ctx) view.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     onResize(view);
   };
   const observer = new ResizeObserver(() => {
@@ -128,6 +129,13 @@ export function mountCanvas(el, onResize, { context = '2d', attributes } = {}) {
   return {
     view,
     measure,
+    acquire() {
+      if (!view.ctx) {
+        view.ctx = canvas.getContext(context, attributes);
+        if (context === '2d' && view.ctx) view.ctx.setTransform(view.ratio, 0, 0, view.ratio, 0, 0);
+      }
+      return view.ctx;
+    },
     destroy() {
       observer.disconnect();
       clearTimeout(timer);
