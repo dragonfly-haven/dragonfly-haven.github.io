@@ -17,6 +17,7 @@
   --ink: #2b2a27;
   --muted: #6e685d;
   --black: #0b0908;
+  --fly: clamp(120px, min(17.5vw, 30vh), 240px); /* the dragonfly: 240px on most laptops and up, smaller on short windows and phones */
 }
 
 * {
@@ -49,7 +50,7 @@ header {
 
 .wordmark {
   margin-right: -0.32em; /* cancels the tracking after the last letter */
-  font-size: clamp(0.85rem, 0.55rem + 0.75vw, 1.25rem);
+  font-size: clamp(0.85rem, 0.6rem + 0.85vw, 1.45rem);
   font-weight: 500;
   letter-spacing: 0.32em;
   line-height: 1;
@@ -63,7 +64,7 @@ header {
 
 #dragonfly {
   flex: none;
-  width: clamp(88px, 11vw, 150px);
+  width: var(--fly);
   aspect-ratio: 1;
 }
 
@@ -77,7 +78,7 @@ main {
 
 #evolution {
   order: 1; /* right of the text on wide screens, above it on phones */
-  width: min(100%, 100vh - 15rem);
+  width: min(100%, 100vh - var(--fly) - 5.5rem); /* leaves room for the header */
   aspect-ratio: 1;
   justify-self: center;
 }
