@@ -186,12 +186,15 @@ export function mountDragonfly(el, options = {}) {
   let scale = 1, ox = 0, oy = 0, dash = dashSize(1), half = 1;
   let body = null; // the still body, as one path in canvas pixels
   let wings = []; // per wing: dash centres and half dashes in model units
+  let job = null; // a layout under way
   // The beat: its clock, how strongly the wings beat now (0 still, 1 full), and
   // what keeps them beating; the frame loop runs only while they move.
   let clock = 0, swing = 0, hovered = false, focused = false, loop = null;
   const beating = () => !calm && (o.beat || hovered || focused);
 
   const surface = mountCanvas(el, build);
+  // It fades in once its first layout is ready, rather than popping in.
+  if (!calm) surface.view.canvas.style.cssText += ';opacity:0;transition:opacity 0.3s';
   surface.measure();
 
   // Hovering with a mouse or pen, or keyboard focus on the link, starts the beat;
@@ -207,7 +210,35 @@ export function mountDragonfly(el, options = {}) {
   for (const [type, handler] of Object.entries(events)) host.addEventListener(type, handler);
   wake();
 
+  // A layout is made a few milliseconds at a time while the page is otherwise
+  // idle, so it never holds up a fresh page's first frames, and drawn once done.
   function build(view) {
+    body = null;
+    const next = (job = layout(view));
+    const idle = window.requestIdleCallback ? (f) => requestIdleCallback(f, { timeout: 100 }) : (f) => setTimeout(() => f({ timeRemaining: () => 6 }), 1);
+    const slice = (deadline) => {
+      if (job !== next) return; // a newer layout took its place
+      const until = performance.now() + clamp(deadline.timeRemaining(), 2, 6);
+      while (performance.now() < until) if (next.next().done) return show();
+      idle(slice);
+    };
+    idle(slice);
+  }
+
+  // Finishes any layout under way at once (for previews and tests).
+  function flush() {
+    if (!job) return;
+    while (!job.next().done);
+    show();
+  }
+
+  function show() {
+    job = null;
+    draw();
+    surface.view.canvas.style.opacity = 1;
+  }
+
+  function* layout(view) {
     // Fit the dragonfly, with its wings anywhere in their beat, into the element.
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     const extend = (q) => {
@@ -228,8 +259,8 @@ export function mountDragonfly(el, options = {}) {
     oy = view.height / 2 + ((y0 + y1) / 2) * scale;
     dash = dashSize(view.ratio);
     half = (dash.length / scale) * 0.45; // half a dash, in model units
-    sample();
-    draw();
+    yield;
+    yield* sample();
   }
 
   // Model point to canvas pixels, through rotation M and shift T.
@@ -250,23 +281,23 @@ export function mountDragonfly(el, options = {}) {
 
   // Lays the dashes: the still body once, as a path; the wings as dashes to
   // turn with them every frame.
-  function sample() {
+  function* sample() {
     const rand = random(o.seed);
     const L = half / 0.45; // a dash's length in model units
     const T0 = [0, 0, 0];
-    body = new Path2D();
+    const path = new Path2D();
     // Like a hand's, every dash is a little longer or shorter than the next.
     const stroke = (p, dir) => {
       const h = half * (0.85 + 0.3 * rand());
       const a = project(G, T0, add(p, scaled(dir, -h))), b = project(G, T0, add(p, scaled(dir, h)));
-      body.moveTo(a[0], a[1]);
-      body.lineTo(b[0], b[1]);
+      path.moveTo(a[0], a[1]);
+      path.lineTo(b[0], b[1]);
     };
 
     // The body: rings of dashes around each part, thinned where the light
     // catches it, as an engraver leaves a highlight.
-    parts.forEach((part, index) => {
-      hatch(part.surface, L * 0.17, L * 1.0, rand, (p, dir, nrm) => {
+    for (const [index, part] of parts.entries()) {
+      yield* hatch(part.surface, L * 0.17, L * 1.0, rand, (p, dir, nrm) => {
         const n = apply(G, nrm);
         if (n[2] < 0.02) return; // facing away
         for (let j = 0; j < parts.length; j++) {
@@ -277,7 +308,7 @@ export function mountDragonfly(el, options = {}) {
         if (rand() < 0.5 * smooth(clamp((gloss - 0.35) / 0.5, 0, 1))) return;
         stroke(p, dir);
       });
-    });
+    }
     for (const limb of limbs()) {
       const path = smoothPath(limb.pts, 4);
       for (let r = 0; r < limb.rows; r++) {
@@ -296,24 +327,33 @@ export function mountDragonfly(el, options = {}) {
       }
     }
 
+    yield;
+
     // The wings, worked out flat and then placed on each wing.
     const thorax = parts.filter((part) => part.layer === 2);
-    wings = WINGS.map((w, i) => {
+    const laid = [];
+    for (const [i, w] of WINGS.entries()) {
       const f = frames[i], centres = [], dirs = [];
-      wingDashes(w.spec, L, rand, (s, c, ds, dc) => {
+      yield* wingDashes(w.spec, L, rand, (s, c, ds, dc) => {
         const p = wingPoint(f, s, c);
         if (thorax.some((part) => part.surface.inside(p))) return;
         centres.push(...p);
         // A half dash: its direction, a little uneven in length.
         dirs.push(...scaled(unit(add(scaled(f.S, ds), scaled(f.C, dc))), half * (0.85 + 0.3 * rand())));
       });
-      return { p: Float32Array.from(centres), d: Float32Array.from(dirs) };
-    });
+      laid.push({ p: Float32Array.from(centres), d: Float32Array.from(dirs) });
+      yield;
+    }
+    body = path;
+    wings = laid;
   }
 
   // The wings ease into their beat and out of it, and once they rest the loop stops.
   function tick(dt) {
     if (!body) return;
+    // A late frame (the page busy elsewhere) moves the wings on by no more than a
+    // short step, so they slow for a moment rather than jump.
+    dt = Math.min(dt, 1 / 30);
     const on = beating();
     swing = on ? Math.min(1, swing + dt / 0.35) : Math.max(0, swing - dt / 0.6);
     clock += dt;
@@ -328,6 +368,7 @@ export function mountDragonfly(el, options = {}) {
   }
 
   function draw() {
+    if (!body) return;
     const { ctx, width, height } = surface.view;
     ctx.clearRect(0, 0, width, height);
     ctx.strokeStyle = INK;
@@ -365,6 +406,7 @@ export function mountDragonfly(el, options = {}) {
   return {
     // Runs the beat forward by `seconds` at once (for previews and tests).
     advance(seconds) {
+      flush();
       if (beating()) swing = 1;
       clock += seconds;
       draw();
@@ -401,17 +443,21 @@ function ellipsoid(c, axes) {
 }
 
 function tube(path, radius, flat = 1) {
-  const frame = (u) => {
-    const t = unit(sub(path(Math.min(1, u + 1e-3)), path(Math.max(0, u - 1e-3))));
+  // The spine, its sideways and upward directions and the radius, worked out
+  // once at many points along it and blended between them.
+  const K = 400;
+  const table = Array.from({ length: K + 1 }, (_, i) => {
+    const u = i / K, t = unit(sub(path(Math.min(1, u + 1e-3)), path(Math.max(0, u - 1e-3))));
     const side = unit(cross(t, [0, 0, 1]));
-    return [side, cross(side, t)];
-  };
+    return [...path(u), ...side, ...cross(side, t), radius(u)];
+  });
   const samples = Array.from({ length: 121 }, (_, i) => i / 120);
   return {
     at(u, v) {
-      const p = path(u), [s, up] = frame(u), r = radius(u), q = v * TAU;
-      const x = Math.cos(q) * r, y = Math.sin(q) * r * flat;
-      return [p[0] + s[0] * x + up[0] * y, p[1] + s[1] * x + up[1] * y, p[2] + s[2] * x + up[2] * y];
+      const f = clamp(u, 0, 1) * K, i = Math.min(K - 1, Math.floor(f)), w = f - i, A = table[i], B = table[i + 1];
+      const g = (k) => A[k] + (B[k] - A[k]) * w;
+      const q = v * TAU, r = g(9), x = Math.cos(q) * r, y = Math.sin(q) * r * flat;
+      return [g(0) + g(3) * x + g(6) * y, g(1) + g(4) * x + g(7) * y, g(2) + g(5) * x + g(8) * y];
     },
     out: (p, u) => sub(p, path(u)),
     inside(p, depth = 0) {
@@ -426,9 +472,10 @@ function tube(path, radius, flat = 1) {
 
 // Wraps a surface in rings of dashes, like the hatching of a pen drawing:
 // rings `gap` apart from end to end, dashes about `step` apart around each.
-// Calls emit(point, direction around, outward normal) for each dash.
-function hatch(surface, gap, step, rand, emit) {
-  const N = 160, len = new Float64Array(N + 1);
+// Calls emit(point, direction around, outward normal) for each dash, and
+// yields every few rings so the work can be spread out.
+function* hatch(surface, gap, step, rand, emit) {
+  const N = 80, len = new Float64Array(N + 1);
   for (let i = 1; i <= N; i++) {
     let d = 0;
     for (const v of [0, 0.25, 0.5, 0.75]) d += Math.hypot(...sub(surface.at(i / N, v), surface.at((i - 1) / N, v)));
@@ -441,8 +488,9 @@ function hatch(surface, gap, step, rand, emit) {
     return (i - 1 + (s - len[i - 1]) / (len[i] - len[i - 1] || 1)) / N;
   };
   const rings = Math.max(1, Math.round(total / gap)), hh = total / rings;
-  const M = 96, ring = new Float64Array(M + 1);
+  const M = 32, ring = new Float64Array(M + 1);
   for (let b = 0; b < rings; b++) {
+    if (b % 8 === 7) yield;
     const u = uAt((b + 0.5) * hh);
     // Even steps of length around the ring, however unevenly v runs.
     for (let k = 1, prev = surface.at(u, 0); k <= M; k++) {
@@ -533,8 +581,9 @@ function insidePolygon(poly, x, y) {
 // Emits a wing's dashes as (s, c, ds, dc): a dash centre and the direction it
 // lies along, for dashes `L` long. Bolder parts come first and win where two
 // would crowd each other: the stigma, the leading edge, the veins, the
-// trailing edge, then a hatching of the membrane across the wing.
-function wingDashes(spec, L, rand, emit) {
+// trailing edge, then a hatching of the membrane across the wing. Yields
+// between parts so the work can be spread out.
+function* wingDashes(spec, L, rand, emit) {
   const W = spec.chord, length = spec.length;
   const { lead, trail, outline } = wingOutline(spec);
   const widest = Math.max(...outline.map(([s]) => (chordAt(trail, s) ?? 0) - (chordAt(lead, s) ?? 0)));
@@ -570,9 +619,15 @@ function wingDashes(spec, L, rand, emit) {
   for (let c = 0; c < W * 0.13; c += L * 0.36) {
     walk([[s0, c], [s1, c]], L * 1.12, L * 0.56 * (1 + (Math.round(c / (L * 0.36)) & 1)), (p) => insidePolygon(stigma, p[0], p[1]) && put(p[0], p[1], 1, 0, L * 0.3));
   }
+  yield;
   along(lead, [L * 0.3, L * 0.68, L * 1.06]); // the leading edge, bold
-  for (const v of spec.veins.filter((vein) => vein.rank <= rank)) along(smoothPath(v.pts.map(([s, c]) => [s * length, c * W]), 6), v.rank ? [-L * 0.15, L * 0.15] : [-L * 0.3, 0, L * 0.3]);
+  yield;
+  for (const v of spec.veins.filter((vein) => vein.rank <= rank)) {
+    along(smoothPath(v.pts.map(([s, c]) => [s * length, c * W]), 6), v.rank ? [-L * 0.15, L * 0.15] : [-L * 0.3, 0, L * 0.3]);
+    yield;
+  }
   along(trail.slice().reverse(), [-L * 0.25, -L * 0.6]); // the trailing edge
+  yield;
 
   // The membrane: dashes across the wing, the way its cross veins run, thinning
   // out towards the root so the wing's base doesn't clot when seen edge on.
