@@ -3,11 +3,14 @@
 // in the vertex shader, so tens of thousands of them cost the page almost
 // nothing per frame.
 //
-// Each dash is one instance with four vec4 attributes, written by the planner
-// in sketch.js:
+// Changes overlap: the next one sets off before the last has quite landed, so
+// two are drawn at once, each from its own buffer, and every dash is drawn by
+// the one it is in. Each dash is one instance with five vec4 attributes,
+// written by the planner in sketch.js:
 //   from, to  x, y (units from the centre, or radius and angle for dust), thickness, dust flag
 //   look      length from, length to, colour from, colour to (palette indices)
-//   more      delay, seed, resting angle from, resting angle to
+//   more      resting angle from, resting angle to, seed, unused
+//   time      sets off, lands, shown from (seconds from the change's start), unused
 
 const VERTEX = `#version 300 es
 precision highp float;
@@ -16,15 +19,16 @@ in vec4 a_from;
 in vec4 a_to;
 in vec4 a_look;
 in vec4 a_more;
+in vec4 a_time;
 
-uniform float u_progress;  // 0 to 1 through a move, above 1 while a drawing rests
-uniform float u_previous;  // the same one frame earlier, to see which way dashes fly
-uniform float u_clock;     // seconds
+uniform float u_time;      // seconds since this change began
+uniform float u_retired;   // 1 once a newer change has begun: then a dash shows here only until it lands
+uniform float u_clock;     // seconds, for everything that keeps moving
 uniform float u_step;      // seconds since the previous frame
-uniform float u_spread;    // how far the change sweeps across the drawing
+uniform float u_ramp;      // share of a flight spent speeding up, and again slowing down
 uniform float u_swirl;     // units of swirl in mid flight
 uniform float u_breath;    // units of drift at rest
-uniform float u_ripple;    // units a slow ripple moves every form by
+uniform float u_ripple;    // units a slow ripple moves every drawing by
 uniform float u_freq;      // swirl features per unit
 uniform float u_twist;     // radians a drawing spirals about the centre in mid change
 uniform float u_spin;      // radians per second the dust turns
@@ -95,37 +99,41 @@ vec2 curl(vec2 p, float z) {
 }
 
 // Drawings stay put; dust keeps slowly orbiting the centre.
+// Drawings stay put; dust keeps slowly orbiting the centre.
 vec2 place(vec4 p, float clock) {
   if (p.w < 0.5) return p.xy;
   float a = p.y + u_spin * clock;
   return vec2(cos(a), sin(a)) * p.x;
 }
 
-// Each one sets off when the sweep reaches it, and all arrive together, so a
-// form completes in one moment and the next change can follow right after.
-float settle(float progress) {
-  return clamp((progress * (1.0 + u_spread) - a_more.x) / (1.0 + u_spread - a_more.x), 0.0, 1.0);
-}
-
-float ease(float u) {
-  return u * u * (3.0 - 2.0 * u); // without a long crawl at either end
-}
-
-// Where the dash is (units from the centre) at a moment of the move.
-vec2 at(float progress, float clock) {
-  float u = settle(progress);
-  vec2 p = mix(place(a_from, clock), place(a_to, clock), ease(u));
-  float flight = sin(3.14159265 * u);
-  p += curl(p * u_freq, clock * 0.08) * (u_breath + u_swirl * flight);
-  // a slow ripple runs through every form, so even a finished one never stands still
-  p += vec2(sin(p.y * 0.11 + clock * 1.3), sin(p.x * 0.13 - clock * 1.1)) * u_ripple;
-  // the middle turns further than the rim, so the change spirals like a galaxy
-  float a = u_twist * flight / (1.0 + dot(p, p) / 3600.0);
-  return mat2(cos(a), sin(a), -sin(a), cos(a)) * p;
-}
-
 const float PI = 3.14159265;
 const float TAU = 6.28318530718;
+
+// How far through its flight the dash is at a moment of the change.
+float flight(float local) {
+  return clamp((local - a_time.x) / max(a_time.y - a_time.x, 0.001), 0.0, 1.0);
+}
+
+// Speeds up, cruises and slows down again: no long crawl at either end.
+float ease(float u) {
+  float a = u_ramp, v = 1.0 / (1.0 - a);
+  if (u < a) return v * u * u / (2.0 * a);
+  if (u > 1.0 - a) return 1.0 - v * (1.0 - u) * (1.0 - u) / (2.0 * a);
+  return v * (u - a * 0.5);
+}
+
+// Where the dash is (units from the centre) at a moment of the change.
+vec2 at(float local, float clock) {
+  float u = flight(local);
+  vec2 p = mix(place(a_from, clock), place(a_to, clock), ease(u));
+  float mid = sin(PI * u);
+  p += curl(p * u_freq, clock * 0.08) * (u_breath + u_swirl * mid);
+  // a slow ripple runs through every drawing, so even a finished one never stands still
+  p += vec2(sin(p.y * 0.11 + clock * 1.3), sin(p.x * 0.13 - clock * 1.1)) * u_ripple;
+  // the middle turns further than the rim, so the change spirals like a galaxy
+  float a = u_twist * mid / (1.0 + dot(p, p) / 3600.0);
+  return mat2(cos(a), sin(a), -sin(a), cos(a)) * p;
+}
 
 // A dash looks the same turned half way round, so angles only matter modulo pi.
 float halfTurn(float d) {
@@ -133,17 +141,24 @@ float halfTurn(float d) {
 }
 
 void main() {
-  float e = ease(settle(u_progress));
-  vec2 p = at(u_progress, u_clock);
-  vec2 q = at(u_previous, u_clock - u_step);
+  // Each dash shows in the change it is in: from when it landed in the change
+  // before, and, once a newer change has begun, until it lands here.
+  if (u_time < a_time.z || (u_retired > 0.5 && u_time >= a_time.y)) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0); // outside the view, so nothing is drawn
+    v_colour = vec4(0.0);
+    return;
+  }
+  float e = ease(flight(u_time));
+  vec2 p = at(u_time, u_clock);
+  vec2 q = at(u_time - u_step, u_clock - u_step);
   float dust = step(0.5, mix(a_from.w, a_to.w, e));
 
   // At rest a dash lies along its stroke, and dust along its orbit; in flight it points where it goes.
-  float rest = dust > 0.5 ? atan(p.y, p.x) + PI * 0.5 : a_more.z + halfTurn(a_more.w - a_more.z) * e;
+  float rest = dust > 0.5 ? atan(p.y, p.x) + PI * 0.5 : a_more.x + halfTurn(a_more.y - a_more.x) * e;
   vec2 v = (p - q) * u_scale;
   float angle = rest + halfTurn(atan(v.y, v.x) - rest) * smoothstep(0.12, 0.7, length(v));
 
-  float twinkle = 0.65 + 0.35 * sin(u_clock * (1.3 + a_more.y * 1.7) + a_more.y * TAU);
+  float twinkle = 0.65 + 0.35 * sin(u_clock * (1.3 + a_more.z * 1.7) + a_more.z * TAU);
   float len = mix(a_look.x, a_look.y, e) * mix(1.0, twinkle, dust);
   float thick = mix(a_from.z, a_to.z, e) * step(0.02, len);
 
@@ -165,7 +180,8 @@ void main() {
   colour = vec4(v_colour.rgb * v_colour.a, v_colour.a);
 }`;
 
-const ATTRIBUTES = ['a_from', 'a_to', 'a_look', 'a_more'];
+const ATTRIBUTES = ['a_from', 'a_to', 'a_look', 'a_more', 'a_time'];
+const STRIDE = ATTRIBUTES.length * 16; // bytes per dash
 
 // Returns a renderer for a WebGL2 context. Its shaders build in the
 // background where the browser allows it (KHR_parallel_shader_compile), so
@@ -183,9 +199,9 @@ export function createRenderer(gl, palette) {
   });
   gl.linkProgram(program);
 
-  let state = 'building', count = 0;
+  let state = 'building';
   const uniform = {};
-  let vao = null, buffer = null;
+  const slots = []; // two buffers, one per change being drawn
 
   // Once built: look up the inputs and set what stays the same.
   function finish() {
@@ -199,16 +215,18 @@ export function createRenderer(gl, palette) {
       const name = gl.getActiveUniform(program, i).name.replace('[0]', '');
       uniform[name] = gl.getUniformLocation(program, name);
     }
-    vao = gl.createVertexArray();
-    buffer = gl.createBuffer();
-    gl.bindVertexArray(vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    ATTRIBUTES.forEach((name, i) => {
-      const at = gl.getAttribLocation(program, name);
-      gl.enableVertexAttribArray(at);
-      gl.vertexAttribPointer(at, 4, gl.FLOAT, false, 64, i * 16);
-      gl.vertexAttribDivisor(at, 1);
-    });
+    for (let k = 0; k < 2; k++) {
+      const vao = gl.createVertexArray(), buffer = gl.createBuffer();
+      gl.bindVertexArray(vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      ATTRIBUTES.forEach((name, i) => {
+        const at = gl.getAttribLocation(program, name);
+        gl.enableVertexAttribArray(at);
+        gl.vertexAttribPointer(at, 4, gl.FLOAT, false, STRIDE, i * 16);
+        gl.vertexAttribDivisor(at, 1);
+      });
+      slots.push({ vao, buffer, count: 0 });
+    }
     gl.bindVertexArray(null);
     gl.useProgram(program);
     gl.uniform3fv(uniform.u_palette, palette.flatMap((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)));
@@ -216,6 +234,13 @@ export function createRenderer(gl, palette) {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     state = 'ready';
   }
+
+  const set = (values) => {
+    for (const [name, value] of Object.entries(values)) {
+      if (Array.isArray(value)) gl.uniform2fv(uniform[name], value);
+      else gl.uniform1f(uniform[name], value);
+    }
+  };
 
   return {
     // Checks without waiting where the browser can tell; otherwise waits for the build.
@@ -226,24 +251,25 @@ export function createRenderer(gl, palette) {
     get failed() {
       return state === 'failed';
     },
-    // Takes the next move: 16 floats per dash, laid out as described above.
-    load(data, n) {
-      count = n;
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    // Takes a planned change into buffer `slot` (0 or 1): 20 floats per dash, laid out as above.
+    load(slot, data, n) {
+      slots[slot].count = n;
+      gl.bindBuffer(gl.ARRAY_BUFFER, slots[slot].buffer);
       gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
     },
-    draw(view, values) {
+    // Draws the changes in `batches` ({ slot, ...their own uniforms }) with the `shared` uniforms.
+    draw(view, shared, batches) {
       gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      if (!count) return;
       gl.useProgram(program);
-      for (const [name, value] of Object.entries(values)) {
-        if (Array.isArray(value)) gl.uniform2fv(uniform[name], value);
-        else gl.uniform1f(uniform[name], value);
+      set(shared);
+      for (const { slot, ...own } of batches) {
+        if (!slots[slot].count) continue;
+        set(own);
+        gl.bindVertexArray(slots[slot].vao);
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, slots[slot].count);
       }
-      gl.bindVertexArray(vao);
-      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
       gl.bindVertexArray(null);
     },
   };

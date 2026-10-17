@@ -10,7 +10,9 @@
 // thicker and darker ones where the pen pressed harder. A slowly turning field
 // of dust surrounds them. Before every change the dashes of one drawing are
 // paired with places in the next so that each travels a short way, and the GPU
-// (sketch-gl.js) draws their whole flight.
+// (sketch-gl.js) draws their whole flight. Changes overlap like a relay: each
+// sweeps across a drawing, and the next sets off before the last has quite
+// landed, so the flow never stops.
 
 import { random, noise3, curl, clamp, smooth, reducedMotion, triangleSize, mountCanvas, animate, insideDistance } from './core.js';
 import { parseSketch } from './svg.js';
@@ -21,7 +23,9 @@ export const YELLOW = ['#574800', '#6a5800', '#7d6700', '#907700', '#a38700', '#
 
 // How everything moves. Lengths are in stage units; a drawing is 200 units across.
 const MOTION = {
-  spread: 0.55, // how much of a move the change takes to sweep across the drawing
+  sweep: 0.36, // share of the time between changes that one takes to sweep across a drawing
+  rest: 0.8, // share of that sweep each part of a drawing rests; under 1, the next change sets off before the last has landed
+  ramp: 0.2, // share of each flight spent speeding up, and again slowing down; dashes cruise in between
   swirl: 5.5, // units of swirl in mid flight
   twist: 0.4, // radians a drawing spirals about the centre in mid change, each way in turn
   breath: 0.3, // units of drift at rest
@@ -33,19 +37,20 @@ const MOTION = {
 const DEFAULTS = {
   motifs: new URL('./motifs/manifest.json', import.meta.url).href, // a manifest, or motifs already loaded
   speed: 1.4, // how fast it all plays (changes, rests, dust); the times here are at speed 1
-  hold: 0, // seconds each drawing rests once drawn: none, the next change starts at once
-  move: 3.6, // seconds each change takes
+  move: 3.6, // seconds from one change setting off to the next
+  hold: 0, // extra seconds each part of a drawing rests, scaled by the drawing's own hold weight
   fit: 0.94, // share of the shorter side a drawing fills
   dash: null, // dash length in CSS px; by default as fine as the screen allows
   start: 0,
   still: null, // a drawing to show once, without motion
   gpu: true, // false draws on a 2D canvas, as where WebGL2 is missing
   seed: 1,
-  onStage: null, // called with (index, title) as each drawing settles
-  dusk: 0, // seconds the dashes rest as drifting dust after the last drawing, before the first gathers; null skips the dust
+  onStage: null, // called with (index, title) as each drawing is at its fullest
+  dusk: 0, // extra seconds the dashes rest as drifting dust after the last drawing; null skips the dust
 };
 
-const STRIDE = 16; // floats per dash in a planned move, see sketch-gl.js
+const STRIDE = 20; // floats per dash in a planned change, see sketch-gl.js
+const MIN_FLIGHT = 0.4; // shortest flight, as a share of the time between changes
 const CAP = 52000; // most dashes in one drawing; denser drawings get wider gaps
 const CROSSFADE = 1.5; // seconds, between drawings when reduced motion is preferred
 const GRID = 50; // cells across the stage, for keeping dust off the drawing
@@ -78,8 +83,8 @@ export function mountEvolution(el, options = {}) {
   let motifs = null;
   let frame = null; // sizes for the current canvas
   let queue = [], samples = new Map();
-  let N = 0, dust = 0, cur = null, seeds = null, data = null, job = null, ready = null, sampler = null, swirl = 1;
-  let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false, frames = 0;
+  let N = 0, dust = 0, cur = null, seeds = null, moves = [], job = null, ready = null, sampler = null;
+  let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false;
 
   // With the GPU, its context and shaders are set up over the first frames
   // (see setup), so mounting costs the page almost nothing.
@@ -103,6 +108,7 @@ export function mountEvolution(el, options = {}) {
     frame = { view, unit, dash, width: Math.max(1 / view.ratio, dash * 0.27), gap: wantGpu || flat ? 1 : 1.6 };
     samples = new Map();
     N = 0;
+    moves = [];
     job = ready = sampler = null;
     phase = 'wait';
     if (!motifs) return;
@@ -244,36 +250,63 @@ export function mountEvolution(el, options = {}) {
     return out;
   }
 
-  // Plans the move to drawing `s`, pairing every dash with a place in it.
-  // A generator, so the work can be spread over the frames of a pause.
-  function* planning(s) {
-    const next = arrange(s, random(o.seed + s * 977 + Math.round(clock * 10)));
-    const [ax, ay] = positions(cur, clock), [bx, by] = positions(next, clock);
-    const match = yield* pairing(ax, ay, bx, by);
-    // The change sweeps across from a side that turns with every drawing.
-    const dir = s * 2.39996 + 0.7, dx = Math.cos(dir), dy = Math.sin(dir);
+  const width = () => MOTION.sweep * o.move; // seconds a change takes to sweep across a drawing
+  // Seconds from the change towards stop `s` setting off to the next, and how
+  // long each part of it rests: both grow with the stop's own extra rest.
+  const period = (s) => o.move + rest(s);
+  const pause = (s) => MOTION.rest * width() + rest(s);
+
+  // Sets when each dash of a layout will set off in the change that leaves
+  // it towards stop `s`: when that change's sweep reaches it, from a side that
+  // turns with every drawing. Dust sets off at random.
+  function sweep(l, s, rnd) {
+    const W = width(), dir = s * 2.39996 + 0.7, dx = Math.cos(dir), dy = Math.sin(dir);
     let lo = Infinity, hi = -Infinity;
     for (let i = 0; i < N; i++) {
-      const v = ax[i] * dx + ay[i] * dy;
+      if (l.w[i]) continue;
+      const v = l.x[i] * dx + l.y[i] * dy;
       if (v < lo) lo = v;
       if (v > hi) hi = v;
     }
-    const d = new Float32Array(N * STRIDE);
-    const after = layout(N); // where each dash rests once the move is done
+    for (let i = 0; i < N; i++) {
+      l.d[i] = l.w[i] ? W * rnd() : W * (((l.x[i] * dx + l.y[i] * dy - lo) / (hi - lo || 1)) * 0.8 + rnd() * 0.2);
+    }
+  }
+
+  // Plans the change to stop `s`, pairing every dash with a place in it.
+  // A generator, so the work can be spread over the frames of the change before.
+  function* planning(s) {
+    const rnd = random(o.seed + s * 977 + Math.round(clock * 10));
+    const next = arrange(s, rnd);
+    const [ax, ay] = positions(cur, clock), [bx, by] = positions(next, clock);
+    const match = yield* pairing(ax, ay, bx, by);
+    const after = layout(N); // where each dash rests once it has landed
     let travel = 0;
     for (let i = 0; i < N; i++) {
-      const j = match[i], at = i * STRIDE;
+      const j = match[i];
       travel += Math.hypot(bx[j] - ax[i], by[j] - ay[i]);
-      const sweep = cur.w[i] && next.w[j] ? rand() : ((ax[i] * dx + ay[i] * dy - lo) / (hi - lo || 1)) * 0.8 + rand() * 0.2;
-      d[at] = cur.x[i]; d[at + 1] = cur.y[i]; d[at + 2] = cur.z[i]; d[at + 3] = cur.w[i];
-      d[at + 4] = next.x[j]; d[at + 5] = next.y[j]; d[at + 6] = next.z[j]; d[at + 7] = next.w[j];
-      d[at + 8] = cur.s[i]; d[at + 9] = next.s[j]; d[at + 10] = cur.c[i]; d[at + 11] = next.c[j];
-      d[at + 12] = MOTION.spread * sweep; d[at + 13] = seeds[i]; d[at + 14] = cur.a[i]; d[at + 15] = next.a[j];
       for (const key of 'xyzwsca') after[key][i] = next[key][j];
+    }
+    yield;
+    // Each dash sets off when this change's sweep reaches it, and lands in the
+    // order it will set off in the next change, a little before it does: so
+    // every part of a drawing rests the same short while, the next change
+    // sweeps in before this one has quite landed, and the flow never stops.
+    sweep(after, following(s), rnd);
+    const P = period(s), lead = pause(s);
+    const data = new Float32Array(N * STRIDE), arrive = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const j = match[i], at = i * STRIDE;
+      arrive[i] = Math.max(P + after.d[i] - lead, cur.d[i] + MIN_FLIGHT * P);
+      data[at] = cur.x[i]; data[at + 1] = cur.y[i]; data[at + 2] = cur.z[i]; data[at + 3] = cur.w[i];
+      data[at + 4] = next.x[j]; data[at + 5] = next.y[j]; data[at + 6] = next.z[j]; data[at + 7] = next.w[j];
+      data[at + 8] = cur.s[i]; data[at + 9] = next.s[j]; data[at + 10] = cur.c[i]; data[at + 11] = next.c[j];
+      data[at + 12] = cur.a[i]; data[at + 13] = next.a[j]; data[at + 14] = seeds[i];
+      data[at + 16] = cur.d[i]; data[at + 17] = arrive[i];
     }
     // Drawings that rhyme barely move, so they melt into each other calmly;
     // far-apart ones get the full swirl.
-    return { stage: s, data: d, after, swirl: clamp(travel / N / 32, 0.3, 1.1) };
+    return { stage: s, data, arrive, after, swirl: clamp(travel / N / 32, 0.3, 1.1) };
   }
 
   // Works on a plan for up to `budget` ms; returns the move once it is ready.
@@ -289,17 +322,38 @@ export function mountEvolution(el, options = {}) {
     }
   }
 
-  // Starts a planned move (with reduced motion, just the change of drawing).
-  function begin(move) {
+  // Sets a planned change off at clock time S (with reduced motion, just the change of drawing).
+  function startMove(move, S) {
+    if (!calm && moves.length && o.onStage) o.onStage(target, motifs[target]?.title ?? ''); // the drawing at its fullest
     last = target;
     target = move.stage;
-    phase = 'move';
-    t = 0;
-    if (calm) return;
-    data = move.data;
+    if (calm) {
+      phase = 'move';
+      t = 0;
+      return;
+    }
+    const P = period(move.stage), data = move.data;
+    for (let i = 0; i < N; i++) {
+      const at = i * STRIDE;
+      // A dash shows in this change from when it landed in the last one, and
+      // never sets off before that.
+      const shown = Math.max(cur.arrive[i] - S, -1e6);
+      const depart = Math.max(data[at + 16], shown);
+      const arrive = Math.max(move.arrive[i], depart + MIN_FLIGHT * P);
+      data[at + 16] = depart;
+      data[at + 17] = arrive;
+      data[at + 18] = shown;
+      move.after.arrive[i] = S + arrive;
+    }
+    move.S = S;
+    move.twist = MOTION.twist * move.swirl * (move.stage % 2 ? 1 : -1);
+    // The newest change takes the buffer the oldest one used.
+    const newest = moves[moves.length - 1];
+    move.slot = newest ? 1 - newest.slot : 0;
+    if (gpu) gpu.load(move.slot, data, N);
+    moves = newest ? [newest, move] : [move];
     cur = move.after;
-    swirl = move.swirl;
-    if (gpu) gpu.load(data, N);
+    phase = 'run';
   }
 
   function tick(dt, render = true) {
@@ -308,16 +362,16 @@ export function mountEvolution(el, options = {}) {
       prepare(6); // read and sample drawings while the GPU gets ready
       return;
     }
-    if (queue.length || sampler) prepare(phase === 'move' ? 4 : 8);
+    if (queue.length || sampler) prepare(phase === 'run' ? 4 : 8);
     if (phase === 'wait') {
       if (queue.length || sampler || !samples.size) return render && draw();
       start();
     }
     if (phase === 'plan') {
-      // A move started out of turn (the first one, or a jump) is planned a slice per frame too.
+      // A change started out of turn (the first one, or a jump) is planned a slice per frame too.
       if (job) ready = work(8);
       if (!ready) return render && draw();
-      begin(ready);
+      startMove(ready, clock);
       ready = null;
     }
     if (!paused) {
@@ -325,27 +379,24 @@ export function mountEvolution(el, options = {}) {
       const step = calm ? dt : dt * o.speed;
       t += step;
       clock += step;
-      if (phase === 'move' && t >= (calm ? CROSSFADE : o.move)) {
-        phase = 'hold';
-        t = 0;
-        if (o.onStage) o.onStage(target, motifs[target]?.title ?? '');
-      }
-      // The next move is planned while this one plays, so it can follow the moment this one settles.
-      if (phase === 'move' || phase === 'hold') {
-        const next = following(target);
-        if (!ready && !job) {
-          if (calm) ready = { stage: next };
-          else job = planning(next);
-        }
-        if (job) ready = work(phase === 'move' ? 3 : 8);
-        if (phase === 'hold' && ready && t >= (calm ? 8 : rest(target))) {
-          begin(ready);
+      if (calm) {
+        if (phase === 'move' && t >= CROSSFADE) {
+          phase = 'hold';
+          t = 0;
+          if (o.onStage) o.onStage(target, motifs[target]?.title ?? '');
+        } else if (phase === 'hold' && t >= 8) startMove({ stage: following(target) }, clock);
+      } else {
+        // The next change is planned while this one plays, and sets off on time.
+        const current = moves[moves.length - 1];
+        if (!ready && !job) job = planning(following(target));
+        if (job) ready = work(4);
+        if (ready && clock >= current.S + period(current.stage)) {
+          startMove(ready, Math.max(current.S + period(current.stage), clock - step));
           ready = null;
         }
       }
     }
-    // While a drawing rests it moves slowly, so every other frame is enough.
-    if (render && (phase !== 'hold' || (frames++ & 1) === 0)) draw();
+    if (render) draw();
   }
 
   // The stop after `s`: the next drawing, or after the last one a spell of
@@ -378,9 +429,10 @@ export function mountEvolution(el, options = {}) {
       cur.z[i] = 0.6;
       cur.w[i] = 1;
       cur.c[i] = 6;
+      cur.d[i] = width() * rand();
     }
     ready = null;
-    if (calm) return begin({ stage: target });
+    if (calm) return startMove({ stage: target }, clock);
     job = planning(target);
     phase = 'plan';
   }
@@ -392,68 +444,76 @@ export function mountEvolution(el, options = {}) {
       const f = phase === 'move' ? smooth(clamp(t / CROSSFADE, 0, 1)) : 1;
       return drawStatic(f < 1 ? [[samples.get(last), 1 - f], [samples.get(target), f]] : [[samples.get(target), 1]]);
     }
-    const progress = phase === 'move' ? t / o.move : phase === 'hold' ? 1 + t / rest(target) : 1;
+    // The newest change, and the one before it until its last dashes have landed.
+    const batches = moves.map((m, k) => ({
+      slot: m.slot,
+      u_time: clock - m.S,
+      u_retired: k < moves.length - 1 ? 1 : 0,
+      u_swirl: MOTION.swirl * m.swirl,
+      u_twist: m.twist,
+    }));
     if (gpu) {
       gpu.draw(view, {
-        u_progress: progress,
-        u_previous: phase === 'move' ? Math.max(0, (t - o.speed / 60) / o.move) : progress,
         u_clock: clock,
         u_step: o.speed / 60,
-        u_spread: MOTION.spread,
-        u_swirl: MOTION.swirl * swirl,
+        u_ramp: MOTION.ramp,
         u_breath: MOTION.breath,
         u_ripple: MOTION.ripple,
         u_freq: MOTION.freq,
-        u_twist: MOTION.twist * swirl * (target % 2 ? 1 : -1),
         u_spin: MOTION.spin,
         u_centre: [view.width / 2, view.height / 2],
         u_view: [view.width, view.height],
         u_scale: frame.unit,
         u_length: frame.dash / 2,
         u_width: frame.width / 2,
-      });
+      }, batches);
       return;
     }
-    drawMoving(progress);
+    drawMoving(batches);
   }
 
   // The same flight as the GPU's, worked out here when WebGL2 isn't available.
   const cpu = { x: null, y: null, a: null, s: null, z: null, c: null, px: null, py: null };
-  function drawMoving(progress) {
-    const { ctx, width, height } = surface.view;
-    ctx.clearRect(0, 0, width, height);
-    if (!data) return;
+  function drawMoving(batches) {
+    const { ctx, width: w, height: h } = surface.view;
+    ctx.clearRect(0, 0, w, h);
+    if (!N || !moves.length) return;
     if (!cpu.x || cpu.x.length !== N) for (const key in cpu) cpu[key] = key === 'c' ? new Uint8Array(N) : new Float32Array(N);
-    const unit = frame.unit, cx = width / 2, cy = height / 2, twist = MOTION.twist * swirl * (target % 2 ? 1 : -1);
-    for (let i = 0; i < N; i++) {
-      const d = i * STRIDE;
-      const u = clamp((progress * (1 + MOTION.spread) - data[d + 12]) / (1 + MOTION.spread - data[d + 12]), 0, 1), e = u * u * (3 - 2 * u);
-      place(data, d, clock);
-      const fx = at[0], fy = at[1];
-      place(data, d + 4, clock);
-      let x = fx + (at[0] - fx) * e, y = fy + (at[1] - fy) * e;
-      curl(noise, x * MOTION.freq, y * MOTION.freq, clock * 0.08, c2);
-      const flight = Math.sin(Math.PI * u), amp = MOTION.breath + MOTION.swirl * swirl * flight;
-      x += c2[0] * amp;
-      y += c2[1] * amp;
-      // a slow ripple runs through every form, so even a finished one never stands still
-      const wx = Math.sin(y * 0.11 + clock * 1.3) * MOTION.ripple, wy = Math.sin(x * 0.13 - clock * 1.1) * MOTION.ripple;
-      x += wx;
-      y += wy;
-      const a = (twist * flight) / (1 + (x * x + y * y) / 3600);
-      const rx = x * Math.cos(a) - y * Math.sin(a);
-      y = cy + (x * Math.sin(a) + y * Math.cos(a)) * unit;
-      x = cx + rx * unit;
-      const dust = (u < 0.5 ? data[d + 3] : data[d + 7]) > 0.5;
-      const rest = dust ? Math.atan2(y - cy, x - cx) + Math.PI / 2 : data[d + 14] + halfTurn(data[d + 15] - data[d + 14]) * e;
-      const vx = x - cpu.px[i], vy = y - cpu.py[i];
-      cpu.a[i] = vx * vx + vy * vy > 0.04 ? cpu.a[i] + halfTurn(Math.atan2(vy, vx) - cpu.a[i]) * 0.3 : cpu.a[i] + halfTurn(rest - cpu.a[i]) * 0.1;
-      cpu.px[i] = cpu.x[i] = x;
-      cpu.py[i] = cpu.y[i] = y;
-      cpu.s[i] = data[d + 8] + (data[d + 9] - data[d + 8]) * e;
-      cpu.z[i] = data[d + 2] + (data[d + 6] - data[d + 2]) * e;
-      cpu.c[i] = u < 0.5 ? data[d + 10] : data[d + 11];
-    }
+    const unit = frame.unit, cx = w / 2, cy = h / 2;
+    cpu.s.fill(0);
+    batches.forEach(({ u_time: local, u_retired: retired, u_swirl: swirl, u_twist: twist }, k) => {
+      const data = moves[k].data;
+      for (let i = 0; i < N; i++) {
+        const d = i * STRIDE;
+        if (local < data[d + 18] || (retired && local >= data[d + 17])) continue;
+        const u = clamp((local - data[d + 16]) / Math.max(data[d + 17] - data[d + 16], 0.001), 0, 1), e = ease(u);
+        place(data, d, clock);
+        const fx = at[0], fy = at[1];
+        place(data, d + 4, clock);
+        let x = fx + (at[0] - fx) * e, y = fy + (at[1] - fy) * e;
+        curl(noise, x * MOTION.freq, y * MOTION.freq, clock * 0.08, c2);
+        const mid = Math.sin(Math.PI * u), amp = MOTION.breath + swirl * mid;
+        x += c2[0] * amp;
+        y += c2[1] * amp;
+        // a slow ripple runs through every drawing, so even a finished one never stands still
+        const wx = Math.sin(y * 0.11 + clock * 1.3) * MOTION.ripple, wy = Math.sin(x * 0.13 - clock * 1.1) * MOTION.ripple;
+        x += wx;
+        y += wy;
+        const a = (twist * mid) / (1 + (x * x + y * y) / 3600);
+        const rx = x * Math.cos(a) - y * Math.sin(a);
+        y = cy + (x * Math.sin(a) + y * Math.cos(a)) * unit;
+        x = cx + rx * unit;
+        const dust = (u < 0.5 ? data[d + 3] : data[d + 7]) > 0.5;
+        const rest = dust ? Math.atan2(y - cy, x - cx) + Math.PI / 2 : data[d + 12] + halfTurn(data[d + 13] - data[d + 12]) * e;
+        const vx = x - cpu.px[i], vy = y - cpu.py[i];
+        cpu.a[i] = vx * vx + vy * vy > 0.04 ? cpu.a[i] + halfTurn(Math.atan2(vy, vx) - cpu.a[i]) * 0.3 : cpu.a[i] + halfTurn(rest - cpu.a[i]) * 0.1;
+        cpu.px[i] = cpu.x[i] = x;
+        cpu.py[i] = cpu.y[i] = y;
+        cpu.s[i] = data[d + 8] + (data[d + 9] - data[d + 8]) * e;
+        cpu.z[i] = data[d + 2] + (data[d + 6] - data[d + 2]) * e;
+        cpu.c[i] = u < 0.5 ? data[d + 10] : data[d + 11];
+      }
+    });
     drawDashes(ctx, N, cpu, frame.dash, frame.width);
   }
 
@@ -487,7 +547,7 @@ export function mountEvolution(el, options = {}) {
       const s = ((index % motifs.length) + motifs.length) % motifs.length;
       if (!samples.has(s)) samples.set(s, finish(sample(motifs[s], random(o.seed + s * 101))));
       ready = null;
-      if (calm) return begin({ stage: s });
+      if (calm) return startMove({ stage: s }, clock);
       job = planning(s);
       phase = 'plan';
     },
@@ -597,9 +657,21 @@ function finish(steps) {
   }
 }
 
+// Where every dash rests, and how: x, y (or radius and angle for dust),
+// thickness, dust flag, length, colour and angle; plus when it sets off in the
+// change that leaves this layout (d, seconds from that change's start) and
+// when it landed here (arrive, clock seconds).
 function layout(n) {
   const f = () => new Float32Array(n);
-  return { x: f(), y: f(), z: f(), w: f(), s: f(), c: new Uint8Array(n), a: f() };
+  return { x: f(), y: f(), z: f(), w: f(), s: f(), c: new Uint8Array(n), a: f(), d: f(), arrive: new Float64Array(n).fill(-Infinity) };
+}
+
+// Speeds up over the first `ramp` of a flight, cruises, and slows down over the last.
+function ease(u) {
+  const a = MOTION.ramp, v = 1 / (1 - a);
+  if (u < a) return (v * u * u) / (2 * a);
+  if (u > 1 - a) return 1 - (v * (1 - u) * (1 - u)) / (2 * a);
+  return v * (u - a / 2);
 }
 
 // Where each dash of a layout is at `clock`, in stage units (dust has orbited on).
