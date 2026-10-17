@@ -105,7 +105,7 @@ float settle(float progress) {
 }
 
 float ease(float u) {
-  return u * u * u * (u * (u * 6.0 - 15.0) + 10.0);
+  return u * u * (3.0 - 2.0 * u); // without a long crawl at either end
 }
 
 // Where the dash is (units from the centre) at a moment of the move.

@@ -21,7 +21,7 @@ export const YELLOW = ['#574800', '#6a5800', '#7d6700', '#907700', '#a38700', '#
 
 // How everything moves. Lengths are in stage units; a drawing is 200 units across.
 const MOTION = {
-  spread: 0.85, // how much of a move the change takes to sweep across the drawing
+  spread: 0.55, // how much of a move the change takes to sweep across the drawing
   swirl: 5.5, // units of swirl in mid flight
   twist: 0.4, // radians a drawing spirals about the centre in mid change, each way in turn
   breath: 0.3, // units of drift at rest
@@ -31,8 +31,8 @@ const MOTION = {
 
 const DEFAULTS = {
   motifs: new URL('./motifs/manifest.json', import.meta.url).href, // a manifest, or motifs already loaded
-  hold: 2.6, // seconds each drawing rests
-  move: 3.8, // seconds each change takes
+  hold: 1, // seconds each drawing rests, fully drawn (about 1.5 s look still, with the ends of the moves)
+  move: 3.6, // seconds each change takes
   fit: 0.94, // share of the shorter side a drawing fills
   dash: null, // dash length in CSS px; by default as fine as the screen allows
   start: 0,
@@ -286,7 +286,7 @@ export function mountEvolution(el, options = {}) {
           if (calm) ready = { stage: next };
           else job = planning(next);
         }
-        if (job) ready = work(5);
+        if (job) ready = work(8);
         if (ready && t >= (calm ? 8 : rest(target))) {
           begin(ready);
           ready = null;
@@ -375,7 +375,7 @@ export function mountEvolution(el, options = {}) {
     const unit = frame.unit, cx = width / 2, cy = height / 2, twist = MOTION.twist * swirl * (target % 2 ? 1 : -1);
     for (let i = 0; i < N; i++) {
       const d = i * STRIDE;
-      const u = clamp(progress * (1 + MOTION.spread) - data[d + 12], 0, 1), e = smooth(u);
+      const u = clamp(progress * (1 + MOTION.spread) - data[d + 12], 0, 1), e = u * u * (3 - 2 * u);
       place(data, d, clock);
       const fx = at[0], fy = at[1];
       place(data, d + 4, clock);

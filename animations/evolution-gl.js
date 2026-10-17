@@ -107,7 +107,7 @@ float settle(float progress) {
 // Where the triangle is (units from the centre, plus height) at a moment of the move.
 vec3 at(float progress, float clock) {
   float u = settle(progress);
-  float e = u * u * u * (u * (u * 6.0 - 15.0) + 10.0);
+  float e = u * u * (3.0 - 2.0 * u); // eased, without a long crawl at either end
   vec2 p = mix(place(a_from, clock), place(a_to, clock), e);
   float h = mix(a_from.z, a_to.z, e);
   float flight = sin(3.14159265 * u);
@@ -122,7 +122,7 @@ const float TAU = 6.28318530718;
 
 void main() {
   float u = settle(u_progress);
-  float e = u * u * u * (u * (u * 6.0 - 15.0) + 10.0);
+  float e = u * u * (3.0 - 2.0 * u); // eased, without a long crawl at either end
   vec3 p = at(u_progress, u_clock);
   vec3 q = at(u_previous, u_clock - u_step);
 
