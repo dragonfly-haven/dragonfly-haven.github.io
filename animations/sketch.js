@@ -31,6 +31,7 @@ const MOTION = {
 
 const DEFAULTS = {
   motifs: new URL('./motifs/manifest.json', import.meta.url).href, // a manifest, or motifs already loaded
+  speed: 1.4, // how fast it all plays (changes, rests, dust); the times here are at speed 1
   hold: 0.25, // seconds each drawing rests once drawn, so the flow is almost continuous
   move: 3.6, // seconds each change takes
   fit: 0.94, // share of the shorter side a drawing fills
@@ -319,8 +320,10 @@ export function mountEvolution(el, options = {}) {
       ready = null;
     }
     if (!paused) {
-      t += dt;
-      clock += dt;
+      // Reduced motion keeps its own slow pace.
+      const step = calm ? dt : dt * o.speed;
+      t += step;
+      clock += step;
       if (phase === 'move' && t >= (calm ? CROSSFADE : o.move)) {
         phase = 'hold';
         t = 0;
@@ -392,9 +395,9 @@ export function mountEvolution(el, options = {}) {
     if (gpu) {
       gpu.draw(view, {
         u_progress: progress,
-        u_previous: phase === 'move' ? Math.max(0, (t - 1 / 60) / o.move) : progress,
+        u_previous: phase === 'move' ? Math.max(0, (t - o.speed / 60) / o.move) : progress,
         u_clock: clock,
-        u_step: 1 / 60,
+        u_step: o.speed / 60,
         u_spread: MOTION.spread,
         u_swirl: MOTION.swirl * swirl,
         u_breath: MOTION.breath,
