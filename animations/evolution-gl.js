@@ -23,6 +23,7 @@ uniform float u_step;      // seconds since the previous frame
 uniform float u_spread;    // how far the change sweeps across the form
 uniform float u_swirl;     // units of swirl in mid flight
 uniform float u_breath;    // units of drift at rest
+uniform float u_ripple;    // units a slow ripple moves every form by
 uniform float u_freq;      // swirl features per unit
 uniform float u_twist;     // radians the whole form spirals about the centre in mid change
 uniform float u_spin;      // radians per second the dust turns
@@ -114,6 +115,8 @@ vec3 at(float progress, float clock) {
   float h = mix(a_from.z, a_to.z, e);
   float flight = sin(3.14159265 * u);
   p += curl(p * u_freq, clock * 0.08) * (u_breath + u_swirl * flight);
+  // a slow ripple runs through every form, so even a finished one never stands still
+  p += vec2(sin(p.y * 0.11 + clock * 1.3), sin(p.x * 0.13 - clock * 1.1)) * u_ripple;
   // the middle turns further than the rim, so the change spirals like a galaxy
   float a = u_twist * flight / (1.0 + dot(p, p) / 3600.0);
   p = mat2(cos(a), sin(a), -sin(a), cos(a)) * p;

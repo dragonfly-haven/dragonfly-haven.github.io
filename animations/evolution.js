@@ -28,6 +28,7 @@ const MOTION = {
   swirl: 5.5, // units of swirl in mid flight
   twist: 0.4, // radians a form spirals about the centre in mid change, turning each way in turn
   breath: 0.45, // units of drift at rest
+  ripple: 0.5, // units a slow ripple moves every form by, so none ever stands still
   freq: 1 / 70, // swirl features per unit
   spin: 0.012, // radians per second the dust turns
   sway: 0.14, // radians the forms turn in depth, slowly back and forth
@@ -36,7 +37,7 @@ const MOTION = {
 
 const DEFAULTS = {
   speed: 1.4, // how fast it all plays (changes, rests, dust); the times here are at speed 1
-  hold: 0.25, // seconds each stage rests once formed, so the flow is almost continuous
+  hold: 0, // seconds each stage rests once formed: none, the next change starts at once
   move: 3.6, // seconds each change takes
   fit: 0.94, // share of the shorter side the stage fills
   size: null, // triangle side in CSS px; by default as fine as the screen allows
@@ -394,6 +395,7 @@ export function mountEvolution(el, options = {}) {
         u_spread: MOTION.spread,
         u_swirl: MOTION.swirl,
         u_breath: MOTION.breath,
+        u_ripple: MOTION.ripple,
         u_freq: MOTION.freq,
         u_twist: MOTION.twist * (target % 2 ? 1 : -1),
         u_spin: MOTION.spin,
@@ -428,6 +430,10 @@ export function mountEvolution(el, options = {}) {
       const flight = Math.sin(Math.PI * u), amp = MOTION.breath + MOTION.swirl * flight;
       x += c2[0] * amp;
       y += c2[1] * amp;
+      // a slow ripple runs through every form, so even a finished one never stands still
+      const wx = Math.sin(y * 0.11 + clock * 1.3) * MOTION.ripple, wy = Math.sin(x * 0.13 - clock * 1.1) * MOTION.ripple;
+      x += wx;
+      y += wy;
       const a = (MOTION.twist * (target % 2 ? 1 : -1) * flight) / (1 + (x * x + y * y) / 3600);
       const tx = x * Math.cos(a) - y * Math.sin(a);
       y = cy + (x * Math.sin(a) + y * Math.cos(a)) * u0;

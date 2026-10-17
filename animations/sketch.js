@@ -25,6 +25,7 @@ const MOTION = {
   swirl: 5.5, // units of swirl in mid flight
   twist: 0.4, // radians a drawing spirals about the centre in mid change, each way in turn
   breath: 0.3, // units of drift at rest
+  ripple: 0.45, // units a slow ripple moves every drawing by, so none ever stands still
   freq: 1 / 70, // swirl features per unit
   spin: 0.012, // radians per second the dust turns
 };
@@ -32,7 +33,7 @@ const MOTION = {
 const DEFAULTS = {
   motifs: new URL('./motifs/manifest.json', import.meta.url).href, // a manifest, or motifs already loaded
   speed: 1.4, // how fast it all plays (changes, rests, dust); the times here are at speed 1
-  hold: 0.25, // seconds each drawing rests once drawn, so the flow is almost continuous
+  hold: 0, // seconds each drawing rests once drawn: none, the next change starts at once
   move: 3.6, // seconds each change takes
   fit: 0.94, // share of the shorter side a drawing fills
   dash: null, // dash length in CSS px; by default as fine as the screen allows
@@ -41,7 +42,7 @@ const DEFAULTS = {
   gpu: true, // false draws on a 2D canvas, as where WebGL2 is missing
   seed: 1,
   onStage: null, // called with (index, title) as each drawing settles
-  dusk: 0.8, // seconds the dashes drift as dust after the last drawing, before the first gathers; 0 to skip
+  dusk: 0, // seconds the dashes rest as drifting dust after the last drawing, before the first gathers; null skips the dust
 };
 
 const STRIDE = 16; // floats per dash in a planned move, see sketch-gl.js
@@ -352,7 +353,7 @@ export function mountEvolution(el, options = {}) {
   function following(s) {
     const M = motifs.length;
     if (s >= M) return 0;
-    return s === M - 1 && o.dusk > 0 && !calm ? M : (s + 1) % M;
+    return s === M - 1 && o.dusk != null && !calm ? M : (s + 1) % M;
   }
 
   // How long stop `s` rests: the drawing's own share of the hold, or the dust's spell.
@@ -401,6 +402,7 @@ export function mountEvolution(el, options = {}) {
         u_spread: MOTION.spread,
         u_swirl: MOTION.swirl * swirl,
         u_breath: MOTION.breath,
+        u_ripple: MOTION.ripple,
         u_freq: MOTION.freq,
         u_twist: MOTION.twist * swirl * (target % 2 ? 1 : -1),
         u_spin: MOTION.spin,
@@ -434,6 +436,10 @@ export function mountEvolution(el, options = {}) {
       const flight = Math.sin(Math.PI * u), amp = MOTION.breath + MOTION.swirl * swirl * flight;
       x += c2[0] * amp;
       y += c2[1] * amp;
+      // a slow ripple runs through every form, so even a finished one never stands still
+      const wx = Math.sin(y * 0.11 + clock * 1.3) * MOTION.ripple, wy = Math.sin(x * 0.13 - clock * 1.1) * MOTION.ripple;
+      x += wx;
+      y += wy;
       const a = (twist * flight) / (1 + (x * x + y * y) / 3600);
       const rx = x * Math.cos(a) - y * Math.sin(a);
       y = cy + (x * Math.sin(a) + y * Math.cos(a)) * unit;
