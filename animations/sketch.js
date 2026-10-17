@@ -31,7 +31,7 @@ const MOTION = {
 
 const DEFAULTS = {
   motifs: new URL('./motifs/manifest.json', import.meta.url).href, // a manifest, or motifs already loaded
-  hold: 1, // seconds each drawing rests, fully drawn (about 1.5 s look still, with the ends of the moves)
+  hold: 0.25, // seconds each drawing rests once drawn, so the flow is almost continuous
   move: 3.6, // seconds each change takes
   fit: 0.94, // share of the shorter side a drawing fills
   dash: null, // dash length in CSS px; by default as fine as the screen allows
@@ -40,7 +40,7 @@ const DEFAULTS = {
   gpu: true, // false draws on a 2D canvas, as where WebGL2 is missing
   seed: 1,
   onStage: null, // called with (index, title) as each drawing settles
-  dusk: 1.6, // seconds the last drawing rests as drifting dust before the first gathers again; 0 to skip
+  dusk: 0.8, // seconds the dashes drift as dust after the last drawing, before the first gathers; 0 to skip
 };
 
 const STRIDE = 16; // floats per dash in a planned move, see sketch-gl.js
@@ -212,7 +212,7 @@ export function mountEvolution(el, options = {}) {
   // A generator, so the work can be spread over the frames of a pause.
   function* planning(s) {
     const next = arrange(s, random(o.seed + s * 977 + Math.round(clock * 10)));
-    const [ax, ay] = positions(cur), [bx, by] = positions(next);
+    const [ax, ay] = positions(cur, clock), [bx, by] = positions(next, clock);
     const match = yield* pairing(ax, ay, bx, by);
     // The change sweeps across from a side that turns with every drawing.
     const dir = s * 2.39996 + 0.7, dx = Math.cos(dir), dy = Math.sin(dir);
@@ -280,14 +280,16 @@ export function mountEvolution(el, options = {}) {
         phase = 'hold';
         t = 0;
         if (o.onStage) o.onStage(target, motifs[target]?.title ?? '');
-      } else if (phase === 'hold') {
+      }
+      // The next move is planned while this one plays, so it can follow the moment this one settles.
+      if (phase === 'move' || phase === 'hold') {
         const next = following(target);
         if (!ready && !job) {
           if (calm) ready = { stage: next };
           else job = planning(next);
         }
-        if (job) ready = work(8);
-        if (ready && t >= (calm ? 8 : rest(target))) {
+        if (job) ready = work(phase === 'move' ? 3 : 8);
+        if (phase === 'hold' && ready && t >= (calm ? 8 : rest(target))) {
           begin(ready);
           ready = null;
         }
@@ -375,7 +377,7 @@ export function mountEvolution(el, options = {}) {
     const unit = frame.unit, cx = width / 2, cy = height / 2, twist = MOTION.twist * swirl * (target % 2 ? 1 : -1);
     for (let i = 0; i < N; i++) {
       const d = i * STRIDE;
-      const u = clamp(progress * (1 + MOTION.spread) - data[d + 12], 0, 1), e = u * u * (3 - 2 * u);
+      const u = clamp((progress * (1 + MOTION.spread) - data[d + 12]) / (1 + MOTION.spread - data[d + 12]), 0, 1), e = u * u * (3 - 2 * u);
       place(data, d, clock);
       const fx = at[0], fy = at[1];
       place(data, d + 4, clock);
@@ -531,13 +533,14 @@ function layout(n) {
   return { x: f(), y: f(), z: f(), w: f(), s: f(), c: new Uint8Array(n), a: f() };
 }
 
-// Where each dash of a layout is now, in stage units.
-function positions(l) {
+// Where each dash of a layout is at `clock`, in stage units (dust has orbited on).
+function positions(l, clock) {
   const n = l.x.length, x = new Float32Array(n), y = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     if (l.w[i]) {
-      x[i] = Math.cos(l.y[i]) * l.x[i];
-      y[i] = Math.sin(l.y[i]) * l.x[i];
+      const a = l.y[i] + MOTION.spin * clock;
+      x[i] = Math.cos(a) * l.x[i];
+      y[i] = Math.sin(a) * l.x[i];
     } else {
       x[i] = l.x[i];
       y[i] = l.y[i];

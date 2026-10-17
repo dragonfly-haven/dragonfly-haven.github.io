@@ -100,8 +100,10 @@ vec2 place(vec4 p, float clock) {
   return vec2(cos(a), sin(a)) * p.x;
 }
 
+// Each one sets off when the sweep reaches it, and all arrive together, so a
+// form completes in one moment and the next change can follow right after.
 float settle(float progress) {
-  return clamp(progress * (1.0 + u_spread) - a_more.x, 0.0, 1.0);
+  return clamp((progress * (1.0 + u_spread) - a_more.x) / (1.0 + u_spread - a_more.x), 0.0, 1.0);
 }
 
 // Where the triangle is (units from the centre, plus height) at a moment of the move.

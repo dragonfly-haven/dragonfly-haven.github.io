@@ -35,7 +35,7 @@ const MOTION = {
 };
 
 const DEFAULTS = {
-  hold: 1, // seconds each stage rests, fully formed (about 1.5 s look still, with the ends of the moves)
+  hold: 0.25, // seconds each stage rests once formed, so the flow is almost continuous
   move: 3.6, // seconds each change takes
   fit: 0.94, // share of the shorter side the stage fills
   size: null, // triangle side in CSS px; by default as fine as the screen allows
@@ -220,7 +220,7 @@ export function mountEvolution(el, options = {}) {
   // A generator, so the work can be spread over the frames of a pause.
   function* planning(s) {
     const next = arrange(s, random(o.seed + s * 977 + Math.round(clock * 10)));
-    const [ax, ay] = positions(cur), [bx, by] = positions(next);
+    const [ax, ay] = positions(cur, clock), [bx, by] = positions(next, clock);
     const match = yield* pairing(ax, ay, bx, by);
     // The change sweeps across from a side that turns with every stage.
     const dir = s * 2.39996 + 0.7, dx = Math.cos(dir), dy = Math.sin(dir);
@@ -283,14 +283,16 @@ export function mountEvolution(el, options = {}) {
         phase = 'hold';
         t = 0;
         if (o.onStage) o.onStage(target, STAGES[target].name);
-      } else if (phase === 'hold') {
+      }
+      // The next move is planned while this one plays, so it can follow the moment this one settles.
+      if (phase === 'move' || phase === 'hold') {
         const next = (target + 1) % STAGES.length;
         if (!ready && !job && samples.has(next)) {
           if (calm) ready = { stage: next };
           else job = planning(next);
         }
-        if (job) ready = work(8);
-        if (ready && t >= (calm ? 8 : o.hold)) {
+        if (job) ready = work(phase === 'move' ? 3 : 8);
+        if (phase === 'hold' && ready && t >= (calm ? 8 : o.hold)) {
           begin(ready);
           ready = null;
         }
@@ -363,7 +365,7 @@ export function mountEvolution(el, options = {}) {
     const u0 = frame.unit, cx = width / 2, cy = height / 2;
     for (let i = 0; i < N; i++) {
       const d = i * STRIDE;
-      const u = clamp(progress * (1 + MOTION.spread) - data[d + 12], 0, 1), e = u * u * (3 - 2 * u);
+      const u = clamp((progress * (1 + MOTION.spread) - data[d + 12]) / (1 + MOTION.spread - data[d + 12]), 0, 1), e = u * u * (3 - 2 * u);
       place(data, d, clock);
       const fx = at[0], fy = at[1];
       place(data, d + 4, clock);
@@ -436,13 +438,14 @@ function layout(n) {
   return { x: f(), y: f(), z: f(), w: f(), s: f(), c: new Uint8Array(n), a: f() };
 }
 
-// Where each triangle of a layout is now, in stage units.
-function positions(l) {
+// Where each triangle of a layout is at `clock`, in stage units (dust has orbited on).
+function positions(l, clock) {
   const n = l.x.length, x = new Float32Array(n), y = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     if (l.w[i]) {
-      x[i] = Math.cos(l.y[i]) * l.x[i];
-      y[i] = Math.sin(l.y[i]) * l.x[i];
+      const a = l.y[i] + MOTION.spin * clock;
+      x[i] = Math.cos(a) * l.x[i];
+      y[i] = Math.sin(a) * l.x[i];
     } else {
       x[i] = l.x[i];
       y[i] = l.y[i];
