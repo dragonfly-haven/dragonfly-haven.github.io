@@ -16,7 +16,6 @@
   --ivory: #fffdf6;
   --ink: #2b2a27;
   --muted: #6e685d;
-  --faint: #d9d3c4;
   --black: #0b0908;
 }
 
@@ -81,32 +80,6 @@ main {
   width: min(100%, 100vh - 15rem);
   aspect-ratio: 1;
   justify-self: center;
-}
-
-/* Until an animation is mounted inside them, the empty spots show a quiet outline. */
-#evolution:empty,
-#dragonfly:empty {
-  display: grid;
-  place-items: center;
-  border: 1px dashed var(--faint);
-  color: var(--muted);
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-#evolution:empty::after {
-  content: "Evolution animation";
-}
-
-#dragonfly:empty {
-  border-radius: 50%;
-  font-size: 0.55rem;
-  letter-spacing: 0.08em;
-}
-
-#dragonfly:empty::after {
-  content: "Dragonfly";
 }
 
 .about {
