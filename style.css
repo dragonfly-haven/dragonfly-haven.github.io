@@ -129,7 +129,6 @@ main {
   text-decoration-color: var(--muted);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.22em;
-  white-space: nowrap;
   transition: text-decoration-color 0.2s;
 }
 
