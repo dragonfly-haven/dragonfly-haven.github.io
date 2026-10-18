@@ -3,33 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Malawsky · Wartschinski · Schoening</title>
+  <title>Malawsky · Duennweber · Wartschinski · Schoening</title>
   <link rel="preload" href="fonts/eb-garamond-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header>
-    <a class="brand" href="./">
-      <span class="wordmark">Dragonfly</span>
+    <a class="brand" href="./" aria-label="Home">
       <div id="dragonfly" aria-hidden="true"></div>
     </a>
   </header>
 
   <main>
-    <div id="evolution" aria-hidden="true"></div>
-
     <section class="about">
       <p>We all hope to one day become ‘living fossils’. Until then we’re interested in making sure the next years go well. For us that means alignment, AI welfare and biosecurity, though we’re open to ideas of any kind, research or otherwise.</p>
       <p>If you work in one of these fields, or would simply like to join us in the attempt, <a class="mail" href="mailto:mld.schoening@gmail.com" title="mld.schoening@gmail.com">send us a message</a>.</p>
 
       <ul class="names">
-        <li>Daniel Malawsky</li>
-        <li>Laura Wartschinski</li>
+        <li><a href="https://scholar.google.com/citations?user=-r4ghMwAAAAJ">Daniel Malawsky</a></li>
+        <li><a href="https://scholar.google.com/citations?user=AOCjd-sAAAAJ">Gesa Duennweber</a></li>
+        <li><a href="https://scholar.google.com/citations?user=UTT94nsAAAAJ">Laura Wartschinski</a></li>
         <li>Maxim Schoening</li>
       </ul>
     </section>
   </main>
 
-  <script type="module" src="animations/site.js"></script>
+  <script type="module">
+    import { mountDragonfly } from './animations/dragonfly.js';
+    const style = new URLSearchParams(location.search).get('dragonfly') || 'crystallise';
+    mountDragonfly(document.getElementById('dragonfly'), { style });
+  </script>
 </body>
 </html>

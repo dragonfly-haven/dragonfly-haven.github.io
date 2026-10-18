@@ -98,7 +98,8 @@ main {
   font-weight: 500;
 }
 
-.mail {
+.mail,
+.names a {
   color: var(--ink);
   text-decoration-color: var(--muted);
   text-decoration-thickness: 1px;
@@ -107,7 +108,9 @@ main {
 }
 
 .mail:hover,
-.mail:focus-visible {
+.mail:focus-visible,
+.names a:hover,
+.names a:focus-visible {
   text-decoration-color: var(--ink);
   text-decoration-thickness: 2px;
 }
@@ -119,6 +122,7 @@ main {
 
   main {
     grid-template-columns: 1fr;
+    align-content: start;
     gap: 2.5rem;
     padding: 1rem 1rem 3rem;
   }
