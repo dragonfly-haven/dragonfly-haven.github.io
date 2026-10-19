@@ -2,28 +2,32 @@
 """06 Endosymbiosis: an Asgard archaeon taking in an alphaproteobacterium.
 
 The origin of mitochondria as a clean textbook figure in ink (reworked for
-Maxim's note "a bit cleaner, more technical, less messy", then after review).
+Maxim's note "a bit cleaner, more technical, less messy", then twice after review).
 
 - The host: an Asgard archaeon (like Prometheoarchaeum), a roundish cell drawn
   as a ball with one side sliced off by a tilted plane, lit from the upper left.
-- The cut face: light, staggered section hatching (13 apart, as on 07's cut
-  faces), thinning toward the light; the cell envelope as a firm edge with a
-  thin line just inside; the circular chromosome as one strand folded into
-  seven twisted-pair loops radiating from a small centre (a nucleoid, with no
-  outer ring that could read as a nucleus), broken where a strand passes under;
-  ribosomes as small dots in loose clusters.
-- On the face, one alphaproteobacterium already taken in, cut through: outer
-  and inner membrane as two clean lines, a thin broken host membrane round it,
-  its own small circular genome (one loop, twisted twice) and a few ribosomes.
+- The cut face: long, evenly spaced section lines, as on 07's cut faces, left
+  out on a lit crescent by the upper left rim (every other line stopping a
+  little short of it) and round what lies in the section; the cell envelope as
+  a firm edge with a thin line just inside.
+- In the section: the circular chromosome as one strand folded into five
+  twisted-pair arms of uneven length, each ending in a loop, running out from a
+  small open hub where the strand turns from arm to arm without crossing itself
+  (broken where a strand passes under); ribosomes as a few small solid grains,
+  single or paired, set between the section lines; and one alphaproteobacterium
+  already taken in, cut through: outer and inner membrane as two clean lines, a
+  thin broken host membrane round it, its own small circular genome and a few grains.
 - The rest of the ball, on the shadow side, shaded with latitude rings about a
   pole just behind the lower right limb (they shrink and close up toward it),
   every ring in the shadow and every second or fourth into the half-tones, never
   closer than 5; a short slanting second set deepens the core shadow.
-- The moment of uptake, on that shadow side: a rod goes in end-first through a
-  shaded dimple, rising toward the eye and over the limb. Two tapering membrane
-  lobes of the host rise round it: the near one in front, wrapping the rod's
-  face (its free edge drawn with a thickness line, its underside hatched along
-  its form), the far one behind; both end in rounded tips resting on the rod.
+- The moment of uptake, well onto that shadow side: a rod goes in end-first
+  through a small shaded dimple, rising toward the eye. Two membrane arms of
+  the host close round it, each about half the rod's length with a round, soft
+  tip: the near one from below, in front, reaching over the rod's face (a
+  thickness line along its free edge, its underside shaded along its form);
+  the far one rising from behind, clear above the rod, and coming over its top
+  so its tip rests on the rod's face. No rod lines show where an arm covers it.
 - Long, thin, smooth protrusions (two branching once) curve out from the back
   surface.
 - Two free bacteria, each with a single polar flagellum: gram-negative rods with
@@ -544,15 +548,20 @@ def arm(ctrl, hw, outer):
 
 # near arm: in front, rising from the dimple's lower rim along the rod's lower
 # side and reaching over its face to about half way up the rod
-def taper(h0, h1, hold=0.0):
-    return lambda u: h0 if u < hold else h0 + (h1 - h0) * ((u - hold) / (1 - hold)) ** 1.2
+def taper(h0, h1, hold=0.0, flare=0.0):
+    """Half-width along an arm: h0 held to `hold`, then narrowing to h1; the base
+    widens by `flare` where it grows out of the host's surface."""
+    def hw(u):
+        h = h0 if u < hold else h0 + (h1 - h0) * ((u - hold) / (1 - hold)) ** 1.2
+        return h + flare * max(0.0, 1 - u / 0.14) ** 2
+    return hw
 
 
-nl_out, nl_tip, nl_in, nl_in_rc = arm([(T_E - 22, 50), (T_E + 6, 45), (T_E + 40, 37), (T_E + 72, 28)], taper(21.0, 15.0), +1)
+nl_out, nl_tip, nl_in, nl_in_rc = arm([(T_E - 22, 50), (T_E + 6, 45), (T_E + 40, 37), (T_E + 72, 28)], taper(21.0, 15.0, flare=8.0), +1)
 NEAR = Region(nl_out + nl_tip[1:-1] + nl_in)
 # far arm: rising from behind the rod above its upper side, then coming over
 # its top so the tip rests on its face
-fl_out, fl_tip, fl_in, fl_in_rc = arm([(T_E + 10, -54), (T_E + 38, -57), (T_E + 62, -52), (T_E + 82, -38), (T_E + 94, -21)], taper(17.0, 10.0, 0.5), -1)
+fl_out, fl_tip, fl_in, fl_in_rc = arm([(T_E + 8, -50), (T_E + 36, -53), (T_E + 60, -50), (T_E + 79, -40), (T_E + 92, -31)], taper(16.0, 12.0, 0.45, flare=7.0), -1)
 T_SW = min(fl_in_rc, key=lambda q: q[1])[0]            # where its free edge comes over the rod's top
 FAR = Region(fl_out + fl_tip[1:-1] + fl_in)
 ROD_REG = Region(capsule_pts(RC[0], RC[1], RA, HLP, ROD_R, step=2.0))
@@ -850,19 +859,19 @@ for i in range(901):
     _g.append((EB[0] + 4 + x * _a[0] - y * _a[1], EB[1] + x * _a[1] + y * _a[0], math.cos(3 * t) * math.sin(t)))
 for run in break_crossings([plane(x, y) for x, y, _ in _g], [d for _, _, d in _g], gap=3.2):
     ink(run, 1.15, hand=0.1)
-for t, o in [(-66, -6), (-56, 15), (62, -15), (70, 8), (-14, -22), (14, 22), (40, 20)]:
+for t, o in [(-64, -4), (64, -10), (-12, -21), (16, 21), (44, 17)]:
     q = plane(EB[0] + _a[0] * t + _n[0] * o, EB[1] + _a[1] * t + _n[1] * o)
-    pen.dot(q[0], q[1], r=2.0, w=1.2)
+    pen.blot(q[0], q[1], 2.2, w=1.8)
 
 # the host's chromosome: one circular strand folded into looped domains, each a
 # twisted pair of strands running out from a small open hub and ending in a loop;
 # between domains the strand turns round the hub without crossing itself
 NUC = (60.0, 92.0)
-N_ARMS = 6
+N_ARMS = 5
 nuc_pts, nuc_depth = [], []
 _rng = random.Random(61)
-_angs = [2 * math.pi * k / N_ARMS + math.radians(_rng.uniform(-4, 4)) + 0.35 for k in range(N_ARMS)]
-_lens = [2.0, 1.5, 2.0, 2.0, 1.5, 2.0]
+_angs = [math.radians(a + 20) for a in (0, 68, 140, 218, 290)]   # a little uneven
+_lens = [2.0, 2.5, 1.5, 2.0, 2.5]
 HUB = 14.0
 PERIOD = 40.0
 S0 = 10.0                                               # the strands run side by side this far before twisting
@@ -871,7 +880,7 @@ arms = []
 for k, al in enumerate(_angs):
     L = PERIOD * _lens[k] + S0
     seg_a, seg_b = [], []
-    bend = math.radians(_rng.uniform(8, 14)) * (1 if k % 2 else -1)
+    bend = math.radians(_rng.uniform(16, 26)) * (1 if k % 2 else -1)
     n = int(L)
     cx, cy = NUC[0] + math.cos(al) * HUB, NUC[1] + math.sin(al) * HUB
     for i in range(n + 1):
@@ -982,10 +991,8 @@ while tries < 4000 and len(grains) < 7:
     grains.append((X, Y))
 for X, Y in grains:
     for j in range(_rr.choice([1, 2, 2])):
-        q = plane(X + j * 9.0, Y + _rr.uniform(-1.2, 1.2))
-        a = _rr.uniform(0, math.pi)
-        d = (math.cos(a) * 3.0, math.sin(a) * 3.0)
-        ink([(q[0] - d[0], q[1] - d[1]), (q[0] + d[0], q[1] + d[1])], 2.2, hand=0.0)
+        q = plane(X + j * 10.0, Y + _rr.uniform(-1.0, 1.0))
+        pen.blot(q[0], q[1], 2.7, w=2.1)               # a small solid grain, which stays a dot at 1x
 
 pen.save(OUT)
 pen.report()
