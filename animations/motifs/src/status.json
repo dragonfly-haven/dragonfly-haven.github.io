@@ -82,13 +82,14 @@
       "note": "refined version; re-reviewed after the review records were lost"
     },
     "quastenflosser": {
-      "passed": false,
-      "last": [
-        6,
-        6,
-        5
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
+        8,
+        8,
+        8
       ],
-      "note": "first round: too light, netted tube, paddle tail, peg-leg pectoral fin, no waterline"
+      "note": "second round; polish asked: lower jaw, pectoral lobe form and fan, looser scales on the back, tail fringe"
     },
     "cynodont": {
       "passed": true,
