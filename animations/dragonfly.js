@@ -2,9 +2,10 @@
 // It is modelled in 3D and seen from straight above: rings of dashes wrap its
 // body like the hatching of a pen drawing, and dashes trace its wings, with
 // more of their veins and cells the more pixels it is drawn with, so it stays
-// clean at any size and on any screen. It keeps still until the pointer is
-// over it, or over the link it sits in, or that link has keyboard focus; then
-// it beats its wings as a hovering dragonfly does, and settles again afterwards.
+// clean at any size and on any screen. As it first appears it beats its wings
+// for a moment, on phones too, then keeps still until the pointer is over it,
+// or over the link it sits in, or that link has keyboard focus; then it beats
+// its wings as a hovering dragonfly does, and settles again afterwards.
 // Its form can be varied (see FORM).
 //
 //   import { mountDragonfly } from './animations/dragonfly.js';
@@ -242,8 +243,9 @@ function wingFrame({ spec, side }) {
 // ---------------------------------------------------------------------------
 
 export function mountDragonfly(el, options = {}) {
-  // `beat: true` keeps it beating its wings, for previews; any key of FORM varies its form.
-  const o = { rotate: -0.7, tilt: 0, roll: 0, fit: 0.97, seed: 3, beat: false, ...FORM, ...options };
+  // `beat: true` keeps it beating its wings, for previews; `hello` is how many
+  // seconds it beats them as it first appears; any key of FORM varies its form.
+  const o = { rotate: -0.7, tilt: 0, roll: 0, fit: 0.97, seed: 3, beat: false, hello: 1, ...FORM, ...options };
   const calm = reducedMotion();
   const { parts, limbs, wings, frames } = model(o);
   // Model to camera: turned in the picture plane; it can also be rolled to show a flank and tipped back.
@@ -257,8 +259,8 @@ export function mountDragonfly(el, options = {}) {
   let job = null; // a layout under way
   // The beat: its clock, how strongly the wings beat now (0 still, 1 full), and
   // what keeps them beating; the frame loop runs only while they move.
-  let clock = 0, swing = 0, hovered = false, focused = false, loop = null;
-  const beating = () => !calm && (o.beat || hovered || focused);
+  let clock = 0, swing = 0, hovered = false, focused = false, helloUntil = 0, loop = null;
+  const beating = () => !calm && (o.beat || hovered || focused || performance.now() < helloUntil);
   // Scratch space for each frame, so that drawing one makes no garbage.
   const R = new Float64Array(9), M = new Float64Array(9), cosine = new Float64Array(TWIST_LEVELS + 1), sine = new Float64Array(TWIST_LEVELS + 1);
   const order = new Int8Array(wings.length), facing = new Float64Array(wings.length), pitches = new Float64Array(wings.length);
@@ -270,13 +272,21 @@ export function mountDragonfly(el, options = {}) {
   surface.measure();
 
   // Hovering with a mouse or pen, or keyboard focus on the link, starts the beat;
-  // on touch screens it stays still.
+  // a touch does not. A tap on a phone can focus the link too, so only focus
+  // from the keyboard counts.
   const host = el.closest('a, button') || el;
   const wake = () => beating() && !loop && (loop = animate(el, tick));
+  const keyboard = (e) => {
+    try {
+      return e.target.matches(':focus-visible');
+    } catch {
+      return true;
+    }
+  };
   const events = {
     pointerenter: (e) => e.pointerType !== 'touch' && ((hovered = true), wake()),
     pointerleave: () => (hovered = false),
-    focusin: () => ((focused = true), wake()),
+    focusin: (e) => keyboard(e) && ((focused = true), wake()),
     focusout: () => (focused = false),
   };
   for (const [type, handler] of Object.entries(events)) host.addEventListener(type, handler);
@@ -308,9 +318,15 @@ export function mountDragonfly(el, options = {}) {
 
   function show(next) {
     job = null;
+    const first = !lay;
     lay = next;
     draw();
     surface.view.canvas.style.opacity = 1;
+    // As it first appears, on any screen, it beats its wings for a moment.
+    if (first && o.hello > 0) {
+      helloUntil = performance.now() + o.hello * 1000;
+      wake();
+    }
   }
 
   // A wing's flap (up from flat) and pitch (leading edge up), in radians, now.
@@ -583,6 +599,7 @@ export function mountDragonfly(el, options = {}) {
     // Runs the beat forward by `seconds` at once (for previews and tests).
     advance(seconds) {
       flush();
+      helloUntil -= seconds * 1000;
       if (beating()) swing = 1;
       clock += seconds;
       draw();
