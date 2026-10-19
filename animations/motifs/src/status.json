@@ -47,13 +47,14 @@
       "when": "2026-10-17"
     },
     "choanoflagellate-colony": {
-      "passed": false,
-      "last": [
-        6,
-        6,
-        6
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
+        8,
+        8,
+        8
       ],
-      "note": "first round read as a flower; redrawn as a ball, in re-review"
+      "note": "second round; polish asked: cleaner rim, open collars, round centre cell"
     },
     "jellyfish": {
       "passed": true,
@@ -117,7 +118,13 @@
       "when": "2026-10-17"
     },
     "neanderthals": {
-      "passed": false
+      "passed": false,
+      "last": [
+        8,
+        6,
+        6
+      ],
+      "note": "legs, hands, hatching on skin, fire, empty corner"
     },
     "couple-1690s": {
       "passed": true,
