@@ -256,6 +256,7 @@ for uend, sgn in ((U_LO, -1), (U_HI, 1)):
     n = (-ed[1], ed[0])
     if (F[j][other][0] - p1[0]) * n[0] + (F[j][other][1] - p1[1]) * n[1] < 0:
         n = (-n[0], -n[1])                   # n points across the front ribbon
+    p1 = (p1[0] + n[0] * 3.0, p1[1] + n[1] * 3.0, p1[2])   # just inside its edge, so the cut is out of sight
     order = range(len(B) // 2, len(B)) if sgn > 0 else range(len(B) // 2, -1, -1)
     for kk in ('e1', 'e2', 'c'):
         stop = None
