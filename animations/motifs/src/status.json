@@ -52,13 +52,13 @@
       "passed": true,
       "when": "2026-10-17",
       "rework": {
-        "round": "w1",
+        "round": "w2",
         "scores": [
-          6,
           7,
-          6
+          8,
+          8
         ],
-        "maxim": "not a clear yes: cleaner but too empty; dot grid, coil ring and clip arms read as decoration",
+        "maxim": "cleaner and less messy: yes, but not yet a clear yes (specks and scratchy hatching on the cut face at 1x)",
         "passed": false
       }
     },
