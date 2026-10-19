@@ -171,17 +171,8 @@
         8,
         8
       ],
-      "note": "polish asked: hands, a strip of waistcoat, folds, legs and shoes, kerchief hem",
-      "rework": {
-        "round": "w1",
-        "scores": [
-          8,
-          8,
-          8
-        ],
-        "maxim": "not a clear yes: too little added detail, man's face muddy at 1x",
-        "passed": false
-      }
+      "note": "rework after Maxim's notes (round w2): clear faces, detailed hands, shoes, hat, coat and basket; polish asked: hand-in-hand grip, ties for buckles, lighter hooks-and-eyes, calf highlight",
+      "maxim": "Plain American dress, more Western European faces, more detail: yes"
     },
     "neural-net": {
       "passed": true,
