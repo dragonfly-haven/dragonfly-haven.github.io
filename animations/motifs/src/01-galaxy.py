@@ -285,6 +285,7 @@ def sig(x):
 
 FIELD = np.zeros_like(GX)
 ECOORD = np.full(GX.shape, np.nan)
+UCOORD = np.full(GX.shape, np.nan)
 for k, arm in enumerate(ARM):
     t, d = arm.coords(GU, GV)
     tt = np.clip(t, 0, arm.T)
@@ -297,6 +298,7 @@ for k, arm in enumerate(ARM):
     FIELD = np.maximum(FIELD, body)
     closer = np.isfinite(t) & (np.abs(e - 0.5) < np.abs(np.nan_to_num(ECOORD, nan=99) - 0.5))
     ECOORD = np.where(closer, e, ECOORD)
+    UCOORD = np.where(closer, t / arm.T, UCOORD)
 
 
 def contours(F, level, x0=0.0, y0=0.0, step=None):
@@ -373,6 +375,13 @@ def smooth(pts, n=2):
                          (pts[i - 1][1] + 2 * pts[i][1] + pts[i + 1][1]) / 4) for i in range(1, len(pts) - 1)] + [pts[-1]]
         pts = q
     return pts
+
+
+def u_at(p):
+    j, i = int(round(p[0] / GS)), int(round(p[1] / GS))
+    if 0 <= i < FIELD.shape[0] and 0 <= j < FIELD.shape[1]:
+        return UCOORD[i, j]
+    return float('nan')
 
 
 def e_at(p):
@@ -517,12 +526,136 @@ def star_cluster(c, n, spread, big=1.9):
 
 knots = [knot(ARM[0], 0.45, 0.8, 60), knot(ARM[1], 0.56, 0.8, 62), knot(ARM[0], 0.67, 0.8, 64),
          knot(ARM[1], 0.77, 0.78, 58), knot(ARM[0], 0.87, 0.76, 46), knot(ARM[1], 0.91, 0.74, 42)]
+_n0 = len(pen.strokes)
 for kn in knots:
     draw_knot(kn)
+del pen.strokes[_n0:]      # superseded by the lens-shaped knots drawn last
 # the smallest knots are only their clusters of young stars
 for arm, u, ec in [(ARM[0], 0.3, 0.9), (ARM[1], 0.35, 0.9), (ARM[0], 0.57, 0.85), (ARM[1], 0.66, 0.85)]:
     t = u * arm.T
     star_cluster(arm.at(t, ec), rng.choice([7, 8, 9]), 5.5)
+
+# ---- the knots as drawn: irregular lenses stretched along the arm, hatched with the flow
+
+krng = random.Random(4242)
+
+
+def KR(lo=0.0, hi=1.0):
+    return lo + (hi - lo) * krng.random()
+
+
+def kchop(pts, lo, hi, glo, ghi, keep=1.0):
+    fine = resample(pts, 1.0)
+    n = len(fine)
+    out = []
+    i = int(KR(0, hi * 0.5))
+    while i < n - 1:
+        j = min(n - 1, i + int(KR(lo, hi)))
+        if j - i >= 2 and krng.random() < keep:
+            out.append(fine[i:j + 1])
+        i = j + int(KR(glo, ghi))
+    return out
+
+
+def lens_knot(arm, u, ec, scale):
+    tc = u * arm.T
+    W = float(arm.W(tc))
+    dc = -0.38 * W + ec * W
+    Hp = 0.36 * W * scale                 # across the arm, in the disc plane
+    Lp = Hp * KR(2.0, 2.4)                # along it
+    rr = float(arm.r(tc)) * 1.07
+    dt = (Lp / 2) / rr
+    corners = [arm.P(tc + a * dt * 1.5, dc + b * Hp * 0.9) for a in (-1, -0.5, 0, 0.5, 1) for b in (-1, 1)]
+    x0 = min(p[0] for p in corners) - 10
+    y0 = min(p[1] for p in corners) - 10
+    x1 = max(p[0] for p in corners) + 10
+    y1 = max(p[1] for p in corners) + 10
+    LX, LY = np.meshgrid(np.arange(x0, x1, 1.0), np.arange(y0, y1, 1.0))
+    ddx, ddy = LX - CX, LY - CY
+    U = ddx * cP + ddy * sP
+    V = (-ddx * sP + ddy * cP) / Q
+    t, d = arm.coords(U, V)
+    st = (t - tc) * rr / (Lp / 2)
+    sd = (d - dc) / (Hp / 2)
+    width = np.clip(1 - st ** 2, 0, None) ** 0.6
+    F = 1 - (sd / np.maximum(width, 0.08)) ** 2 - 0.25 * st ** 2
+    F = np.where(np.isfinite(F), F, -9.0)
+    F += 0.22 * fine_noise(LX, LY, 13, krng.randrange(10 ** 6)) + 0.07 * fine_noise(LX, LY, 6, krng.randrange(10 ** 6))
+    fore = dist(arm.P(tc, dc), arm.P(tc, dc + 10)) / 10
+    star = arm.P(tc + KR(-0.15, 0.15) * dt, dc + KR(-0.1, 0.1) * Hp)
+    return dict(arm=arm, tc=tc, dc=dc, Hp=Hp, Lp=Lp, dt=dt, F=F, x0=x0, y0=y0, x1=x1, y1=y1,
+                fore=fore, star=star)
+
+
+LENSES = [lens_knot(ARM[0], 0.45, 0.78, 1.0), lens_knot(ARM[1], 0.56, 0.78, 1.0),
+          lens_knot(ARM[0], 0.67, 0.78, 1.05), lens_knot(ARM[1], 0.77, 0.76, 0.95),
+          lens_knot(ARM[0], 0.87, 0.74, 0.8), lens_knot(ARM[1], 0.91, 0.72, 0.75)]
+
+
+def lens_val(kn, p):
+    if not (kn['x0'] <= p[0] < kn['x1'] - 1 and kn['y0'] <= p[1] < kn['y1'] - 1):
+        return -9.0
+    return float(kn['F'][int(p[1] - kn['y0']), int(p[0] - kn['x0'])])
+
+
+def in_lens(p, level=0.25):
+    return any(lens_val(kn, p) > level for kn in LENSES)
+
+
+def draw_lens(kn):
+    arm, tc, dc, Hp, dt = kn['arm'], kn['tc'], kn['dc'], kn['Hp'], kn['dt']
+    sx, sy = kn['star']
+    glow = 9.0 + 0.1 * Hp * kn['fore']
+    # the edge: broken, irregular, fine
+    for line in contours(kn['F'], 0.0, kn['x0'], kn['y0'], 1.0):
+        line = smooth(line, 3)
+        if length(line) < 40:
+            continue
+        for seg in kchop(line, 20, 60, 4, 10, keep=0.88):
+            ink(seg, KR(1.25, 1.5), block=BULGE, hand=0.2, lift=0.0, piece=(10, 25))
+    # hatching that runs with the arm, whole in the body, breaking into dashes outward,
+    # thinning again round the star so the heart glows
+    step = 5.2 / kn['fore']
+    d = dc - Hp * 0.7 + KR(0, step)
+    while d < dc + Hp * 0.7:
+        pts = [arm.P(t, d) for t in arm.ts(tc - 1.3 * dt, tc + 1.3 * dt, 1.0)]
+        cur, left, on = [], 0, False
+        for p in pts:
+            v = lens_val(kn, p)
+            inside = v > 0.02 and math.hypot(p[0] - sx, p[1] - sy) > glow
+            if inside:
+                if left <= 0:
+                    dens = min(1.0, v / 0.3) * max(0.45, 1 - 0.5 * max(0.0, (v - 0.55) / 0.45))
+                    on = dens >= 0.97 or krng.random() < dens ** 0.8
+                    left = KR(4, 10)
+                left -= 1
+            if inside and on:
+                cur.append(p)
+            elif cur:
+                if len(cur) > 2:
+                    ink(cur, 0.95 * KR(0.9, 1.1), block=BULGE, hand=0.25, lift=0.0, piece=(30, 60))
+                cur = []
+        if len(cur) > 2:
+            ink(cur, 0.95 * KR(0.9, 1.1), block=BULGE, hand=0.25, lift=0.0, piece=(30, 60))
+        d += step
+    pen.hatch_spacings.append(5.2)
+    # stipple: the gas thinning into the arm round it
+    placed = []
+    for _ in range(int(Hp * 6)):
+        p = (KR(kn['x0'], kn['x1']), KR(kn['y0'], kn['y1']))
+        v = lens_val(kn, p)
+        if -0.45 < v < 0.0 and krng.random() < ((v + 0.45) / 0.45) ** 1.5:
+            if all(dist(p, q) > 4.5 for q in placed):
+                placed.append(p)
+                pen.dot(p[0], p[1], r=KR(0.75, 1.1), w=1.0)
+    L = min(11.0, 6.0 + Hp * 0.06)
+    for k in range(2):
+        a = KR(-0.2, 0.2) + k * math.pi / 2
+        Lk = L * (1.0 if k == 0 else 0.8)
+        pen.line([(sx - math.cos(a) * Lk, sy - math.sin(a) * Lk), (sx, sy), (sx + math.cos(a) * Lk, sy + math.sin(a) * Lk)],
+                 w=1.25, hand=0, lift=0, piece=(2.5, 4), taper=0.92, occlude=False)
+    pen.dot(sx, sy, r=1.2, w=1.25)
+
 
 # ---------------------------------------------------------------- dust lanes
 
@@ -648,6 +781,17 @@ def disc_block(p):
     return BULGE(p) or CLOUD(p)
 
 
+def env_block(p):
+    if disc_block(p) or in_lens(p, -0.1):
+        return True
+    u = u_at(p)
+    if np.isfinite(u) and u > 0.88:
+        return True
+    if 190 < p[0] < 248 and 512 < p[1] < 568:     # the left lobe, in dashes
+        return int((p[0] + p[1]) // 6) % 2 == 0
+    return False
+
+
 for line in contours(FIELD, 0.5):
     line = smooth(line, 3)
     closed = dist(line[0], line[-1]) < 3
@@ -657,9 +801,14 @@ for line in contours(FIELD, 0.5):
         if length(sgm) < 40:
             continue
         for piece in chop(sgm, 50, 180, 4, 14, keep=0.92):
-            ink(piece, 1.45, block=disc_block, hand=0.5)
+            ink(piece, 1.45, block=env_block, hand=0.5)
 
 # ---------------------------------------------------------------- the arms' flowing lines
+
+
+def flow_block(p):
+    return disc_block(p) or in_lens(p)
+
 
 for k, arm in enumerate(ARM):
     T = arm.T
@@ -676,14 +825,14 @@ for k, arm in enumerate(ARM):
         keep = 0.95 - 0.25 * f
         ta, tb = min(t1, 0.74 * T), min(t1, 0.87 * T)
         for seg in chop(arm.rail(f, t0, ta, wob=0.045, k=i + 2), 70, 240, 3, 12, keep=keep):
-            ink(seg, w * R(0.9, 1.1), block=disc_block, hand=0.7)
+            ink(seg, w * R(0.9, 1.1), block=flow_block, hand=0.7)
         # toward the tip the lines break into dashes, and the dashes into stars
         if tb > ta:
             for seg in chop(arm.rail(f, ta, tb, wob=0.045, k=i + 2), 25, 70, 5, 14, keep=keep * 0.95):
-                ink(seg, w * 0.9 * R(0.9, 1.1), block=disc_block, hand=0.7)
+                ink(seg, w * 0.9 * R(0.9, 1.1), block=flow_block, hand=0.7)
         if t1 > tb:
             for seg in chop(arm.rail(f, tb, t1, wob=0.045, k=i + 2), 8, 24, 7, 18, keep=keep * 0.8):
-                ink(seg, w * 0.8 * R(0.9, 1.1), block=disc_block, hand=0.5)
+                ink(seg, w * 0.8 * R(0.9, 1.1), block=flow_block, hand=0.5)
     # the arm's tip unravels into wisps of gas
     for j in range(7):
         t0 = 0.84 * T + R(-0.05, 0.05)
@@ -693,12 +842,12 @@ for k, arm in enumerate(ARM):
         drift = R(-0.4, 1.2)
         tend = T + R(0.1, 0.35)
         while tt < tend:
-            tc = min(tt, T)
-            d = arm.d_in(tc) + f * (arm.d_out(tc) - arm.d_in(tc)) + drift * (tt - t0) * 40
+            tc = min(tt, 0.92 * T)       # past the steep taper at the very tip, so no hooks
+            d = arm.d_in(tc) + f * (arm.d_out(tc) - arm.d_in(tc)) + drift * 0.35 * (tt - t0) * 40
             pts.append(arm.P(tt, d))
             tt += 2.0 / (float(arm.r(tt)) * 1.07)
         for seg in chop(pts, 8, 26, 6, 16, keep=0.8):
-            ink(seg, R(0.8, 1.05), block=disc_block, hand=0.6)
+            ink(seg, R(0.8, 1.05), block=disc_block, hand=0.3)
     # small clusters strung along the tail, where the arm fades into stars
     for u in [0.84, 0.92, 0.99, 1.04]:
         t = u * T + G(0.01)
@@ -717,7 +866,8 @@ GAPS = [(380, 330), (640, 640)]
 
 
 def rim_block(p):
-    return gap_block(p) or any(dist(p, g) < 120 for g in GAPS)
+    e = e_at(p)
+    return gap_block(p) or any(dist(p, g) < 120 for g in GAPS) or (np.isfinite(e) and -0.6 < e < 1.7)
 
 
 for rr in [385, 420]:
@@ -771,6 +921,9 @@ for _ in range(400):
 for p, L in [((88, 110), 18), ((880, 92), 14), ((835, 880), 16), ((150, 860), 12),
              ((610, 950), 9), ((60, 520), 9), ((945, 470), 10), ((395, 60), 9)]:
     sparkle(p[0], p[1], L, w=1.3, rot=R(-0.1, 0.1), diag=0.3)
+
+for kn in LENSES:
+    draw_lens(kn)
 
 # the set's finest line is 0.6
 pen.strokes = [(p, max(0.6, w)) for p, w in pen.strokes]

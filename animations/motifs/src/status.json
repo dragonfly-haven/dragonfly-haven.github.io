@@ -9,7 +9,7 @@
         8,
         8
       ],
-      "note": "second round; polish asked: knots as lenses with curved hatching, two pen slips"
+      "note": "second round; polished: knots as lenses with curved hatching, pen slips at the arm tips fixed"
     },
     "organic-molecule": {
       "passed": true,
@@ -81,7 +81,13 @@
       "note": "refined version; re-reviewed after the review records were lost"
     },
     "quastenflosser": {
-      "passed": false
+      "passed": false,
+      "last": [
+        6,
+        6,
+        5
+      ],
+      "note": "first round: too light, netted tube, paddle tail, peg-leg pectoral fin, no waterline"
     },
     "cynodont": {
       "passed": true,
