@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Motif stills</title>
+  <style>
+    html, body { margin: 0; background: #fffdf6; }
+    .grid { display: flex; flex-wrap: wrap; }
+    .stage { position: relative; }
+  </style>
+</head>
+<body>
+  <div class="grid" id="grid"></div>
+  <script type="module">
+    // Draws motifs held still, in the engine's own dashes, for render.mjs:
+    //   still.html?files=../10-trilobite.svg,../11-fish.svg&box=700
+    import { mountEvolution } from '../../sketch.js';
+
+    const params = new URLSearchParams(location.search);
+    const box = Number(params.get('box') || 700);
+    const files = params.get('files').split(',');
+    const grid = document.getElementById('grid');
+    const motifs = await Promise.all(files.map(async (file) => ({
+      title: file, slug: file, hold: 1, sketch: null, text: await (await fetch(file)).text(),
+    })));
+    motifs.forEach((_, i) => {
+      const stage = document.createElement('div');
+      stage.className = 'stage';
+      stage.style.width = stage.style.height = `${box}px`;
+      grid.append(stage);
+      mountEvolution(stage, { motifs, still: i });
+    });
+    // mountCanvas measures on resize; give it a moment, then report done
+    await new Promise((r) => setTimeout(r, 400));
+    document.body.dataset.done = '1';
+  </script>
+</body>
+</html>
