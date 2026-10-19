@@ -566,7 +566,9 @@ class Head:
             if y > 0.30:
                 lim = 0.30 + (y - 0.30) * 1.5          # the shadow under the jaw
             return keep_prob((x - 0.06) / max(0.05, lim - 0.06), 0.35, 1.0, 0.0)
-        field(hd, self.P(ft['region']), math.degrees(self.tilt) + 70, 5.4, prob, ln=(7, 13), gap=(2, 3.5), bow=0.4)
+        lite = 0.5 if self.female else 1.0
+        field(hd, self.P(ft['region']), math.degrees(self.tilt) + 70, 5.4, lambda q: prob(q) * lite, ln=(7, 13),
+              gap=(2, 3.5), bow=0.4)
         # a hollow under the cheekbone and the shadow under the lower lip
         hd.add(self.C([(ft['cheek'][0][0] - 0.03, 0.10), (ft['cheek'][0][0] - 0.06, 0.18), (ft['cheek'][0][0] - 0.07, 0.26)]),
                w=0.75, hand=0.2)
@@ -625,21 +627,22 @@ def man():
     torso = F.part('torso', closed([
         (250, 262), (232, 292), (222, 334), (222, 384), (232, 432), (240, 462), (236, 492), (230, 520),
         (240, 548), (262, 562), (300, 562), (328, 540), (344, 508), (352, 478), (361, 452), (369, 424),
-        (373, 394), (371, 364), (361, 336), (345, 314), (326, 302), (306, 298)]), 8, joins=('neck', 'thighN', 'thighF'))
+        (373, 394), (368, 366), (357, 342), (344, 322), (330, 308), (316, 300), (304, 298)]), 8, joins=('neck', 'thighN', 'thighF'))
 
-    # near arm: shoulder (288, 312), elbow (304, 432), wrist (384, 410); a short forearm
-    ua = Limb([(287, 310), (292, 368), (304, 432)],
-              wa=[(0, 25), (0.13, 32), (0.36, 25), (0.62, 29), (0.9, 23), (1, 21)],
-              wb=[(0, 27), (0.2, 34), (0.45, 31), (0.8, 24), (1, 22)], cap0=0.7, cap1=0.4)
+    # near arm: shoulder (306, 318) rolled forward so the deltoid overlaps the top of
+    # the chest, elbow (332, 428), wrist (415, 404); a short forearm
+    ua = Limb([(306, 318), (316, 374), (332, 428)],
+              wa=[(0, 31), (0.12, 42), (0.36, 31), (0.6, 27), (0.88, 21), (1, 19)],
+              wb=[(0, 29), (0.18, 34), (0.45, 30), (0.8, 23), (1, 20)], cap0=0.6, cap1=0.4)
     uarm = F.part('uarm', ua.poly, 2, joins=('farm', 'elbow'))
-    elbow = F.part('elbow', blob(306, 430, 23, 22), 1.9, joins=('uarm', 'farm'))
-    fa = Limb([(302, 433), (345, 426), (390, 408)],
+    elbow = F.part('elbow', blob(333, 428, 19.5, 19.5), 1.9, joins=('uarm', 'farm'))
+    fa = Limb([(331, 430), (373, 420), (415, 404)],
               wa=[(0, 24), (0.3, 27), (0.75, 19), (1, 15.5)],
               wb=[(0, 25), (0.25, 25), (0.75, 18), (1, 15.5)], cap0=0.5, cap1=0.3)
     farm = F.part('farm', fa.poly, 1.5, joins=('uarm', 'fist', 'elbow'))
     # the fist round the shaft: back of the hand, four fingers curled across the
     # front of the shaft, the thumb pressed over them; the shaft shows above and below
-    G = lambda pts: [(410 + x * 1.12, 407 + y * 1.12) for x, y in pts]
+    G = lambda pts: [(435 + x * 1.12, 403 + y * 1.12) for x, y in pts]
     fist = F.part('fist', closed(G([(-24, -12), (-14, -17), (-2, -19.5), (8, -20.5), (16, -18.5), (20.5, -13.5),
                                     (19, -9.5), (21.5, -5), (21, 0.5), (19, 3), (21, 7), (19.5, 11), (17.5, 13),
                                     (18, 16), (14, 19.5), (2, 20.5), (-10, 18.5), (-22, 13)]), step=1.0), 0.5,
@@ -650,21 +653,21 @@ def man():
         fist.add(catmull(G([(-4, y - 3), (-2, y), (-4, y + 3)]), step=1.0), w=0.8)       # finger roots
     thumb, _ = capsule(F, 'thumb', G([(-14, -15), (-2, -12), (10, -6)]), 5.0 * 1.12, 0.45, joins=('fist',), w=1.7)
     thumb.add(catmull(G([(5, -10), (9, -8), (10.5, -4)]), step=1.0), w=0.85)          # nail
-    field(fist, fist.poly, 70, 5.5, lambda q: keep_prob((q[1] - 399) / 26, 0.0, 0.6, 0.0) if q[0] < 418 else 0.0,
+    field(fist, fist.poly, 70, 5.5, lambda q: keep_prob((q[1] - 395) / 26, 0.0, 0.6, 0.0) if q[0] < 443 else 0.0,
           ln=(5, 8))
 
     # legs: the near one a step forward with the knee easy, the far one back and
     # straight under the weight; long heavy thighs, short shins, thick calves and ankles
     th = Limb([(290, 468), (310, 596), (336, 712)],
-              wa=[(0, 52), (0.38, 57), (0.7, 44), (0.9, 30), (1, 28)],
+              wa=[(0, 52), (0.38, 57), (0.7, 44), (0.9, 32), (1, 29)],
               wb=[(0, 50), (0.3, 47), (0.75, 35), (1, 30)], cap0=0.5, cap1=0.6)
     thighN = F.part('thighN', th.poly, 6.2, joins=('torso', 'shinN', 'kneeN', 'patN'))
     sh = Limb([(336, 712), (334, 772), (326, 830)],
-              wa=[(0, 28), (0.12, 24.5), (0.3, 26.5), (1, 19)],
+              wa=[(0, 29), (0.12, 26.5), (0.3, 27), (1, 19)],
               wb=[(0, 29), (0.28, 43), (0.6, 35), (1, 20)], cap0=0.6, cap1=0.5)
     shinN = F.part('shinN', sh.poly, 6.1, joins=('thighN', 'footN', 'kneeN', 'patN'))
     kneeN = F.part('kneeN', blob(331, 712, 28, 26), 6.05, joins=('thighN', 'shinN', 'patN'))
-    patN = F.part('patN', blob(360, 707, 9.5, 13, 0.15), 6.04, joins=('thighN', 'shinN', 'kneeN'))
+    patN = F.part('patN', blob(355, 709, 9, 16, 0.12), 6.04, joins=('thighN', 'shinN', 'kneeN'))
     footN = foot(F, 'footN', (326, 829), 6.0, joins=('shinN',))
     th2 = Limb([(278, 468), (270, 596), (260, 712)],
                wa=[(0, 48), (0.4, 45), (0.85, 33), (1, 29)],
@@ -698,38 +701,37 @@ def man():
         y0 = 470.5 + (x0 - 236) * 0.01
         wrap.add([(x0, y0), (x1, y0 + 0.5)], w=1.2, hand=0.1)
         wrap.add([(x0, y0 + 3.5), (x1, y0 + 4)], w=0.9, hand=0.1)
-    knot = F.part('knot', blob(332, 469, 7, 4.6, -0.35), 4.3, w=1.4, joins=('knot2',))
-    knot2 = F.part('knot2', blob(345, 470, 7, 4.6, 0.35), 4.25, w=1.4, joins=('knot',))
-    knot.add([(338.5, 465), (338.5, 474)], w=1.0)
-    for x0, L, sw in ((335, 38, -1), (342, 30, 1)):                     # the ends, as narrow thongs
-        c = catmull([(x0, 474), (x0 + sw * 2, 474 + L * 0.5), (x0 + sw * 1 - 2, 474 + L)], step=1.5)
-        nn = normals(c)
-        for o in (-1.4, 1.4):
-            knot.add([(p[0] + n[0] * o, p[1] + n[1] * o) for p, n in zip(c, nn)], w=0.95, clip=False, hand=0.1)
-        knot.add([(c[-1][0] - 1.6, c[-1][1]), (c[-1][0] + 1.6, c[-1][1] + 0.5)], w=0.9, clip=False)
+    knot = F.part('knot', closed([(331, 468), (334, 464.5), (341, 463.5), (347, 465), (349.5, 469), (346, 473),
+                                  (339, 474), (333, 472.5)], step=1.0), 4.3, w=1.45)
+    knot.add(catmull([(335, 465.5), (339, 469.5), (342.5, 473.5)], step=1.0), w=0.9)      # the twist
+    knot.add(catmull([(340.5, 464), (344, 467.5), (347.5, 470.5)], step=1.0), w=0.75)
+    for pts in ([(343, 473.5), (344.5, 480), (343.5, 488)],                 # the two ends, short and uneven
+                [(347, 472), (350.5, 477), (354, 482)]):
+        knot.add(catmull(pts, step=1.0), w=1.35, clip=False, hand=0.1)
+        e = pts[-1]
+        knot.add([(e[0] - 1.2, e[1] + 0.8), (e[0] + 1.2, e[1] - 0.8)], w=0.9, clip=False, hand=0)
 
     # modelling: hatching on the side away from the fire
     skin(uarm, ua, 0.08, 1.0, 'b', depth=0.5, cross=0.45, ext=1.45)
     skin(farm, fa, 0.05, 0.95, 'b', depth=0.45, ang=-0.3, ext=1.5)
-    uarm.add(catmull([(276, 326), (290, 318), (306, 320), (318, 330)], step=1.5), w=0.9)   # deltoid
-    uarm.add(catmull([(318, 360), (322, 386), (320, 410)], step=1.5), w=0.8)              # biceps
-    farm.add(catmull([(318, 420), (338, 414), (356, 410)], step=1.5), w=0.8)              # the forearm's muscle
+    uarm.add(catmull([(342, 348), (346, 360), (346, 374)], step=1.5), w=0.8)              # deltoid's insertion
+    farm.add(catmull([(346, 416), (366, 410), (384, 405)], step=1.5), w=0.8)              # the forearm's muscle
     skin(thighN, th, 0.3, 0.97, 'b', depth=0.42, ext=1.4, ang=0.55)
     skin(shinN, sh, 0.06, 1.0, 'b', depth=0.45, ext=1.4, ang=0.45)
     skin(shinN, sh, 0.0, 0.3, 'b', depth=0.3, cross=1.0, ang=0.1)        # the hollow behind the knee
     edge_shade(thighN, whem, 1, depth=10, every=5.2)                       # under the wrap's hem
-    kneeN.add(catmull([(346, 694), (352, 706), (348, 720)], step=1.0), w=0.85)          # the knee cap
-    kneeN.add(catmull([(350, 726), (354, 738), (356, 752)], step=1.0), w=0.75)          # tendon below it
+    kneeN.add(catmull([(352, 730), (355, 742), (357, 754)], step=1.0), w=0.72)          # tendon below the kneecap
     skin(thighF, th2, 0.3, 1.0, 'b', depth=0.75, cross=0.35)
     skin(shinF, sh2, 0.0, 1.0, 'b', depth=0.75, cross=0.35)
     # torso: a shadow cast by the arm across the barrel chest, the chest's lower
     # edge where it turns under to the belly, the back in shadow at the cape's edge
-    torso.add(catmull([(328, 306), (314, 303), (300, 305)], step=1.0), w=0.9)          # collarbone
-    edge_shade(torso, ua.A, 1, depth=13, every=5.4, ang=-0.25)
+    edge_shade(torso, ua.A, 1, depth=7, every=5.6, ang=-0.25, keep=0.8)
+    pec = catmull([(370, 396), (360, 392), (350, 384), (344, 374)], step=1.5)           # the chest muscle's lower edge
+    torso.add(pec, w=0.85)
+    edge_shade(torso, pec, 1, depth=6, every=5.0, ang=0.2)
     # the barrel turning away under the chest toward the belly
-    edge_shade(torso, catmull([(340, 311), (356, 326), (367, 348), (372, 372), (372, 396), (366, 420), (358, 442),
-                               (350, 456)], step=1.5), -1, depth=10, every=5.4, ang=0.15, keep=0.92)
-    torso.add(catmull([(330, 330), (340, 352), (346, 372)], step=1.5), w=0.75)             # the chest's edge
+    edge_shade(torso, catmull([(372, 400), (369, 420), (361, 446), (352, 460)], step=1.5), -1, depth=8, every=5.4,
+               ang=0.15, keep=0.85)                                                # the belly turning under
     # neck: muscle from behind the ear to the notch, shadow under the jaw
     neck.add(catmull([(300, 240), (312, 272), (326, 298)], step=1.5), w=0.85)
     field(neck, neck.poly, 75, 5.4, lambda q: keep_prob((q[0] - 262) / 50, 0.3, 1.0, 0.0), ln=(7, 12), gap=(2, 3.5))
@@ -754,7 +756,7 @@ def man():
 def add_spear(F, grip):
     """The spear: a wooden shaft through the fist, a triangular Levallois point
     set in a lump of resin and bound with sinew."""
-    phi = 0.012
+    phi = -0.03
     d = (math.sin(phi), math.cos(phi))
     top = (grip[0] - d[0] * (grip[1] - 106) / d[1], 106)
     n = (-d[1], d[0])
@@ -764,8 +766,13 @@ def add_spear(F, grip):
     edge_l = [S(0, 0)] + [S(s, -s * 0.255 + pen.g(0.4)) for s in (8, 16, 24, 32, 40)] + [S(47, -12)]
     edge_r = [S(47, 12)] + [S(s, s * 0.245 + pen.g(0.4)) for s in (40, 32, 24, 16, 8)]
     point = F.part('point', edge_l + [S(53, -10), S(53, 10)] + edge_r, 0.7, w=1.7)
-    for s0, w0, sg in ((10, -2.5, 1), (22, -5.5, 1), (34, -8.5, 1), (16, 4, -1), (28, 7, -1), (40, 10, -1)):
-        point.add(catmull([S(s0, w0), S(s0 + 5, w0 * 0.35), S(s0 + 11, w0 * 0.2 * sg)], step=1.0), w=0.8, hand=0)
+    for s0 in (7, 15, 23, 31, 39):                                     # retouch along the edges
+        point.add(catmull([S(s0, -0.255 * s0), S(s0 + 4, -0.255 * (s0 + 4) + 2.8), S(s0 + 8, -0.255 * (s0 + 8))],
+                          step=1.0), w=0.8, hand=0)
+        point.add(catmull([S(s0 - 3, 0.245 * (s0 - 3)), S(s0 + 1, 0.245 * (s0 + 1) - 2.8), S(s0 + 5, 0.245 * (s0 + 5))],
+                          step=1.0), w=0.8, hand=0)
+    point.add(catmull([S(16, -4.1), S(27, 1.5), S(40, -2), S(46, -11)], step=1.0), w=0.8, hand=0)   # broad flake scars
+    point.add(catmull([S(9, 2.2), S(20, -0.5), S(31, 7.6)], step=1.0), w=0.8, hand=0)
     resin = F.part('resin', closed([S(46, -9), S(56, -10), S(72, -8.5), S(84, -5.5), S(86, 0), S(84, 5.5), S(72, 8.5),
                                     S(56, 10), S(46, 9)], step=1.0), 0.75, w=1.5)
     for k in range(8):
@@ -815,62 +822,72 @@ def woman():
               wa=[(0, 21), (0.3, 22), (0.8, 15.5), (1, 14)],
               wb=[(0, 21), (0.3, 21), (0.8, 14.5), (1, 13.5)], cap0=0.5, cap1=0.3)
     farm = F.part('farm', fa.poly, 1.5, joins=('uarm', 'hand', 'elbow'))
-    # the core hand: palm up under the core, two fingers curled up its front, the thumb on top
-    hand = F.part('hand', closed([(344, 702), (358, 704), (374, 706), (390, 706), (402, 704), (409, 708), (411, 717),
-                                  (405, 726), (391, 732), (372, 734), (356, 733), (345, 727)], step=1.0), 1.05, w=2.0,
-                  joins=('farm', 'fing1', 'fing2'))
-    hand.add(catmull([(352, 729), (370, 734), (388, 731)], step=1.0), w=0.75)
-    fing1, _ = capsule(F, 'fing1', [(397, 727), (409, 717), (413, 700)], 5.2, 0.95, joins=('hand',), w=1.7)
-    fing2, _ = capsule(F, 'fing2', [(388, 731), (402, 727), (409, 714)], 4.8, 0.97, joins=('hand',), w=1.6)
-    fing1.add(catmull([(410, 703), (415, 706)], step=1.0), w=0.8)
-    fing1.add(catmull([(404, 721), (409, 725)], step=1.0), w=0.75)
-    thumb, _ = capsule(F, 'thumb', [(360, 707), (368, 697), (378, 690)], 5.3, 0.9, w=1.7, taper=0.8)
-    thumb.add(catmull([(372, 690), (376, 694), (381, 692)], step=1.0), w=0.8)
-    thumb.add(catmull([(363, 700), (366, 704)], step=1.0), w=0.75)
-    edge_shade(hand, [(404, 708), (380, 707), (356, 705)], 1, depth=6, every=5.0, ang=0.2)   # under the core
+    # the core hand: palm up under the nodule, the fingers curled up round its far
+    # end with their tips pressing on it, the jointed thumb pressing on its near side
+    hand = F.part('hand', closed([(344, 704), (362, 706), (380, 708), (398, 710), (408, 716), (410, 726), (400, 732),
+                                  (380, 735), (360, 734), (346, 729)], step=1.0), 1.05, w=2.0,
+                  joins=('farm', 'fing1', 'fing2', 'fing3', 'thumb'))
+    hand.add(catmull([(354, 730), (374, 735), (394, 732)], step=1.0), w=0.75)
+    for k, (pts, r) in enumerate((([(404, 723), (419, 718), (428, 705), (425, 691)], 5.4),
+                                  ([(400, 728), (414, 726), (424, 716), (423, 704)], 5.1),
+                                  ([(394, 731), (408, 731), (417, 725), (418, 715)], 4.8))):
+        fk, fL = capsule(F, f'fing{k + 1}', pts, r, 0.95 + 0.01 * k, joins=('hand',), w=1.6, taper=0.92)
+        if k == 0:
+            fk.add(catmull([fL.pt(0.86, 0.9), fL.pt(0.93, 0.45), fL.pt(1.0, 0.75)], step=1.0), w=0.75)   # nail
+        fk.add([fL.pt(0.5, 0.9), fL.pt(0.5, -0.6)], w=0.72)                               # knuckle crease
+    tL = Limb([(349, 724), (353, 709), (359, 699), (368, 691)],
+              wa=[(0, 8.5), (0.3, 6.6), (0.5, 5.4), (0.58, 5.0), (0.68, 5.5), (1, 4.7)],
+              wb=[(0, 8.5), (0.3, 6.6), (0.5, 5.4), (0.58, 5.1), (0.68, 5.4), (1, 4.7)], cap0=0.6, cap1=1.0)
+    thumb = F.part('thumb', tL.poly, 0.9, w=1.7, joins=('hand',))
+    thumb.add([tL.pt(0.58, 0.95), tL.pt(0.58, -0.8)], w=0.8)                            # the joint
+    thumb.add(catmull([tL.pt(0.76, 0.95), tL.pt(0.78, 0.4), tL.pt(0.9, 0.3), tL.pt(1.0, 0.65)], step=1.0), w=0.8)  # nail
+    edge_shade(hand, [(408, 710), (390, 710), (364, 707)], 1, depth=6, every=5.0, ang=0.2)   # under the nodule
     # the flint core: a lumpy nodule, its upper face knapped into flake scars
     # (facets between ridges, rippled round the points where they were struck),
     # the chalky cortex left on its underside
-    cx, cy = 385, 690
+    cx, cy, S = 390, 686, 1.3
     angs = (180, 218, 254, 290, 326, 0, 40, 90, 140)
-    rim = [(cx + 27 * math.cos(math.radians(v)) * pen.r(0.94, 1.05), cy + 17 * math.sin(math.radians(v)) * pen.r(0.94, 1.05))
-           for v in angs]
-    core = F.part('core', chaikin(rim, 2), 1.0, w=1.9)
-    tops = [(cx - 15, cy - 15), (cx - 2, cy - 17.5), (cx + 11, cy - 15.5), (cx + 22, cy - 9)]
+    rim = [(cx + 26 * S * math.cos(math.radians(v)) * pen.r(0.86, 1.08),
+            cy + 16 * S * math.sin(math.radians(v)) * pen.r(0.86, 1.1)) for v in angs]
+    core = F.part('core', chaikin(rim, 1), 1.0, w=1.9)
+    tops = [(cx - 15 * S, cy - 14.5 * S), (cx - 2 * S, cy - 16.5 * S), (cx + 11 * S, cy - 14.5 * S), (cx + 21 * S, cy - 8 * S)]
     for (x0, y0) in tops[:3]:
-        core.add(catmull([(x0 + 6, y0 - 1), (x0 + 6.5, y0 + 8), (x0 + 8.5, y0 + 18)], step=1.0), w=0.85, hand=0)   # ridge
-    for (x0, y0), (x1, y1) in zip([(cx - 26, cy - 6)] + tops[:-1], tops):
+        core.add(catmull([(x0 + 6 * S, y0 - 1), (x0 + 6.5 * S, y0 + 8 * S), (x0 + 8.5 * S, y0 + 17 * S)], step=1.0),
+                 w=0.9, hand=0)                                                            # ridge
+    for (x0, y0), (x1, y1) in zip([(cx - 25 * S, cy - 5 * S)] + tops[:-1], tops):
         mx, my = (x0 + x1) / 2, min(y0, y1)
-        for r in (4.5, 9.0):                                                   # ripples round the strike
+        for r in (5.5, 10.5):                                                  # ripples round the strike
             core.add(ellipse_pts(mx, my + 1, r * 0.9, r * 0.8, 0, 0.35, math.pi - 0.35, step=1.0), w=0.72, hand=0)
-    field(core, core.poly, 15, 5.0, lambda q: 1.0 if q[1] > cy + 5 else 0.0, ln=(6, 10))
-    for k in range(6):
-        p = (cx + pen.r(-18, 16), cy + pen.r(2, 6))
-        core.add(ellipse_pts(p[0], p[1], 0.7, 0.7, step=0.5), w=0.9, hand=0, lift=0)       # cortex
+    field(core, core.poly, 15, 5.0, lambda q: 1.0 if q[1] > cy + 7 else 0.0, ln=(6, 10))
+    for k in range(8):
+        p = (cx + pen.r(-24, 22), cy + pen.r(2, 7))
+        core.add(ellipse_pts(p[0], p[1], 0.75, 0.75, step=0.5), w=0.9, hand=0, lift=0)     # cortex
     # far arm: forearm raised from under the shawl, the hammerstone held in its
     # fist, the stone's striking end jutting out below the thumb toward the core
-    fa2 = Limb([(268, 660), (302, 648), (334, 636)],
+    dy = -9
+    Y = lambda pts: [(x, y + dy) for x, y in pts]
+    fa2 = Limb(Y([(268, 660), (302, 648), (334, 636)]),
                wa=[(0, 20), (0.3, 21), (0.8, 14.5), (1, 13.5)],
                wb=[(0, 20), (0.3, 20), (0.8, 14), (1, 13)], cap0=0.5, cap1=0.3)
     farm2 = F.part('farm2', fa2.poly, 3.6, joins=('hand2',))
-    hand2 = F.part('hand2', closed([(330, 626), (338, 618), (350, 613), (362, 614), (371, 620), (376, 630), (375, 641),
-                                    (369, 650), (358, 655), (345, 653), (335, 646), (329, 637)], step=1.0), 2.9, w=2.0,
+    hand2 = F.part('hand2', closed(Y([(330, 626), (338, 618), (350, 613), (362, 614), (371, 620), (376, 630), (375, 641),
+                                      (369, 650), (358, 655), (345, 653), (335, 646), (329, 637)]), step=1.0), 2.9, w=2.0,
                    joins=('farm2',))
     for y0 in (623, 633, 643):                                                   # the curled fingers
-        hand2.add(catmull([(374 - abs(y0 - 633) * 0.15, y0 - 1), (366, y0 + 0.5), (358, y0 + 1.5)], step=1.0), w=0.95)
-    hand2.add(catmull([(352, 616), (348, 624), (350, 632)], step=1.0), w=0.75)    # knuckle
-    sp_ = [(377 + 18 * math.cos(math.radians(v)) * pen.r(0.9, 1.05), 654 + 13.5 * math.sin(math.radians(v)) * pen.r(0.9, 1.05))
+        hand2.add(catmull(Y([(374 - abs(y0 - 633) * 0.15, y0 - 1), (366, y0 + 0.5), (358, y0 + 1.5)]), step=1.0), w=0.95)
+    hand2.add(catmull(Y([(352, 616), (348, 624), (350, 632)]), step=1.0), w=0.75)    # knuckle
+    sp_ = [(377 + 18 * math.cos(math.radians(v)) * pen.r(0.9, 1.05), 654 + dy + 13.5 * math.sin(math.radians(v)) * pen.r(0.9, 1.05))
            for v in (0, 50, 100, 150, 200, 250, 300)]
     stone = F.part('stone', chaikin(sp_, 2), 2.95, w=1.9)
-    field(stone, stone.poly, 20, 5.0, lambda q: keep_prob((664 - q[1]) / 12, 0.0, 1.0, 0.0), ln=(5, 9))
-    stone.add(catmull([(380, 646), (388, 644), (394, 648)], step=1.0), w=0.8)
-    thumb2, _ = capsule(F, 'thumb2', [(350, 618), (365, 622), (380, 634)], 4.6, 2.85, w=1.6, taper=0.85)
-    thumb2.add(catmull([(375, 629), (380, 632), (381, 637)], step=1.0), w=0.8)
+    field(stone, stone.poly, 20, 5.0, lambda q: keep_prob((664 + dy - q[1]) / 12, 0.0, 1.0, 0.0), ln=(5, 9))
+    stone.add(catmull(Y([(380, 646), (388, 644), (394, 648)]), step=1.0), w=0.8)
+    thumb2, _ = capsule(F, 'thumb2', Y([(350, 618), (365, 622), (380, 634)]), 4.6, 2.85, w=1.6, taper=0.85)
+    thumb2.add(catmull(Y([(375, 629), (380, 632), (381, 637)]), step=1.0), w=0.8)
     field(hand2, hand2.poly, 65, 5.4, lambda q: keep_prob((q[0] - 330) / 30, 0.3, 1.0, 0.0), ln=(5, 9))
     # a flake flying from the strike
-    fl = F.part('flake', [(414, 664), (430, 655), (434, 659), (418, 669)], 0.5, w=1.3)
+    fl = F.part('flake', [(424, 657), (440, 649), (444, 653), (428, 662)], 0.5, w=1.3)
     for k in range(2):
-        fl.add([(400 - k * 4, 671 + k * 6), (408 - k * 4, 668 + k * 6)], w=0.8, clip=False)
+        fl.add([(408 - k * 4, 664 + k * 6), (416 - k * 4, 661 + k * 6)], w=0.8, clip=False)
 
     # hide shawl over the shoulders and back, the forearms coming out in front
     back = rag([(272, 580), (250, 566), (228, 556), (206, 556), (178, 574), (150, 606), (126, 650), (108, 700),
@@ -936,23 +953,29 @@ def hearth(cx=510, cy=842):
             field(st, poly, 30, 5.2, lambda q, x=x: 1.0 if q[0] < x - 4 else 0.0, ln=(5, 9))
     # fuel: two branches crossed in the hearth, their ends sticking out of the
     # fire, the inner parts charred
-    for k, (p0, p1, w0, z) in enumerate((((392, 852), (612, 790), 7.5, 3.5), ((630, 852), (412, 794), 7.0, 3.6))):
+    for k, (p0, p1, w0, z) in enumerate((((412, 849), (612, 790), 7.5, 3.5), ((630, 852), (414, 794), 7.0, 3.6))):
         d = ((p1[0] - p0[0]) / dist(p0, p1), (p1[1] - p0[1]) / dist(p0, p1))
         n = (-d[1], d[0])
-        side1 = [(p0[0] + n[0] * w0, p0[1] + n[1] * w0), (p1[0] + n[0] * w0 * 0.75, p1[1] + n[1] * w0 * 0.75)]
-        side2 = [(p1[0] - n[0] * w0 * 0.75, p1[1] - n[1] * w0 * 0.75), (p0[0] - n[0] * w0, p0[1] - n[1] * w0)]
-        cap1 = [(p1[0] + d[0] * 2.5, p1[1] + d[1] * 2.5)]
-        poly = side1 + cap1 + side2
-        stick = F.part(f'stick{k}', poly, z, w=1.6)
-        stick.add(ellipse_pts(p0[0], p0[1], 2.5, w0 * 0.95, math.atan2(d[1], d[0]), step=1.0), w=1.1, clip=False)
-        for s0, s1, o in ((0.04, 0.3, 0.35), (0.22, 0.5, -0.4), (0.7, 0.96, 0.25)):          # bark
+        w1 = w0 * 0.75
+        Q = lambda c, s, o: (c[0] + d[0] * s + n[0] * o, c[1] + d[1] * s + n[1] * o)
+        side1 = [Q(p0, 0, w0), Q(p1, 0, w1)]
+        end1 = [Q(p1, 3, w1 * 0.4), Q(p1, -1.5, 0), Q(p1, 4, -w1 * 0.5)]               # burnt-through tip
+        side2 = [Q(p1, 0, -w1), Q(p0, 0, -w0)]
+        end0 = [Q(p0, -3, -w0 * 0.4), Q(p0, 2, -w0 * 0.05), Q(p0, -5, w0 * 0.5)]        # snapped end
+        stick = F.part(f'stick{k}', side1 + end1 + side2 + end0, z, w=1.6)
+        for o, L in ((-0.35, 9), (0.3, 13)):                                                 # splinters
+            stick.add([Q(p0, 1, w0 * o), Q(p0, L, w0 * o * 0.7)], w=0.8)
+        for s0, s1, o in ((0.06, 0.3, 0.35), (0.22, 0.5, -0.4), (0.7, 0.9, 0.25)):          # bark
             a, b = lerp(p0, p1, s0), lerp(p0, p1, s1)
             stick.add([(a[0] + n[0] * w0 * o, a[1] + n[1] * w0 * o), (b[0] + n[0] * w0 * o, b[1] + n[1] * w0 * o)], w=0.8)
-        for s in [0.36 + 0.035 * j for j in range(14)]:                                     # char
+        for s in [0.36 + 0.035 * j for j in range(18)]:                                     # char
             q = lerp(p0, p1, s)
             stick.add([(q[0] - n[0] * w0, q[1] - n[1] * w0), (q[0] + d[0] * 3 + n[0] * w0, q[1] + d[1] * 3 + n[1] * w0)],
                       w=0.8)
-        kn = lerp(p0, p1, 0.12)                                                              # a twig stub
+            if s > 0.86:
+                stick.add([(q[0] + n[0] * w0, q[1] + n[1] * w0), (q[0] + d[0] * 3 - n[0] * w0, q[1] + d[1] * 3 - n[1] * w0)],
+                          w=0.75)
+        kn = lerp(p0, p1, 0.14)                                                              # a twig stub
         stick.add([(kn[0] - n[0] * w0, kn[1] - n[1] * w0), (kn[0] - n[0] * (w0 + 8) + d[0] * 5, kn[1] - n[1] * (w0 + 8) + d[1] * 5)],
                   w=1.2, clip=False)
 
@@ -989,11 +1012,12 @@ def hearth(cx=510, cy=842):
         field(p, pts, 88, 5.5, lambda q: keep_prob((by - q[1]) / (H * 0.3), 0.15, 1.0, 0.0), ln=(5, 9))
         return p
 
-    flame(cx, cy - 8, 150, 62, -14, 2.0, 'flame0', sway=7, lick=9, ph=0.3)
-    flame(cx - 36, cy - 6, 100, 42, -22, 2.2, 'flame1', sway=5, lick=-6, ph=2.0)
-    flame(cx + 36, cy - 6, 116, 44, 16, 2.1, 'flame2', sway=-6, lick=7, ph=4.1)
-    flame(cx - 64, cy - 3, 56, 26, -14, 2.3, 'flame3', sway=3, ph=1.0)
-    flame(cx + 64, cy - 3, 64, 28, 12, 2.3, 'flame4', sway=-3, ph=5.0)
+    flame(cx + 2, cy - 8, 158, 62, 22, 2.0, 'flame0', sway=7, lick=9, ph=0.3)
+    flame(cx - 38, cy - 6, 90, 40, 14, 2.2, 'flame1', sway=5, lick=-6, ph=2.0)
+    flame(cx + 38, cy - 6, 124, 44, 28, 2.1, 'flame2', sway=-6, lick=7, ph=4.1)
+    flame(cx - 66, cy - 3, 48, 24, 8, 2.3, 'flame3', sway=3, ph=1.0)
+    flame(cx + 66, cy - 3, 78, 28, 22, 2.3, 'flame4', sway=-3, ph=5.0)
+    flame(cx - 14, cy - 5, 66, 30, 14, 1.95, 'flame5', sway=3, ph=3.0)
     for x, y in ((cx - 30, 640), (cx + 22, 622), (cx + 6, 600), (cx + 44, 652), (cx - 50, 668)):
         sp = F.part(f'spark{x}', blob(x, y, 1.0, 1.0), 0.5, w=1.0, outline=[])
         sp.add(blot_pts(x, y, 1.3, w=1.2), w=1.2, clip=False, hand=0, lift=0, piece=(400, 800))
@@ -1078,45 +1102,54 @@ render(parts)
 # ------------------------------------------------------------------ the rock shelter
 
 def shelter():
-    """The lip of a rock overhang coming in from the corner over her, its face
-    shaded toward the lip, strata and cracks fading out into the corner."""
-    lip = rag([(556, 56), (586, 82), (618, 96), (650, 106), (668, 124), (700, 140), (730, 150), (752, 176),
-               (790, 190), (828, 204), (850, 226), (884, 240), (914, 254), (934, 276), (958, 296)], 1.6, 9)
-    face = rag([(574, 50), (604, 70), (640, 86), (672, 100), (710, 120), (740, 132), (768, 158), (806, 170),
-                (846, 188), (870, 208), (904, 222), (934, 238), (962, 262)], 1.2, 9)
+    """The lip of a rock overhang running in from the top edge and out at the
+    right edge, the narrow underside of the lip in shadow, the rock above it
+    in straight hatching with strata and cracks, fading away from the lip."""
+    lip_c = [(546, 0), (560, 36), (586, 70), (618, 90), (650, 104), (668, 122), (700, 138), (730, 150), (752, 174),
+             (790, 188), (828, 204), (850, 224), (884, 238), (914, 252), (934, 274), (962, 292), (1000, 312)]
+    face_c = [(566, 0), (578, 30), (604, 62), (640, 80), (672, 96), (710, 116), (740, 128), (768, 152), (806, 164),
+              (846, 182), (870, 202), (904, 216), (934, 232), (962, 254), (1000, 274)]
+    lip = rag(lip_c, 1.6, 9)
+    face = rag(face_c, 1.2, 9)
     pen.line(lip, w=2.3, lift=0.15)
     for seg in broken(face, (40, 120), (4, 10), 0.95):
         pen.line(seg, w=1.3)
-    # the narrow face of the lip, in shadow
-    for k in range(48):
-        t = (k + 0.5) / 48
+    # the narrow underside of the lip, in shadow
+    for k in range(60):
+        t = (k + 0.5) / 60
         a, b = at(lip, t), at(face, t)
         if dist(a, b) > 4:
-            pen.line([lerp(a, b, 0.08), lerp(a, b, 0.92 - pen.r(0, 0.2))], w=0.75, hand=0.2, lift=0)
-    # the rock above: strata following the lip, broken and fading into the corner
-    region = face + [(980, 240), (982, 30), (580, 28)]
-    lipr = resample(face, 6)
+            pen.line([lerp(a, b, 0.08), lerp(a, b, 0.92 - pen.r(0, 0.2))], w=0.75, hand=0.15, lift=0)
+    # the rock above: straight hatching, dark along the lip and fading away from it
+    region = face + [(1000, 0)]
+    facer = resample(face, 6)
 
     def d_lip(q):
-        return min(dist(q, p) for p in lipr)
-
-    tone = Part('rock', closed(region, step=3.0), 0)
-    tone.finish()
-    field(tone, region, 32, 6.5, lambda q: keep_prob(d_lip(q) / 105, 0.12, 1.0, 0.0) * (0.0 if q[0] > 975 else 1.0),
-          ln=(7, 14), gap=(3, 7), clip=False)
-    for off, keep in ((26, 0.8), (58, 0.55), (96, 0.3)):
-        st = [(x + off * 0.25, y - off) for x, y in face]
-        st = [p for p in st if p[1] > 24 and p[0] < 970]
-        for seg in broken(st, (20, 60), (8, 30), keep):
-            tone.add(seg, w=1.0 if off < 60 else 0.85, clip=False)
-    for x0 in (640, 742, 836, 912):                                           # cracks up from the lip
-        p = at(face, (x0 - 574) / 390)
+        return min(dist(q, p) for p in facer)
+    for p0, p1 in scanlines(region, 32, 6.5, pen.r()):
+        L = dist(p0, p1)
+        if L < 4:
+            continue
+        dx, dy = (p1[0] - p0[0]) / L, (p1[1] - p0[1]) / L
+        s = pen.r(0, 5)
+        while s < L - 3:
+            ln_ = min(pen.r(14, 30), L - s)
+            m = (p0[0] + dx * (s + ln_ / 2), p0[1] + dy * (s + ln_ / 2))
+            if pen.rng.random() < keep_prob(d_lip(m) / 110, 0.12, 1.0, 0.0):
+                pen.line([(p0[0] + dx * s, p0[1] + dy * s), (p0[0] + dx * (s + ln_), p0[1] + dy * (s + ln_))],
+                         w=0.75, hand=0.05, lift=0, occlude=False)
+            s += ln_ + pen.r(3, 6)
+    # strata following the lip, and cracks running up from it
+    smooth_face = catmull(face_c, step=2.0)
+    for off, keep in ((24, 0.8), (54, 0.55), (88, 0.3)):
+        st = [(x + off * 0.25, y - off) for x, y in smooth_face]
+        st = [p for p in st if 0 < p[1] and p[0] < 1000]
+        for seg in broken(st, (24, 70), (8, 28), keep):
+            pen.line(seg, w=1.0 if off < 50 else 0.85, hand=0.2, lift=0.05, occlude=False)
+    for x0 in (640, 742, 836, 912):
+        p = at(face, (x0 - 566) / 434)
         pts = [p, (p[0] + pen.r(-4, 4), p[1] - pen.r(12, 18)), (p[0] + pen.r(-8, 8), p[1] - pen.r(28, 40))]
-        tone.add(pts, w=1.1, clip=False, hand=0.6)
-    for pts, w, clip, kw in tone.strokes:
-        args = dict(hand=0.4, lift=0.05, piece=(40, 120))
-        args.update(kw)
-        pen.line(pts, w=max(0.72, w), occlude=False, **args)
+        pen.line(pts, w=1.1, hand=0.6, lift=0.05, occlude=False)
 
 
 shelter()
@@ -1128,7 +1161,7 @@ for k, (off, ph, top) in enumerate(((-1.6, 0.0, 0.86), (-0.5, 1.3, 1.0), (0.6, 2
     for i in range(90):
         u = i / 89
         y = 652 - u * 390
-        x = 506 + u * u * 140 + off * (2 + 26 * u) + (3 + 15 * u) * math.sin(u * 9.5 + ph)
+        x = 528 + u * u * 130 + off * (2 + 26 * u) + (3 + 15 * u) * math.sin(u * 9.5 + ph)
         pts.append((x, y))
     pts = sub(pts, 0.03 * k, top)
     for seg in broken(pts, (30, 80), (5, 12), 0.9):
