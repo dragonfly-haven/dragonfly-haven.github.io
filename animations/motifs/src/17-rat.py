@@ -12,14 +12,16 @@ highlight, a large rounded ear with its rim and inner fold. The naked tail is ab
 as long as the body: thick at the root, where a tuft of the rump's fur runs over
 it, tapering to a fine tip, ringed with fine regular scale bands and a few sparse
 hairs; it sweeps down behind and forward along the ground. The far legs show,
-in shadow, a little ahead of the near ones.
+in shadow, a little ahead of the near ones; the haunch stands clear of the foot.
 
 The fur is engraving strokes laid along streamlines of the lie of the hair, and so
 of the form: back along the body, over the shoulder and down the foreleg, in arcs
 around the haunch and down the shank. Their spacing, length and weight follow a
 tone map: dark along the back and in the shadows behind the haunch, the shoulder
 and the elbow, lighter where the light falls on the haunch, the shoulder and the
-cheek, a pale belly; guard hairs break the outline along the back, belly and rump.
+cheek, a pale belly. A second, lighter layer crossing the first at a shallow angle
+darkens the spine, the top of the shoulders and of the rump. Guard hairs break the
+outline along the back, belly and rump.
 Light ground line and a cast shadow of three ruled strokes. Drawn facing right;
 saved mirrored.
 """
@@ -305,7 +307,7 @@ def hair_stroke(seg, turn=5.0, bow=0.9, shift=0.6):
     return [(x + nx * b * math.sin(math.pi * i / n), y + ny * b * math.sin(math.pi * i / n)) for i, (x, y) in enumerate(rot)]
 
 
-def fur(region, field, D, box, wbase=0.62, wvar=0.95, maxlen=220.0, seedstep=7, lenscale=1.0, lmap=None):
+def fur(region, field, D, box, wbase=0.65, wvar=0.95, maxlen=220.0, seedstep=7, lenscale=1.0, lmap=None):
     """Fur for a region: streamlines spaced by darkness (close where dark), each broken
     into hair strokes, long and close where dark, short and gappy toward the light."""
     def ok(p):
@@ -802,14 +804,14 @@ def main():
         return 1.0 / (1.0 + np.exp(-(v - v0) / w))
 
     thx = THIGH.at(0.6)[0]
-    D = 0.38 + 0.72 * np.exp(-(dtop / 75.0) ** 1.5)                  # dark along the back
+    D = 0.48 + 0.66 * np.exp(-(dtop / 75.0) ** 1.5)                  # dark along the back
     D = D - 0.45 * np.exp(-((dtop - 5.0) / 3.2) ** 2)                 # a lit rim along the back
     # the barrel turns under: a shade above the pale belly fringe
     D = D + 0.18 * np.exp(-((dbel - 34) / 15.0) ** 2) * step(GXX, 525, 8) * (1 - step(GXX, 690, 8))
     D = D - 0.34 * np.exp(-dbel / 14.0) * (1 - step(GXX, 696, 5))
     # the haunch: lit on its upper front, dark behind and below, dark in the flank fold
     D = D - 0.14 * blob(480, 452, 24)
-    D = D + 0.35 * np.exp(-drear / 26.0) * step(GYY, 470, 15)
+    D = D + 0.35 * np.exp(-drear / 26.0) * step(GYY, 470, 15) * (1 - 0.5 * step(GYY, 596, 5))
     D = D + 0.25 * np.exp(-dthigh / 12.0) * step(GXX, thx - 4, 4) * step(GYY, 470, 10)
     D = D + 0.2 * np.exp(-dshank / 18.0)
     # the shoulder: lit on its point, dark behind it and behind the elbow
@@ -820,7 +822,7 @@ def main():
     D = D + 0.25 * np.exp(-dund / 20.0) * step(GYY, 485, 8) * (1 - step(GYY, 560, 10))
     # the head: cheek and muzzle light, a dark ring about the eye
     headm = step(GXX, 725, 8)
-    D = D - headm * (0.25 * blob(797, 440, 24) + 0.4 * np.clip((GXX - 825) / 40.0, 0, 1))
+    D = D - headm * (0.16 * blob(797, 440, 24) + 0.34 * np.clip((GXX - 825) / 40.0, 0, 1))
     deye = np.hypot(GXX - EYE[0], GYY - EYE[1])
     D = D + 0.4 * np.exp(-((deye - 12.5) / 3.5) ** 2)
     D[np.minimum(np.minimum(dtop, dund), np.minimum(dbel, drear)) < 3.2] = -1
@@ -837,16 +839,16 @@ def main():
         (HOCK.pts(), 0.8),
         (SHANK.pts(), 0.9),
         # over the shoulder and down the foreleg
-        (C([(705, 412), (692, 440), (686, 480), (690, 520), (700, 560)]), 0.7),
-        # the flank: hair lying back and a little down, between shoulder and haunch
-        (C([(668, 432), (630, 440), (590, 450), (548, 462)]), 1.0),
-        (C([(664, 474), (626, 482), (586, 492), (546, 503)]), 1.0),
-        (C([(660, 516), (622, 525), (584, 534), (548, 545)]), 0.9),
+        (C([(712, 416), (700, 445), (690, 478), (688, 512), (694, 548), (700, 566)]), 0.7),
+        # the flank: hair lying back and a little down, and on round the haunch
+        (C([(640, 433), (600, 442), (560, 451), (520, 457), (482, 463), (448, 477), (420, 500),
+            (403, 532), (400, 566), (410, 596)]), 1.0),
+        (C([(642, 476), (600, 486), (560, 496), (525, 506), (496, 520), (476, 544), (466, 575),
+            (466, 604)]), 1.0),
+        (C([(645, 520), (605, 530), (570, 540), (545, 552), (528, 566)]), 0.9),
         # the haunch: arcs about the hip
         (C([(545, 425), (500, 416), (455, 418), (422, 428), (396, 448), (380, 480), (379, 515),
             (386, 552), (402, 584), (425, 606)]), 1.0),
-        (C([(528, 478), (494, 490), (466, 512), (452, 545), (452, 580), (458, 606)]), 0.8),
-        (THIGH.pts(), 0.8),
         # head: back from the nose, over the crown, down the cheek to the throat
         (C([(872, 425), (850, 420), (825, 418), (800, 420), (775, 428), (750, 440)]), 0.7),
         (C([(860, 408), (835, 400), (810, 393), (785, 388), (760, 388)]), 0.6),
@@ -857,7 +859,7 @@ def main():
     # a second, lighter layer along the spine, the top of the shoulders and of the rump,
     # crossing the first at a shallow angle, to darken the back
     band = (dtop > 8) & (GXX > 352) & (GXX < 728)
-    D2 = np.where(band, np.clip((46.0 - dtop) / 34.0, 0, 1), 0) * step(GXX, 372, 8) * (1 - step(GXX, 715, 6))
+    D2 = np.where(band, np.clip((52.0 - dtop) / 38.0, 0, 1), 0) * step(GXX, 372, 8) * (1 - step(GXX, 715, 6))
     D2 = 0.9 * D2 * (1 - 0.6 * blob(705, 458, 22))
     fur(region, field.rotated(16), D2, (340, 380, 740, 480), wbase=0.6, wvar=0.5, lenscale=0.9)
     occlude(body_poly())
