@@ -13,7 +13,14 @@
     },
     "organic-molecule": {
       "passed": true,
-      "when": "2026-10-17"
+      "when": "2026-10-19",
+      "scores": [
+        9,
+        9,
+        8
+      ],
+      "maxim": "more chemistry like; just the six ring: yes",
+      "note": "rework after Maxim's notes: a single Kekule benzene ring with a cast shadow; polish asked: inner lines at ring weight, gap before the shadow, shorter shadow"
     },
     "rna": {
       "passed": true,
