@@ -26,13 +26,15 @@ Every body part is a closed outline with a depth (z). An outline is hidden
 where a nearer part covers it, or where it runs inside a part it is joined to
 (so a thigh flows into a hip without a seam). Outlines are heavy where they
 bound a figure against the ground and lighter where they cross another part.
-Skin is modelled engraver-fashion: cross-contour rows on the trunk, lit from
-above so the underside of the barrel darkens, and short slanted strokes in
-from the shadow side of each limb. The hides are lofted round the body as
-bands with uneven edges, folds, thongs, knots and fur: the man's cape, tied at
-the throat, and a skin wound round his hips and tied by its corners at the far
-hip; the woman's hide shirt with a flap over the shoulder, a thong at the
-waist and the legs of the pelt hanging from its hem.
+Skin is modelled engraver-fashion: cross-contour rows wrapping round the
+trunk's barrel, sagging where it faces us, gathered on the side away from the
+fire and in a band under the swell of the chest, the fire-lit side left open;
+short slanted strokes in from the shadow side of each limb. The hides are
+lofted round the body as bands with uneven edges, folds, thongs, knots and
+fur: the man's cape, held by a bone toggle at the front of the near shoulder,
+and a skin wound round his hips and tied by its corners at the far hip; the
+woman's pelt shirt lapped over itself down the front, with an uneven flap
+over the shoulder, a thong at the waist and legs of the pelt at its hem.
 
 Run from this folder: python3 19-neanderthals.py   (writes ../19-neanderthals.svg)
 """
@@ -580,10 +582,11 @@ class Trunk:
         return left[::-1] + bot + right + top
 
     def rows(self, part, light, spacing=6.0, thr=0.42, mid=0.62, ln=(10, 22), gap=(2, 4), w=0.72, h0=None, h1=None,
-             keep=None):
+             keep=None, bow=0.0):
         """Cross-contour hatching: the visible arc of every section a row apart,
         inked where it turns away from the light; every other row runs on into
-        the half-tone."""
+        the half-tone. With bow (cm) each row sags where the surface faces us,
+        as the rings of a barrel do seen a little from above."""
         view = self.view
         dh = spacing / (view.s * view.cp)
         h = (h0 if h0 is not None else self.secs[0][0]) + pen.r(0, dh)
@@ -600,7 +603,8 @@ class Trunk:
                 p3 = self.point(sec, phi)
                 ok = view.facing(n) > 0.05 and vdot(n, light) < lim and (keep is None or keep(p3, n))
                 if ok:
-                    run.append(view.P(p3))
+                    q = view.P(p3)
+                    run.append((q[0], q[1] + bow * view.s * max(0.0, view.facing(n))))
                 elif run:
                     runs.append(run)
                     run = []
@@ -751,7 +755,8 @@ class Head:
             hd.add(self.C(ft['cheek']), w=0.75, hand=0.15)
         # the jaw's edge against the neck, and the angle of the jaw
         jaw = JAW_M if self.sex == 'M' else JAW_F
-        hd.add(self.C(jaw[:5] if self.sex == 'M' else jaw[1:4]), w=1.3 if self.sex == 'M' else 1.0, hand=0.1)
+        if self.sex == 'M':
+            hd.add(self.C(jaw[:5]), w=1.3, hand=0.1)
         # the ear: rim, inner fold, the tragus and the lobe
         ec = self.p(-0.4, -0.6)
         rot = self.tilt - 0.25
@@ -1247,23 +1252,31 @@ def man(ox=236):
     knN, knF = (-9.5, 36.0, -4.0), (10.5, 36.3, 10.0)
     anN, anF = (-9.5, 7.5, -8.0), (11.0, 7.5, 6.0)
     shN, shF = (-19.5, 127.0, -1.5), (19.5, 127.0, -1.5)
-    elN, wrN = (-24.5, 98.5, -5.0), (-25.0, 79.5, -4.0)
+    elN, wrN = (-26.5, 98.5, -5.0), (-26.5, 79.5, -4.0)
     elF, wrF = (24.5, 100.5, 9.5), (19.4, 110.9, 25.6)
 
-    # the trunk: a broad pelvis, little waist, a deep barrel of a chest, wide shoulders
-    keys = [(0, 17.5, 9.0, 11.5, 2.4), (6, 19.5, 10, 12.8, 2.4), (12, 18.6, 10.6, 12.2, 2.3), (18, 17.6, 11.4, 11.2, 2.2),
-            (23, 18.2, 12.2, 10.8, 2.2), (29, 19.8, 14.6, 11.3, 2.2), (36, 21.2, 16.6, 12.0, 2.2),
-            (42, 21.4, 16.4, 12.4, 2.2), (48, 20.8, 14.2, 11.9, 2.3), (53, 19.6, 10, 10.5, 2.4), (56, 14.5, 7.5, 8, 2.3),
-            (59, 8.5, 6, 6.5, 2.0)]
+    # the trunk: a broad pelvis, the belly barely narrower, the rib cage a
+    # deep barrel swelling out from it, the shoulders sloping down from the
+    # neck under a heavy trapezius
+    keys = [(0, 17.5, 9.0, 11.5, 2.3), (6, 19.0, 10.0, 12.5, 2.3), (12, 18.0, 10.6, 12.0, 2.2),
+            (18, 17.4, 11.8, 11.0, 2.1), (24, 18.2, 13.0, 11.0, 2.1), (30, 20.4, 16.6, 11.6, 2.1),
+            (36, 21.4, 18.0, 12.2, 2.1), (42, 21.2, 17.4, 12.6, 2.1), (47, 20.0, 15.0, 12.2, 2.1),
+            (51, 18.2, 11.6, 11.4, 2.2), (54, 15.4, 8.2, 10.4, 2.2), (57, 12.0, 6.0, 9.0, 2.1), (60, 8.5, 4.5, 7.5, 2.0)]
     Tr = Trunk(V, (0.0, 76.0, 0.0), (0.0, 1.0, 0.0), keys)
     torso = F.part('torso', Tr.poly(), 0, w=2.2, joins=('neck', 'thighN', 'thighF'))
-    LtT = vnorm((0.3, 0.75, 1.0))                    # the trunk lit from above, so the barrel's underside darkens
-    Tr.rows(torso, LtT, spacing=6.0, thr=0.34, mid=0.56, ln=(10, 22), gap=(2, 4), h0=14)
-    # the collarbones; the barrel of the chest modelled by rows wrapping
-    # round it, a half-tone under its swell where it turns in to the belly
-    for pts, wt in (([(54.6, 0.04), (55.0, -0.35), (54.4, -0.75), (53.5, -1.1), (52.8, -1.3)], 1.2),
-                    ([(54.6, 0.04), (55.0, 0.35), (54.4, 0.75), (53.6, 1.05)], 1.05)):
-        torso.add(Tr.curve(pts), w=wt, hand=0.1)
+    torso.inner_w = 1.75                            # the chest's contour holds against the far arm behind it
+    # the barrel modelled by rows wrapping round it, lit from above and from
+    # the fire, so they gather on the far side and in a band under the swell
+    LtT = vnorm((0.7, 0.6, 1.0))
+    LtH = vnorm((0.7, 0.0, 1.0))
+    band = lambda p3, n: vdot(vnorm((n[0], 0.0, n[2])), LtH) < 0.4 + 0.5 * math.exp(-((p3[1] - 102.0) / 4.5) ** 2)
+    Tr.rows(torso, LtT, spacing=5.8, thr=0.36, mid=0.6, ln=(30, 70), gap=(2, 4), h0=12, bow=2.6, keep=band)
+    # a hint of the collarbones and of the arch of the lower ribs
+    for pts in ([(52.4, -0.1), (53.1, -0.32), (52.9, -0.55), (52.2, -0.72)], [(52.4, 0.1), (53.1, 0.3), (52.9, 0.5)]):
+        torso.add(Tr.curve(pts), w=0.85, hand=0.1)
+    for pts in ([(27.0, -0.95), (29.6, -0.6), (31.4, -0.25), (32.0, -0.05)], [(32.0, 0.05), (31.2, 0.32), (29.4, 0.6)]):
+        for seg in broken(Tr.curve(pts), (8, 16), (5, 9), 0.85):
+            torso.add(seg, w=0.78, hand=0.15)
 
     # arms: big deltoids, thick upper arms, short heavy forearms
     uaN, LuaN = limb(F, 'uarmN', V, [shN, vlerp(shN, elN, 0.5), elN],
@@ -1279,12 +1292,19 @@ def man(ox=236):
     hand_hang(F, 'handN', pw, math.atan2(pw[1] - pe[1], pw[0] - pe[0]) - 0.1, -18, flip=True, joins=('farmN',))
     skin(uaN, LuaN, 0.08, 1.0, 'b', depth=0.46, cross=0.4, ext=1.45)
     skin(faN, LfaN, 0.04, 0.96, 'b', depth=0.44, ext=1.45, ang=-0.25)
-    limb_lines(uaN, LuaN, [[(0.04, 0.72), (0.24, 0.5), (0.47, 0.08)],          # the deltoid's front edge
-                           [(0.1, -0.78), (0.3, -0.48), (0.47, -0.02)],          # and its back edge
-                           [(0.52, -0.2), (0.74, -0.3), (0.94, -0.22)]], w=0.9)  # biceps from triceps
     limb_lines(faN, LfaN, [[(0.06, 0.35), (0.34, 0.18), (0.66, 0.02)],          # the long supinator
                            [(0.72, -0.5), (0.86, -0.4), (0.97, -0.5)]], w=0.85)  # the wrist bone
     elbN.add(catmull([LuaN.pt(0.97, -0.75), LfaN.pt(0.03, -0.9), LfaN.pt(0.1, -0.7)], step=1.0), w=0.9)
+    # the elbow: the point of the elbow behind, the crease across the joint in front
+    side = 1 if LuaN.pt(0.5, 1)[0] > LuaN.pt(0.5, -1)[0] else -1          # the side toward the chest
+    eb = [LuaN.pt(0.9, -side * 1.0), LfaN.pt(0.06, -side * 1.12), LfaN.pt(0.18, -side * 1.0)]
+    elbN.add(catmull(eb, step=1.0), w=1.3, clip=False, hand=0.05)
+    faN.add(catmull([LfaN.pt(0.05, side * 0.95), LfaN.pt(0.07, side * 0.45), LfaN.pt(0.04, 0.0)], step=1.0), w=0.95,
+            clip=False, hand=0.05)
+    # the armpit: the chest wall running on behind the arm, the arm's round head above
+    ap = LuaN.pt(0.22, side * 1.0)
+    torso.add(catmull([ap, (ap[0] + 1.3 * SC, ap[1] + 1.2 * SC), (ap[0] + 1.9 * SC, ap[1] + 3.0 * SC)], step=1.0),
+              w=1.2, hand=0.05)
 
     for p in (uaN, faN, elbN):
         p.inner_w = 1.9
@@ -1383,7 +1403,7 @@ def man(ox=236):
     sag_h = lambda ph: (2.6 * math.sin(ph + 0.3) + 1.2 * math.sin(3 * ph + 1.0) + 0.7 * math.sin(5 * ph + 2.0)
                         + 6.0 * math.exp(-((ph - TIE - 0.05) / 0.14) ** 2))
     WP = lambda f, ph: band_pt(V, C0, K0, C1, K1, f, ph, sag_t, sag_h)
-    wtop = rag(near_arc(V, ring_pts(C0, *K0, sag=sag_t)), 0.7, 9)
+    wtop = rag(near_arc(V, ring_pts(C0, *K0, n=240, sag=sag_t))[2:-2], 0.7, 9)
     whem = rag(near_arc(V, ring_pts(C1, *K1, n=240, sag=sag_h))[::-1], 1.0, 6)
     wrap = F.part('wrap', resample(wtop, 2.0) + whem[1:-1], -11, w=2.0)
     kn = WP(0.07, TIE)
@@ -1403,21 +1423,21 @@ def man(ox=236):
     edge_shade(wrap, wtop, 1, depth=4, every=5.6, ang=0.1, keep=0.6)
     fur_edge(wrap, whem, every=6.0, ln=(4, 8), inward=1, keep=0.8)
 
-    # the cape: a hide thrown back over the shoulders, tied at the throat,
-    # hanging behind to the knees
-    tie = P((0.0, 131.6, 10.0))
-    frontN = [P((-6.0, 133.4, 7.8)), P((-12.0, 134.4, 3.6)), P((-16.5, 134.8, -1.4)), P((-19.5, 133.0, -6.2)),
-              P((-22.5, 128.5, -9.4))]
-    backN = rag([P((-22.5, 128.5, -9.4)), P((-24.6, 120.0, -10.0)), P((-25.2, 105.0, -11.5)), P((-25.0, 90.0, -14.0)),
+    # the cape: a hide thrown back over the shoulders, its edge held by a
+    # bone toggle and thong at the front of the near shoulder, hanging
+    # behind to the knees
+    tie = P((-14.5, 135.2, 4.0))
+    frontN = [tie, P((-18.0, 135.4, 0.6)), P((-21.0, 133.8, -4.0)), P((-23.2, 130.4, -8.0)), P((-24.2, 126.0, -10.0))]
+    backN = rag([P((-24.2, 126.0, -10.0)), P((-25.0, 118.0, -10.5)), P((-25.2, 105.0, -11.5)), P((-25.0, 90.0, -14.0)),
                  P((-24.6, 75.0, -16.5)), P((-24.4, 62.0, -19.5)), P((-24.0, 50.0, -22.5))], 0.6, 12)
     hemC = rag([P((-24.0, 50.0, -22.5)), P((-16.0, 48.5, -25.5)), P((-6.0, 47.6, -26.5)), P((4.0, 48.5, -26.0)),
                 P((14.0, 49.5, -23.5)), P((21.0, 51.0, -19.5))], 1.4, 7)
-    farC = [P((24.0, 75.0, -14.0)), P((24.5, 105.0, -10.0)), P((23.5, 125.0, -6.0)), P((19.5, 132.6, -1.5)),
-            P((12.0, 134.2, 3.2)), P((6.0, 133.4, 7.6))]
+    farC = [P((24.0, 75.0, -14.0)), P((24.5, 105.0, -10.0)), P((23.5, 124.0, -7.5)), P((20.0, 133.5, -8.5)),
+            P((11.0, 139.0, -10.0)), P((0.0, 140.6, -10.0)), P((-8.0, 139.6, -7.0)), P((-12.6, 137.2, 1.5))]
     FC = Figure('AC.')
-    cape = FC.part('cape', [tie] + catmull(frontN, step=2.0) + backN[1:] + hemC[1:] + catmull(farC, step=2.0), 20, w=2.0)
+    cape = FC.part('cape', catmull(frontN, step=2.0) + backN[1:] + hemC[1:] + catmull(farC, step=2.0), 20, w=2.0)
     cx0 = min(q[0] for q in cape.poly)
-    field(cape, cape.poly, 72, 7.4, lambda q: keep_prob((q[0] - cx0) / 40.0, 0.3, 1.0, 0.15), ln=(9, 16))
+    field(cape, cape.poly, 72, 8.0, lambda q: keep_prob((q[0] - cx0) / 40.0, 0.3, 1.0, 0.15), ln=(9, 16))
     for u0 in (-23.0, -19.0, -13.0, -6.0):
         c = catmull([P((u0 * 0.95, 118.0, -10.5)), P((u0, 90.0, -14.5)), P((u0 * 1.02, 62.0, -20.0)),
                      P((u0 * 1.04, 50.0, -23.5))], step=1.5)
@@ -1425,20 +1445,23 @@ def man(ox=236):
             cape.add(seg, w=0.85)
     fur_edge(cape, hemC, every=6.5, ln=(4, 8), inward=1, keep=0.75)
     fur_edge(cape, sub(backN, 0.3, 1.0), every=10, ln=(3, 6), inward=1, keep=0.6)
-    collar = FC.part('collar', closed([tie] + frontN + [P((-23.4, 123.0, -11.0)),
-                                                       P((-18.5, 133.5, -11.5)), P((-10.0, 137.6, -10.0)),
-                                                       P((-3.0, 139.2, -8.5)), P((0.0, 137.5, 0.0))], step=1.5),
-                    -16.5, w=2.0, joins=('cape', 'collarF'))
-    collarF = FC.part('collarF', closed([tie, P((6.0, 133.4, 7.6)), P((12.0, 134.2, 3.2)), P((19.5, 132.6, -1.5)),
-                                        P((22.5, 129.5, -5.5)), P((17.0, 136.5, -9.5)), P((7.0, 139.2, -8.5)),
-                                        P((0.0, 137.5, 0.0))], step=1.5), -0.5, w=2.0, joins=('cape', 'collar'))
+    # the part of it over the near shoulder, behind the arm's round head
+    collar = FC.part('collar', closed(frontN + [P((-25.0, 121.0, -11.0)), P((-19.0, 134.5, -11.5)),
+                                                P((-10.0, 139.2, -9.8)), P((-4.0, 140.6, -9.0)), P((-8.5, 139.4, -1.5)),
+                                                P((-12.4, 137.4, 2.4))], step=1.5),
+                     -14.8, w=2.0, joins=('cape',))
     fe = catmull(frontN, step=1.5)
     fur_edge(collar, fe, every=6.0, ln=(3, 6), inward=-1, keep=0.7)
-    collar.add(offset_line(fe, 4.0), w=1.0, hand=0.1)                       # the edge's thickness
-    field(collar, collar.poly, 70, 5.6, lambda q: keep_prob((q[0] - fe[-1][0]) / (tie[0] - fe[-1][0]), 0.2, 0.8, 0.1),
+    collar.add(offset_line(fe, 3.5), w=1.0, hand=0.1)                       # the edge's thickness
+    field(collar, collar.poly, 70, 5.8, lambda q: keep_prob((q[0] - fe[-1][0]) / (tie[0] - fe[-1][0]), 0.2, 0.8, 0.1),
           ln=(7, 12))
-    lacing(collar, [P((-3.4, 131.9, 9.4)), P((-3.8, 130.2, 9.6))], [P((3.4, 131.9, 9.4)), P((3.8, 130.2, 9.6))], w=1.1)
-    thong_ends(collar, P((0.0, 129.4, 10.8)), [(4, 26), (-3, 21)])
+    # the toggle: a short bone peg through the edge, the thong wound round it
+    tg = [(tie[0] - 1.8 * SC, tie[1] - 0.9 * SC), (tie[0] + 1.8 * SC, tie[1] + 0.7 * SC)]
+    collar.add(offset_line(tg, 1.1), w=1.0, clip=False, hand=0)
+    collar.add(offset_line(tg, -1.1), w=1.0, clip=False, hand=0)
+    for e in tg:
+        collar.add(ellipse_pts(e[0], e[1], 1.2, 1.2, 0, step=0.7), w=0.9, clip=False, hand=0, lift=0)
+    thong_ends(collar, (tie[0] + 0.3 * SC, tie[1] + 0.6 * SC), [(4, 18), (-2, 14)], w=1.1)
     F.parts += FC.parts
     return F, V, Tr, head, (gx, gy)
 
@@ -1484,7 +1507,7 @@ def woman(cx=830):
     # knee up; the core held on the far knee, the hammerstone raised over it
     hipN, hipF = (-9.0, 32.5, 0.5), (9.0, 32.5, 0.5)
     knN, anN = (-10.0, 5.5, 29.5), (-10.0, 11.0, -0.5)
-    knF, anF = (10.0, 30.5, 36.5), (10.0, 7.5, 30.5)
+    knF, anF = (10.0, 30.5, 35.0), (10.0, 7.5, 28.0)
     shN, shF = T3(44, -16), T3(44, 16)
     elF, wrF = (19.0, 43.0, 20.0), (11.0, 41.0, 38.5)
 
@@ -1576,12 +1599,13 @@ def woman(cx=830):
                                   P(T3(48, 0, 6.5))]), -1, w=2.2, joins=('head', 'torso'))
     # her hair drawn back close over the long low skull and its bun, gathered
     # with a thong at the nape, a loose tail of it hanging down her back
-    hair = head.hair_lines([(7.3, -8.1), (6.9, -9.1), (4.2, -10.45), (1.15, -10.95), (-1.8, -10.85), (-4.8, -10.25),
-                            (-7.6, -9.1), (-9.4, -7.65), (-10.75, -6.05), (-11.7, -4.4), (-11.9, -2.5), (-11.35, -0.55),
-                            (-10.4, 1.4), (-9.8, 3.4)],
-                           [(7.3, -8.1), (6.7, -7.1), (5.6, -6.0), (4.0, -4.8), (3.0, -3.4), (1.4, -3.8), (-0.4, -4.0),
-                            (-2.2, -3.0), (-3.1, -0.9), (-3.4, 1.4), (-5.0, 3.3), (-7.4, 3.8), (-9.8, 3.4)], 12,
-                           edge_w=1.25, wave=0.25, tip=(0.35, 0.8), tuft=(2.4, 3.8), lock=(-0.035, 0.035), keep=0.8)
+    hair = head.hair_lines([(9.6, -6.3), (9.1, -7.5), (7.0, -9.1), (4.2, -10.45), (1.15, -10.95), (-1.8, -10.85),
+                            (-4.8, -10.25), (-7.6, -9.1), (-9.4, -7.65), (-10.75, -6.05), (-11.7, -4.4), (-11.9, -2.5),
+                            (-11.35, -0.55), (-10.4, 1.4), (-9.8, 3.4)],
+                           [(9.6, -6.3), (8.7, -5.5), (7.2, -4.5), (5.6, -3.5), (4.0, -2.6), (2.4, -2.8), (1.2, -3.6),
+                            (-0.6, -4.0), (-2.4, -2.8), (-3.0, -0.6), (-3.4, 1.6), (-5.0, 3.3), (-7.4, 3.8), (-9.8, 3.4)],
+                           14, w=0.7, edge_w=1.1, wave=0.28, tip=(0.35, 0.8), tuft=(2.6, 4.0), lock=(-0.035, 0.035),
+                           keep=0.75)
     for dy in (1.6, 2.4):                                                   # the thong round it
         hair.add(head.C([(-11.6, dy - 0.4), (-10.4, dy + 0.1), (-8.8, dy + 0.3)]), w=1.3, clip=False, hand=0.05)
     for k in range(6):                                                      # the tail, strand by strand
@@ -1594,16 +1618,14 @@ def woman(cx=830):
         for seg in broken(catmull(pts, step=1.2), (30, 80), (3, 6), 0.95):
             hair.add(seg, w=0.95 if k in (0, 5) else 0.8, clip=False, hand=0.15)
     hair.z = -34.6
-    for pts in (((7.4, -7.9), (7.9, -6.2), (7.6, -4.6)),):                  # a loose strand
-        head.part.add(head.C(list(pts)), w=0.8, clip=False, hand=0.2)
 
     # a hide shirt from the shoulders to the tops of the thighs, a thong round
     # the waist; the near arm comes out from under a flap at the shoulder
-    prof_a = [(49.5, 8.5), (48.5, 12.5), (47.0, 16.5), (45.0, 19.0), (42.0, 20.4), (41.0, 20.6), (35.0, 20.3), (29.0, 19.6), (22.0, 18.4),
-              (17.0, 16.4), (13.0, 18.4), (6.0, 20.8), (-6.0, 22.4)]
-    prof_b = [(49.5, 7.0), (48.5, 8.4), (47.0, 9.8), (45.0, 11.3), (42.0, 12.4), (41.0, 12.6), (35.0, 13.0), (29.0, 12.6), (22.0, 11.8),
-              (17.0, 10.6), (13.0, 11.6), (6.0, 12.8), (-6.0, 13.4)]
-    bust = lambda h: 3.2 * math.exp(-((h - 34.5) / 4.2) ** 2) - 1.0 * math.exp(-((h - 28.0) / 2.5) ** 2)
+    prof_a = [(49.5, 8.5), (48.5, 12.5), (47.0, 16.5), (45.0, 19.0), (42.0, 20.4), (41.0, 20.6), (35.0, 20.3), (29.0, 19.8),
+              (22.0, 19.4), (17.0, 18.8), (13.0, 19.4), (6.0, 20.8), (-6.0, 22.4)]
+    prof_b = [(49.5, 7.0), (48.5, 8.4), (47.0, 9.8), (45.0, 11.3), (42.0, 12.4), (41.0, 12.6), (35.0, 13.0), (29.0, 12.8),
+              (22.0, 12.4), (17.0, 12.0), (13.0, 12.3), (6.0, 12.8), (-6.0, 13.4)]
+    bust = lambda h: 2.6 * math.exp(-((h - 34.5) / 4.6) ** 2)
 
     def rad(pr, h):
         for (h0, r0), (h1, r1) in zip(pr, pr[1:]):
@@ -1616,13 +1638,14 @@ def woman(cx=830):
         return ring_at(T3(h), a_, b_ + 0.6 + bust(h) * max(0.0, math.cos(ph + 0.25)) ** 2, b_, 2.05, ph, rt=rt, fw=fw)
 
     hem_h = lambda ph: 0.5 - 2.0 * math.cos(ph)
+    top_h = lambda ph: 49.5 - 4.0 * max(0.0, math.cos(ph - 0.3)) ** 2
     phis = frange(-math.pi, math.pi, 0.04)
     hem_ring = [(ph, CP(hem_h(ph), ph), vnorm(vsub(CP(hem_h(ph), ph), T3(hem_h(ph))))) for ph in phis]
     phL = min(phis, key=lambda ph: P(CP(hem_h(ph), ph))[0])
     phR = max(phis, key=lambda ph: P(CP(hem_h(ph), ph))[0])
     lefts, rights = [], []
     for h in frange(-4.0, 49.5, 0.8):
-        pp = [P(CP(h, ph)) for ph in phis if hem_h(ph) <= h]
+        pp = [P(CP(h, ph)) for ph in phis if hem_h(ph) <= h <= top_h(ph)]
         if pp and h >= hem_h(phL):
             lefts.append(min(pp, key=lambda q: q[0]))
         if pp and h >= hem_h(phR):
@@ -1635,13 +1658,21 @@ def woman(cx=830):
     hem = [(q[0], q[1] + 9.0 * max(0.0, 1 - abs(k / n_ - 0.22) / 0.06) + 7.0 * max(0.0, 1 - abs(k / n_ - 0.7) / 0.05))
            for k, q in enumerate(hem)]
     hem = rag(hem, 1.6, 6)
-    top = near_arc(V, [(ph, CP(49.5, ph), vnorm(vsub(CP(49.5, ph), T3(49.5)))) for ph in phis])
+    top = near_arc(V, [(ph, CP(top_h(ph), ph), vnorm(vsub(CP(top_h(ph), ph), T3(top_h(ph))))) for ph in phis])
     cape = F.part('cape', top + rights[::-1] + hem[::-1] + rag(lefts, 0.9, 9), -16.5, w=2.0)
-    fur_edge(cape, top, every=5.0, ln=(3, 6), inward=1, keep=0.7)
-    fl_ = [P(CP(40.5 + 1.5 * math.sin((ph + 2.1) / 1.35 * math.pi), ph)) for ph in frange(-2.1, -0.75, 0.1)]
-    flap = F.part('flap', closed([P(CP(48.6, ph)) for ph in frange(-2.1, -0.75, 0.15)] + fl_[::-1], step=1.5),
-                  -30.5, w=2.0, joins=('cape',))
+    # the flap over the near shoulder, its edge uneven, a leg of the pelt
+    # hanging lower behind the arm
+    fl_ = rag([P(CP(41.5 + 1.8 * math.sin((ph + 2.1) / 1.35 * math.pi) - 7.5 * math.exp(-((ph + 1.3) / 0.12) ** 2)
+                    - 3.0 * math.exp(-((ph + 1.9) / 0.1) ** 2) + 0.8 * math.sin(5 * ph), ph))
+               for ph in frange(-2.1, -0.75, 0.05)], 1.0, 5)
+    flap = F.part('flap', [P(CP(48.6, ph)) for ph in frange(-2.1, -0.75, 0.15)] + fl_[::-1], -30.5, w=2.0,
+                  joins=('cape',))
     cape.joins.add(flap.name)
+    # the pelt lapped over itself down the front, from the far shoulder to the near side of the hem
+    lapF = rag([P(CP(h, 0.5 - 1.8 * (46.0 - h) / 44.0)) for h in frange(2.0, 46.0, 1.5)], 0.7, 8)
+    cape.add(lapF, w=1.45, hand=0.1)
+    edge_shade(cape, lapF, -1, depth=5, every=5.6, ang=0.1, keep=0.55)
+    fur_edge(cape, sub(lapF, 0.0, 0.9), every=7.0, ln=(3, 5), inward=1, keep=0.6)
     # a thong round the waist, knotted at the near front, the hide bunched over it
     cape.add(catmull([P(CP(17.0 + 0.4 * math.sin(3 * ph), ph)) for ph in frange(-2.6, 0.55, 0.1)], step=1.5), w=1.4,
              hand=0.1)
@@ -1659,12 +1690,12 @@ def woman(cx=830):
             cape.add(seg, w=0.95)
     xs = [q[0] for q in cape.poly]
     x0, x1 = min(xs), max(xs)
-    field(cape, cape.poly, 65, 7.2, lambda q: keep_prob((q[0] - x0) / (x1 - x0), 0.12, 0.45, 0.0), ln=(7, 13))
+    field(cape, cape.poly, 65, 8.0, lambda q: keep_prob((q[0] - x0) / (x1 - x0), 0.12, 0.45, 0.0), ln=(7, 13))
     edge_shade(cape, catmull([P(CP(16.0, ph)) for ph in frange(-2.6, 0.55, 0.1)], step=1.5), 1, depth=6, every=5.2,
                ang=0.15)
     fur_edge(cape, hem, every=5.5, ln=(4, 9), inward=-1, keep=0.8)
     fur_edge(cape, sub(lefts, 0.0, 0.5), every=7.0, ln=(3, 6), inward=1, keep=0.6)
-    fur_edge(flap, catmull(fl_, step=1.5), every=6.0, ln=(3, 6), inward=-1, keep=0.7)
+    fur_edge(flap, catmull(fl_, step=1.5), every=5.0, ln=(3, 7), inward=-1, keep=0.85)
     field(flap, flap.poly, 65, 6.6, lambda q: keep_prob((q[0] - x0) / (x1 - x0), 0.12, 0.45, 0.0), ln=(7, 12))
 
     # chips flying from the blow
@@ -1833,7 +1864,7 @@ def runs_of(pts, keep):
     return [r for r in runs if len(r) > 1]
 
 
-OW = 0.88                      # all outlines a touch lighter, to sit with the neighbours
+OW = 0.86                      # all outlines a touch lighter, to sit with the neighbours
 
 
 def render(parts):
@@ -1909,7 +1940,7 @@ def shelter():
         while s < L - 3:
             ln_ = min(pen.r(14, 30), L - s)
             m = (p0[0] + dx * (s + ln_ / 2), p0[1] + dy * (s + ln_ / 2))
-            if pen.rng.random() < 0.6 * keep_prob(d_lip(m) / 100, 0.12, 1.0, 0.0):
+            if pen.rng.random() < 0.54 * keep_prob(d_lip(m) / 100, 0.12, 1.0, 0.0):
                 pen.line([(p0[0] + dx * s, p0[1] + dy * s), (p0[0] + dx * (s + ln_), p0[1] + dy * (s + ln_))],
                          w=0.75, hand=0.05, lift=0, occlude=False)
             s += ln_ + pen.r(3, 6)
