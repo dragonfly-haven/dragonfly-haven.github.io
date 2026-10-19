@@ -6,12 +6,13 @@ and minor grooves alternate), base-pair rungs between them, set on a
 diagonal. Modelled in 3D and drawn front to back with a depth test, so the
 near ribbon hides what lies behind it. The inner face of each ribbon, seen
 where it turns away behind the helix, is shaded with hatching across the band.
-Drawn in the same ribbon language as 03 RNA.
+Both strands stop at the same height, cut square across the ribbon just
+past the last pair, so the ladder simply ends. Drawn in the same ribbon language as 03 RNA.
 """
 
 import math
 
-from pen import Pen, resample, dist, lerp, inside, length
+from pen import Pen, dist, lerp, inside, length
 
 pen = Pen(seed=404)
 
@@ -79,8 +80,9 @@ class Depth:
                 return True
         return False
 
-    def runs(self, pts, zs, skip=None, eps=0.8, step=1.5):
-        """Visible runs of a 2D polyline whose points carry depths zs."""
+    def runs(self, pts, zs, skip=None, eps=0.8, step=1.5, force=(), minlen=3.5):
+        """Visible runs of a 2D polyline whose points carry depths zs.
+        Polygons in `force` hide whatever falls inside them, whatever its depth."""
         fine, fz = [], []
         for i in range(len(pts) - 1):
             a, b = pts[i], pts[i + 1]
@@ -93,31 +95,30 @@ class Depth:
         fz.append(zs[-1])
         out, cur = [], []
         for p, z in zip(fine, fz):
-            sk = skip(p) if callable(skip) and getattr(skip, 'per_point', False) else skip
-            if not self.hidden(p, z, sk, eps):
+            hid = any(bb[0] <= p[0] <= bb[2] and bb[1] <= p[1] <= bb[3] and inside(p, poly) for poly, bb in force)
+            if not hid and not self.hidden(p, z, skip, eps):
                 cur.append(p)
             elif cur:
                 out.append(cur)
                 cur = []
         if cur:
             out.append(cur)
-        return [r for r in out if length(r) > 3.5]
+        return [r for r in out if length(r) > minlen]
 
 
 # ---------------------------------------------------------------- the helix
 
-CEN = (500, 500)
 AXA = math.radians(-46)                     # axis runs up to the right
 A = (math.cos(AXA), math.sin(AXA))          # up the helix, in the picture
 X = (-A[1], A[0])                           # across it, to the right of A
+CEN = (500, 500)
 PITCH = 368.0                               # one turn along the axis
 R = 116.0                                   # backbone radius
 HW = 16.0                                   # half width of a ribbon (as in 03)
-U0, U1 = -470.0, 470.0                      # ends along the axis (about 2.55 turns)
 BP_PER_TURN = 10.0
 DELTA = math.radians(132)                   # angle between the strands across the minor groove
 K = -2 * math.pi / PITCH                    # right-handed: dtheta/du
-THETA0 = 0.35
+END_DEG = 90.0
 LIGHT = norm((-0.55, -0.65, 0.55))          # from upper left, a little in front
 
 
@@ -134,28 +135,47 @@ def frame(u, th):
     c = pos(u, th)
     a3 = (A[0], A[1], 0.0)
     e_th = (-math.sin(th) * X[0], -math.sin(th) * X[1], math.cos(th))
-    rk = R * K
-    W = norm(add(mul(a3, -rk), e_th))
+    W = norm(add(mul(a3, -R * K), e_th))
     N = (math.cos(th) * X[0], math.cos(th) * X[1], math.sin(th))
     return c, W, N
 
 
-def strand(phase, tag):
-    """Samples along one backbone ribbon."""
-    us = []
-    u = U0 - 2 * HW
-    while u < U1 + 2 * HW:
-        us.append(u)
-        u += 1.6
+# both strands end at the same height, just past the last pair, each cut square across
+# its own ribbon as it lies in the picture (so no end is drawn to a point)
+U_LO = -1.25 * PITCH
+U_HI = 1.25 * PITCH
+END_TH = math.radians(END_DEG)                # where strand a ends at the lower end, round the helix
+THETA0 = END_TH - K * U_LO
+PHASE = {'a': 0.0, 'b': DELTA}
+EXT = 34.0                                    # sampled a little past the ends, then cut
+
+
+def strand(tag):
+    """Samples along one backbone ribbon, a little past its ends."""
+    u0, u1 = U_LO - EXT, U_HI + EXT
+    n = int((u1 - u0) / 1.6) + 1
     S = []
-    for i, u in enumerate(us):
-        th = THETA0 + phase + K * u
+    for i in range(n + 1):
+        u = u0 + (u1 - u0) * i / n
+        th = THETA0 + PHASE[tag] + K * u
         c, W, N = frame(u, th)
-        e1 = add(c, mul(W, HW))
-        e2 = add(c, mul(W, -HW))
-        S.append(dict(u=u, th=th, c=c, W=W, N=N, e1=e1, e2=e2, i=i, tag=tag))
+        S.append(dict(u=u, th=th, c=c, W=W, N=N, e1=add(c, mul(W, HW)), e2=add(c, mul(W, -HW)), i=i, tag=tag))
     return S
 
+
+strands = {'a': strand('a'), 'b': strand('b')}
+
+
+def cut_planes(S):
+    """The two end cuts of a strand: (point, direction along the strand) in the picture."""
+    out = []
+    for uend, sgn in ((U_LO, 1), (U_HI, -1)):
+        j = min(range(len(S)), key=lambda k: abs(S[k]['u'] - uend))
+        p, q = S[max(0, j - 4)]['c'], S[min(len(S) - 1, j + 4)]['c']
+        t = (q[0] - p[0], q[1] - p[1])
+        L = math.hypot(*t) or 1
+        out.append((S[j]['c'], (sgn * t[0] / L, sgn * t[1] / L), uend))
+    return out
 
 
 def ax(p):
@@ -163,87 +183,101 @@ def ax(p):
     return (p[0] - CEN[0]) * A[0] + (p[1] - CEN[1]) * A[1]
 
 
-def slab_runs(pts3):
-    """A 3D polyline cut to the stretch of helix between the end planes (U0..U1)."""
+def side(p, cut):
+    """Signed distance past a cut (negative: cut away); cuts only act near their own end."""
+    c, t, uend = cut
+    if abs(ax(p) - uend) > 70:
+        return 1.0
+    return (p[0] - c[0]) * t[0] + (p[1] - c[1]) * t[1]
+
+
+CUTS = {tag: cut_planes(S) for tag, S in strands.items()}
+
+
+def keep_side(tag, p):
+    return all(side(p, cut) >= 0 for cut in CUTS[tag])
+
+
+def cut_runs(tag, pts3):
+    """A 3D polyline cut to the strand's own ends."""
     out, cur = [], []
     for i, p in enumerate(pts3):
-        inside_ = U0 <= ax(p) <= U1
         if i:
             q = pts3[i - 1]
-            aq, ap = ax(q), ax(p)
-            for edge in (U0, U1):
-                if (aq - edge) * (ap - edge) < 0:
-                    t = (edge - aq) / (ap - aq)
-                    x = lerp3(q, p, t)
+            for cut in CUTS[tag]:
+                dq, dp = side(q, cut), side(p, cut)
+                if dq * dp < 0:
+                    x = lerp3(q, p, dq / (dq - dp))
                     if cur:
                         cur.append(x)
                         out.append(cur)
                         cur = []
                     else:
                         cur = [x]
-        if inside_:
+        if keep_side(tag, p):
             cur.append(p)
     if cur:
         out.append(cur)
     return [r for r in out if len(r) > 1]
 
 
-def clip_poly(poly3):
-    """A 3D polygon clipped to the slab between the end planes (Sutherland-Hodgman)."""
+def cut_poly(tag, poly3):
     pts = list(poly3)
-    for edge, keep in ((U0, lambda a: a >= U0), (U1, lambda a: a <= U1)):
+    for cut in CUTS[tag]:
         if not pts:
             break
         res = []
         for i in range(len(pts)):
             p, q = pts[i], pts[(i + 1) % len(pts)]
-            ap, aq = ax(p), ax(q)
-            if keep(ap):
+            dp, dq = side(p, cut), side(q, cut)
+            if dp >= 0:
                 res.append(p)
-            if keep(ap) != keep(aq):
-                res.append(lerp3(p, q, (edge - ap) / (aq - ap)))
+            if (dp >= 0) != (dq >= 0):
+                res.append(lerp3(p, q, dp / (dp - dq)))
         pts = res
     return pts
 
 
-strands = [strand(0.0, 'a'), strand(DELTA, 'b')]
 depth = Depth()
 
 # occluders: each ribbon in small quads
 QSTEP = 3
-for S in strands:
+quads = {'a': [], 'b': []}
+for tag, S in strands.items():
     for i in range(0, len(S) - QSTEP, QSTEP):
         p, q = S[i], S[i + QSTEP]
-        poly3 = clip_poly([p['e1'], q['e1'], q['e2'], p['e2']])
+        poly3 = cut_poly(tag, [p['e1'], q['e1'], q['e2'], p['e2']])
         if len(poly3) < 3:
             continue
         z = sum(c[2] for c in poly3) / len(poly3)
-        depth.add([c[:2] for c in poly3], z, (p['tag'], i))
+        poly = [c[:2] for c in poly3]
+        depth.add(poly, z, (tag, i))
+        xs = [c[0] for c in poly]
+        ys = [c[1] for c in poly]
+        quads[tag].append((i, poly, (min(xs), min(ys), max(xs), max(ys))))
 
-# rungs: base pairs as two pegs meeting near the middle
+# rungs: base pairs as two pegs meeting near the middle, only where both strands run
 RISE = PITCH / BP_PER_TURN
+RT = 7.0  # half thickness of a rung, along the axis (as the pegs of 03)
+lo, hi = U_LO + RT + 4, U_HI - RT - 4
+nbp = int(round((hi - lo) / RISE)) + 1
+u_first = lo
+RISE = (hi - lo) / (nbp - 1)
 rungs = []
-nbp = int((U1 - U0 - RISE * 0.6) / RISE)
-u_first = U0 + (U1 - U0 - (nbp - 1) * RISE) / 2
 for k in range(nbp):
     u = u_first + k * RISE
     tha = THETA0 + K * u
-    thb = tha + DELTA
-    pa, pb = pos(u, tha), pos(u, thb)
+    pa, pb = pos(u, tha), pos(u, tha + DELTA)
     f = 0.56 if (k * 7 + 3) % 5 < 2 else 0.44   # purine with pyrimidine, either way round
     rungs.append((u, pa, pb, f))
-
-RT = 7.0  # half thickness of a rung, along the axis (as the pegs of 03)
-
 
 def rung_quads(pa, pb, f):
     """The two pegs of a rung as 3D quads (corner points), meeting with a small gap."""
     a3 = (A[0], A[1], 0.0)
     m = lerp3(pa, pb, f)
     d = norm(tuple(b - a for a, b in zip(pa, pb)))
-    gap = 2.2
-    m1 = add(m, mul(d, -gap))
-    m2 = add(m, mul(d, gap))
+    m1 = add(m, mul(d, -2.2))
+    m2 = add(m, mul(d, 2.2))
     out = []
     for s, e in ((pa, m1), (pb, m2)):
         out.append([add(s, mul(a3, RT)), add(e, mul(a3, RT)), add(e, mul(a3, -RT)), add(s, mul(a3, -RT))])
@@ -251,7 +285,7 @@ def rung_quads(pa, pb, f):
 
 
 for k, (u, pa, pb, f) in enumerate(rungs):
-    for j, quad in enumerate(rung_quads(pa, pb, f)):
+    for quad in rung_quads(pa, pb, f):
         # split along the peg so depth stays local
         n = 6
         for m in range(n):
@@ -260,8 +294,7 @@ for k, (u, pa, pb, f) in enumerate(rungs):
             c1 = lerp3(quad[0], quad[1], t1)
             c2 = lerp3(quad[3], quad[2], t1)
             c3 = lerp3(quad[3], quad[2], t0)
-            z = (c0[2] + c1[2] + c2[2] + c3[2]) / 4
-            depth.add([c0[:2], c1[:2], c2[:2], c3[:2]], z, ('r', k))
+            depth.add([c0[:2], c1[:2], c2[:2], c3[:2]], (c0[2] + c1[2] + c2[2] + c3[2]) / 4, ('r', k))
 
 
 def skip_own(tag, i, win):
@@ -270,10 +303,10 @@ def skip_own(tag, i, win):
     return f
 
 
-def draw3(pts3, w, skip=None, eps=0.8, hand=1.0, **kw):
+def draw3(pts3, w, skip=None, eps=0.8, hand=1.0, force=(), minlen=3.5, **kw):
     pts = [p[:2] for p in pts3]
     zs = [p[2] for p in pts3]
-    for run in depth.runs(pts, zs, skip, eps):
+    for run in depth.runs(pts, zs, skip, eps, force=force, minlen=minlen):
         pen.line(run, w=w, hand=hand, occlude=False, **kw)
 
 
@@ -284,8 +317,7 @@ def zweight(z, lo, hi):
 
 # ---------------------------------------------------------------- ribbon edges
 
-for S in strands:
-    tag = S[0]['tag']
+for tag, S in strands.items():
     for key in ('e1', 'e2'):
         # in chunks, so the weight follows depth (nearer is heavier)
         for k0 in range(0, len(S) - 1, 40):
@@ -294,22 +326,22 @@ for S in strands:
 
             def skip(t, tag=tag, i0=i0, i1=i1):
                 return t is not None and t[0] == tag and i0 - 7 <= t[1] <= i1 + 7
-            for run in slab_runs([c[key] for c in chunk]):
+            for run in cut_runs(tag, [c[key] for c in chunk]):
                 zm = sum(p[2] for p in run) / len(run)
                 draw3(run, zweight(zm, 1.75, 2.55), skip, eps=1.0, hand=0.9)
-    # the cut ends, along the end planes
-    for edge in (U0, U1):
-        ends = []
+    # the cut ends: where the two edges meet each cut
+    for cut in CUTS[tag]:
+        hits = []
         for key in ('e1', 'e2'):
-            pts = [c[key] for c in S]
+            pts = [s[key] for s in S]
             for i in range(1, len(pts)):
-                a0, a1 = ax(pts[i - 1]), ax(pts[i])
-                if (a0 - edge) * (a1 - edge) <= 0 and a0 != a1:
-                    ends.append((lerp3(pts[i - 1], pts[i], (edge - a0) / (a1 - a0)), i))
+                dq, dp = side(pts[i - 1], cut), side(pts[i], cut)
+                if dq * dp < 0 and abs(S[i]['u'] - cut[2]) < EXT + 20:
+                    hits.append((lerp3(pts[i - 1], pts[i], dq / (dq - dp)), i))
                     break
-        if len(ends) == 2:
-            i = (ends[0][1] + ends[1][1]) // 2
-            draw3(over3(ends[0][0], ends[1][0], 2.0, 2.5), 2.0, skip_own(tag, i, 30), eps=1.0, hand=0.4)
+        if len(hits) == 2:
+            i = (hits[0][1] + hits[1][1]) // 2
+            draw3(over3(hits[0][0], hits[1][0], 2.0, 2.5), 2.1, skip_own(tag, i, 14), eps=1.0, hand=0.3)
 
 # ---------------------------------------------------------------- ribbon shading
 
@@ -327,8 +359,7 @@ def face_shade(smp):
     return (1 - N[2]) ** 1.2 * (0.55 + 0.75 * away)
 
 
-for S in strands:
-    tag = S[0]['tag']
+for tag, S in strands.items():
     last = None
     acc = 0.0
     for i in range(1, len(S) - 1):
@@ -339,7 +370,10 @@ for S in strands:
             last = None
             acc = 0.0
             continue
-        sp = 9.5 - 4.0 * min(1.0, (sh - 0.3) / 0.6)   # 5.5 .. 9.5
+        if smp['N'][2] <= 0:
+            sp = 7.0 + 1.6 * abs(smp['N'][2])           # the inner face: an even, open tone
+        else:
+            sp = 9.5 - 4.0 * min(1.0, (sh - 0.3) / 0.6)  # 5.5 .. 9.5
         if acc < sp:
             continue
         a, b = smp['e1'], smp['e2']
@@ -353,26 +387,32 @@ for S in strands:
         # lines stop short, as a hand does; light ones only part way across
         s0 = pen.r(0.04, 0.16)
         s1 = 1 - pen.r(0.04, 0.2) - (0.35 * pen.r() if sh < 0.5 else 0)
-        p0, p1 = lerp3(a, b, s0), lerp3(a, b, s1)
-        for run in slab_runs([p0, p1]):
-            draw3(run, pen.r(0.85, 1.05), skip_own(tag, i, 9), eps=1.0, hand=0.3, lift=0.04, piece=(40, 120))
+        for run in cut_runs(tag, [lerp3(a, b, s0), lerp3(a, b, s1)]):
+            draw3(run, pen.r(0.85, 1.05), skip_own(tag, i, 9), eps=1.0, hand=0.3, lift=0.04, piece=(40, 120), minlen=4.5)
 
 # ---------------------------------------------------------------- rungs
 
+
+def root_band(tag, u):
+    """The patch of ribbon a rung is fixed to: the rung stops at its inner edge."""
+    S = strands[tag]
+    i = (u - S[0]['u']) / (S[-1]['u'] - S[0]['u']) * (len(S) - 1)
+    return [(poly, bb) for j, poly, bb in quads[tag] if abs(j - i) <= 16]
+
+
 for k, (u, pa, pb, f) in enumerate(rungs):
-    quads = rung_quads(pa, pb, f)
-    for j, q in enumerate(quads):
+    for tag, q in zip(('a', 'b'), rung_quads(pa, pb, f)):
         zm = sum(c[2] for c in q) / 4
         w = zweight(zm, 1.45, 1.95)
+        force = root_band(tag, u)
 
         def skip(t, k=k):
             return t is not None and t[0] == 'r' and t[1] == k
-        # the two long sides, the meeting end, and the root where it shows on a ribbon behind
-        draw3([q[0], q[1]], w, skip, eps=0.6, hand=0.5)
-        draw3([q[3], q[2]], w * 1.1, skip, eps=0.6, hand=0.5)
-        draw3(over3(q[1], q[2], pen.r(0.3, 1.6), pen.r(0.3, 1.6)), w * 0.9, skip, eps=0.6, hand=0.2, lift=0)
-        if q[0][2] < -HW:
-            draw3([q[0], q[3]], w * 0.8, skip, eps=0.6, hand=0.2, lift=0)
+        # the two long sides and the meeting end; the root is tucked under the ribbon
+        kw = dict(skip=skip, eps=0.6, force=force, minlen=5.0)
+        draw3([q[0], q[1]], w, hand=0.5, **kw)
+        draw3([q[3], q[2]], w * 1.1, hand=0.5, **kw)
+        draw3(over3(q[1], q[2], pen.r(0.3, 1.6), pen.r(0.3, 1.6)), w * 0.9, hand=0.2, lift=0, **kw)
         # shaded with short slanted strokes across, as the pegs of 03
         L = dist(q[0][:2], q[1][:2])
         if L < 8:
@@ -384,8 +424,14 @@ for k, (u, pa, pb, f) in enumerate(rungs):
             u0, u1 = t / L, (t + slant) / L
             c0 = lerp3(lerp3(q[0], q[3], 0.14), lerp3(q[1], q[2], 0.14), u0)
             c1 = lerp3(lerp3(q[0], q[3], 0.86), lerp3(q[1], q[2], 0.86), u1)
-            draw3([c0, c1], pen.r(0.9, 1.1), skip, eps=0.6, hand=0.2, lift=0)
+            draw3([c0, c1], pen.r(1.0, 1.2), hand=0.2, lift=0, **kw)
             t += sp + pen.r(-0.2, 0.3)
 
+# centre the drawing in the square
+xs = [x for p, _ in pen.strokes for x, _ in p]
+ys = [y for p, _ in pen.strokes for _, y in p]
+cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+pen.strokes = [([(x - cx + 500, y - cy + 500) for x, y in p], w) for p, w in pen.strokes]
+print('pairs', nbp)
 pen.save('../04-dna.svg', mirror=False)
 pen.report()

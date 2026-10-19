@@ -1,11 +1,12 @@
 """03 RNA: a single strand folded into a hairpin.
 
 One sugar-phosphate backbone drawn as a flat ribbon, the bases as short pegs
-standing off its inner side. The strand runs in from a single-stranded 5'
-tail, up one side of a short paired stem (the pegs meet across it, a long
-purine with a short pyrimidine), round a loop of unpaired bases and back
-down, leaving as a short 3' tail. Where the ribbon twists and shows its back,
-the back is shaded with hatching across the band, as in 04 DNA.
+standing off its inner side. The strand comes down from a single-stranded 5'
+arm, turns up one side of a short paired stem (the pegs meet across it, a
+long purine with a short pyrimidine), round a loop of unpaired bases that
+tilts away from us, and back down, leaving as a 3' tail. The ribbon is
+modelled as in 04 DNA: hatching along its shadowed edge, and across the band
+where it twists and shows its back.
 """
 
 import math
@@ -20,14 +21,17 @@ SP = 60.0          # base spacing along the strand
 S = 186.0          # stem: strand centre to strand centre
 GAP = 3.0          # gap where two paired pegs meet
 
-ANG = math.radians(-56)
+ANG = math.radians(-62)
 D = (math.cos(ANG), math.sin(ANG))      # stem axis, base to loop
 P = (-D[1], D[0])                       # across the stem, strand 1 to strand 2
 B0 = (500.0, 600.0)                     # stem base, on its axis (the drawing is centred afterwards)
-NBP = 5
+NBP = 6
 LS = (NBP - 1) * SP                     # first to last pair
 E0, E1 = 30.0, 30.0                     # straight strand below the first / above the last pair
-RL = 138.0                              # loop radius (ribbon centre)
+RL = 138.0                              # loop radius (ribbon centre), before the tilt
+TILT_Y0 = LS + 12.0                     # the loop tilts away from here up
+TILT_K = 0.58                           # how much the tilted loop is foreshortened along the stem
+TILT_L = 45.0                           # how gradually the tilt sets in
 LIGHT = (-0.6, -0.8)                    # light from the upper left
 
 
@@ -41,7 +45,22 @@ def pt(side, u):
     return fr(side * S / 2, u)
 
 
-# the loop: a round bulb on the axis beyond the stem
+def warp(p):
+    """The loop tilts away from us: beyond the stem, distances along the axis shrink."""
+    x = (p[0] - B0[0]) * P[0] + (p[1] - B0[1]) * P[1]
+    y = (p[0] - B0[0]) * D[0] + (p[1] - B0[1]) * D[1]
+    if y > TILT_Y0:
+        e = y - TILT_Y0
+        y = TILT_Y0 + TILT_K * e + (1 - TILT_K) * TILT_L * (1 - math.exp(-e / TILT_L))
+    return fr(x, y)
+
+
+def warp_line(a, b, n=6):
+    return [warp(lerp(a, b, k / n)) for k in range(n + 1)]
+
+
+# ---------------------------------------------------------------- the strand's path (before the tilt)
+
 dc = math.sqrt(max(0.0, RL ** 2 - (S / 2) ** 2))
 LCY = LS + E1 + dc * 0.8
 
@@ -59,11 +78,40 @@ def stem_line(side, u0, u1, n=6):
     return [pt(side, u0 + (u1 - u0) * k / n) for k in range(n + 1)]
 
 
-# the 5' tail swings in from the left and hooks up into the stem; the 3' tail drops away below
-tail5 = [fr(-S / 2 - 290, -E0 + 60), fr(-S / 2 - 255, -E0 - 95), fr(-S / 2 - 140, -E0 - 175), fr(-S / 2 - 30, -E0 - 108)]
-tail3 = [fr(S / 2 + 6, -E0 - 95), fr(S / 2 + 70, -E0 - 178), fr(S / 2 + 180, -E0 - 205)]
+# the 5' arm comes down from the upper left and turns up into the stem; the 3' tail turns out
+# the other way below the stem and falls away to the lower right. Either side of the stem the
+# strand runs across its foot, so the first unpaired bases hang clear, not facing each other
 
-ctrl = tail5 + stem_line(-1, -E0, LS + E1) + loop_pts() + stem_line(+1, LS + E1, -E0) + tail3
+
+def scr(dx, dy):
+    """A point given as an offset in the picture from the stem base."""
+    return (B0[0] + dx, B0[1] + dy)
+
+
+RC = 28.0                               # radius of the turns at the foot of the stem
+
+
+def corner(start, side):
+    """The quarter turn at the foot of the stem, as points: side -1 runs in along +P and turns up
+    into strand 1 at `start`; side +1 leaves strand 2 at `start` and turns out along +P."""
+    out = []
+    for k in range(7):
+        f = math.radians(90 * k / 6)
+        if side < 0:
+            c = (start[0] - P[0] * RC, start[1] - P[1] * RC)
+            out.append((c[0] + RC * (-D[0] * math.cos(f) + P[0] * math.sin(f)), c[1] + RC * (-D[1] * math.cos(f) + P[1] * math.sin(f))))
+        else:
+            c = (start[0] + P[0] * RC, start[1] + P[1] * RC)
+            out.append((c[0] + RC * (-P[0] * math.cos(f) - D[0] * math.sin(f)), c[1] + RC * (-P[1] * math.cos(f) - D[1] * math.sin(f))))
+    return out
+
+
+foot1 = corner(pt(-1, -E0), -1)
+foot2 = corner(pt(+1, -E0), +1)
+arm5 = [scr(-392, -425), scr(-362, -295), scr(-312, -168), scr(-240, -78), (foot1[0][0] - P[0] * 45, foot1[0][1] - P[1] * 45)] + foot1[:-1]
+tail3 = foot2[1:] + [(foot2[-1][0] + P[0] * 45, foot2[-1][1] + P[1] * 45), scr(190, 160), scr(262, 222), scr(302, 315), scr(308, 418)]
+
+ctrl = arm5 + stem_line(-1, -E0, LS + E1) + loop_pts() + stem_line(+1, LS + E1, -E0) + tail3
 line = resample(catmull(ctrl, step=2.0), 2.0)
 
 sl = [0.0]
@@ -73,7 +121,7 @@ TOTAL = sl[-1]
 
 
 def at(s):
-    """Point and unit tangent at arc length s."""
+    """Point and unit tangent at arc length s (before the tilt)."""
     s = max(0.0, min(TOTAL, s))
     lo, hi = 0, len(sl) - 1
     while hi - lo > 1:
@@ -95,8 +143,6 @@ def nearest_s(p):
 
 
 s_bot1 = nearest_s(pt(-1, -E0))
-s_top1 = nearest_s(pt(-1, LS + E1))
-s_top2 = nearest_s(pt(+1, LS + E1))
 s_bot2 = nearest_s(pt(+1, -E0))
 
 
@@ -108,20 +154,16 @@ def ease(u):
 def twist(s):
     """How far the ribbon is turned from facing us (0 faces us, pi shows its back)."""
     tw = 0.0
-    # a full turn along the 5' tail
-    a, b = 25.0, s_bot1 - 55.0
+    # a full turn down the 5' arm
+    a, b = 70.0, 330.0
     tw += 2 * math.pi * ease((s - a) / (b - a))
-    # the loop rolls away from us over its top
-    mid, half = (s_top1 + s_top2) / 2, (s_top2 - s_top1) / 2
-    if abs(s - mid) < half:
-        tw += 2.3 * ease(1.25 * (1 - abs(s - mid) / half))
     # a half turn in the 3' tail, ending on the ribbon's back
-    a = s_bot2 + 45.0
+    a = s_bot2 + 150.0
     tw += math.pi * 0.85 * ease((s - a) / (TOTAL - 12 - a))
     return tw
 
 
-# ---------------------------------------------------------------- ribbon samples
+# ---------------------------------------------------------------- ribbon samples (tilted)
 
 samples = []
 s = 0.0
@@ -131,17 +173,8 @@ while s <= TOTAL + 0.01:
     c = math.cos(twist(s))
     e1 = (p[0] + nl[0] * HW * c, p[1] + nl[1] * HW * c)
     e2 = (p[0] - nl[0] * HW * c, p[1] - nl[1] * HW * c)
-    samples.append(dict(s=s, p=p, t=t, nl=nl, cos=c, e1=e1, e2=e2))
+    samples.append(dict(s=s, p=warp(p), cos=c, e1=warp(e1), e2=warp(e2)))
     s += 1.6
-
-
-def shade(smp):
-    """0 lit .. 1 dark, for the face we see."""
-    c = smp['cos']
-    if c < 0:
-        return 0.62 + 0.38 * (1 - abs(c))
-    return 1.0 * (1 - c) ** 1.2
-
 
 # ---------------------------------------------------------------- the ribbon
 
@@ -153,29 +186,47 @@ for smp in (samples[0], samples[-1]):
     u = ((b[0] - a[0]) / L, (b[1] - a[1]) / L)
     pen.line([(a[0] - u[0] * 2, a[1] - u[1] * 2), (b[0] + u[0] * 2.5, b[1] + u[1] * 2.5)], w=2.0, hand=0.3, occlude=False)
 
-# hatching across the band where it turns away or shows its back
+
+def shade_stroke(i):
+    """The hatch stroke across the band at sample i: from the shadowed edge, part way or right across."""
+    smp = samples[i]
+    a, b = smp['e1'], smp['e2']
+    c = smp['cos']
+    # which edge lies away from the light
+    mid = smp['p']
+    da = (a[0] - mid[0]) * LIGHT[0] + (a[1] - mid[1]) * LIGHT[1]
+    db = (b[0] - mid[0]) * LIGHT[0] + (b[1] - mid[1]) * LIGHT[1]
+    if da > db:
+        a, b = b, a
+    away = abs(da - db) / (2 * HW) if HW else 0
+    if c < 0:
+        f = 0.9                                   # the ribbon's back: right across
+    else:
+        f = 0.5 + 0.25 * away + 0.45 * (1 - c)    # its face: a band along the shadowed edge, wider as it turns
+    return a, b, min(0.92, f), away, c
+
+
 last = None
 acc = 0.0
 for i in range(1, len(samples) - 1):
-    smp = samples[i]
-    acc += dist(samples[i - 1]['p'], smp['p'])
-    sh = shade(smp)
-    if sh < 0.3:
-        last, acc = None, 0.0
-        continue
-    sp = 9.5 - 4.0 * min(1.0, (sh - 0.3) / 0.6)
+    acc += dist(samples[i - 1]['p'], samples[i]['p'])
+    a, b, f, away, c = shade_stroke(i)
+    sp = 6.2 if c > 0.5 else 6.0
     if acc < sp:
         continue
-    a, b = smp['e1'], smp['e2']
     if dist(a, b) < 5:
         continue
-    if last is not None and min(dist(a, last[0]), dist(b, last[1])) < 5.0:
+    if c >= 0 and away < 0.12:
+        continue                                  # where the ribbon runs along the light, it is lit on both edges
+    if last is not None and min(dist(a, last[0]), dist(lerp(a, b, f), last[1])) < 5.0:
         continue
     acc = 0.0
-    last = (a, b)
-    t0 = pen.r(0.04, 0.16)
-    t1 = 1 - pen.r(0.04, 0.2) - (0.35 * pen.r() if sh < 0.5 else 0)
-    pen.line([lerp(a, b, t0), lerp(a, b, t1)], w=pen.r(0.85, 1.05), hand=0.3, lift=0.04, piece=(40, 120), occlude=False)
+    t0 = pen.r(0.02, 0.1)
+    t1 = f * pen.r(0.8, 1.0)
+    q0, q1 = lerp(a, b, t0), lerp(a, b, t1)
+    last = (a, q1)
+    if dist(q0, q1) > 3:
+        pen.line([q0, q1], w=pen.r(0.9, 1.1), hand=0.3, lift=0.04, piece=(40, 120), occlude=False)
 
 # the pegs go under the ribbon
 for i in range(0, len(samples) - 4, 4):
@@ -184,9 +235,9 @@ for i in range(0, len(samples) - 4, 4):
 
 # ---------------------------------------------------------------- bases
 
-pegs = []   # (root on the centre line, direction, length, half width of the ribbon there)
+pegs = []   # (root on the centre line, direction, length, half width of the ribbon there), before the tilt
 pair_len = S - 2 * HW - GAP
-purine = [1, 0, 0, 1, 0]
+purine = [1, 0, 0, 1, 0, 1]
 for k in range(NBP):
     f = 0.58 if purine[k] else 0.42
     pegs.append((pt(-1, k * SP), P, pair_len * f, HW))
@@ -202,13 +253,14 @@ s_a, s_b = nearest_s(pt(-1, LS)), nearest_s(pt(+1, LS))
 loop_lens = [62, 46, 64, 62, 46, 64, 46, 62, 48]
 for k in range(len(loop_lens)):
     unpaired(s_a + (s_b - s_a) * (k + 1) / (len(loop_lens) + 1), loop_lens[k])
-for k, L in enumerate([64, 48, 64, 64, 48, 64, 48, 64]):
+arm_lens = [64, 48, 64, 64, 48, 64, 48, 64, 48, 64, 64, 48]
+for k, L in enumerate(arm_lens):
     s = nearest_s(pt(-1, 0)) - SP * (k + 1)
-    if s > 28:
+    if s > 26:
         unpaired(s, L)
-for k, L in enumerate([48, 64, 48, 64]):
+for k, L in enumerate([48, 64, 48, 64, 64, 48]):
     s = nearest_s(pt(+1, 0)) + SP * (k + 1)
-    if s < TOTAL - 28:
+    if s < TOTAL - 26:
         unpaired(s, L)
 
 
@@ -220,32 +272,47 @@ def over(a, b, da, db):
 
 
 def peg(root, d, L, hwr):
-    """A base: a short flat stick from under the ribbon's edge, its free end square."""
+    """A base: a short flat stick from under the ribbon's edge, its free end square, shaded."""
     n = (-d[1], d[0])
     a = (root[0] + d[0] * (hwr - 3), root[1] + d[1] * (hwr - 3))
     b = (root[0] + d[0] * (hwr + L), root[1] + d[1] * (hwr + L))
-    lit = n[0] * LIGHT[0] + n[1] * LIGHT[1] > 0      # the +n side faces the light
     sides = []
     for sg in (1, -1):
-        sides.append([(a[0] + sg * n[0] * PEG_HW, a[1] + sg * n[1] * PEG_HW), (b[0] + sg * n[0] * PEG_HW, b[1] + sg * n[1] * PEG_HW)])
+        p0 = (a[0] + sg * n[0] * PEG_HW, a[1] + sg * n[1] * PEG_HW)
+        p1 = (b[0] + sg * n[0] * PEG_HW, b[1] + sg * n[1] * PEG_HW)
+        sides.append(warp_line(p0, p1))
+    lit = n[0] * LIGHT[0] + n[1] * LIGHT[1] > 0      # the +n side faces the light
     w_lit, w_dark = 1.6, 2.0
     # a hand overshoots the corners a little
-    pen.line(over(*sides[0], 0, pen.r(0.5, 2.5)), w=w_lit if lit else w_dark, hand=0.6)
-    pen.line(over(*sides[1], 0, pen.r(0.5, 2.5)), w=w_dark if lit else w_lit, hand=0.6)
-    pen.line(over(sides[0][1], sides[1][1], pen.r(0.3, 1.6), pen.r(0.3, 1.6)), w=1.7, hand=0.2, lift=0)
-    # the base is shaded: short strokes across it, slanted, as on the atoms of 02
-    sp = 5.6
-    m = int((hwr + L - (hwr + 2)) / sp)
-    slant = 0.45
-    for j in range(m):
-        t = hwr + 3.5 + j * sp + pen.r(-0.2, 0.2)
-        if t > hwr + L - 3:
-            break
-        c0 = (root[0] + d[0] * t + n[0] * (PEG_HW - 2.0), root[1] + d[1] * t + n[1] * (PEG_HW - 2.0))
-        c1 = (root[0] + d[0] * (t + slant * 2 * PEG_HW) - n[0] * (PEG_HW - 2.0), root[1] + d[1] * (t + slant * 2 * PEG_HW) - n[1] * (PEG_HW - 2.0))
-        if t + slant * 2 * PEG_HW > hwr + L - 2:
-            break
-        pen.line([c0, c1], w=pen.r(0.9, 1.1), hand=0.2, lift=0)
+    e0 = over(sides[0][-2], sides[0][-1], 0, pen.r(0.5, 2.5))[1]
+    e1 = over(sides[1][-2], sides[1][-1], 0, pen.r(0.5, 2.5))[1]
+    pen.line(sides[0][:-1] + [e0], w=w_lit if lit else w_dark, hand=0.6)
+    pen.line(sides[1][:-1] + [e1], w=w_dark if lit else w_lit, hand=0.6)
+    pen.line(over(sides[0][-1], sides[1][-1], pen.r(0.3, 1.6), pen.r(0.3, 1.6)), w=1.7, hand=0.2, lift=0)
+    # shaded with short slanted strokes across it, as on the atoms of 02
+    A0, A1 = warp(a), warp(b)
+    Lw = dist(A0, A1)
+    off = (hwr + 3.5) / max(1.0, hwr + L + 3) * Lw     # start clear of the ribbon's edge
+    slant = 0.45 * 2 * PEG_HW * Lw / (L + 3)
+    t = off + pen.r(0, 1.0)
+    while t + slant < Lw - 3:
+        u0, u1 = t / Lw, (t + slant) / Lw
+        c0 = lerp(_along(sides[0], u0), _along(sides[1], u0), 0.14)
+        c1 = lerp(_along(sides[0], u1), _along(sides[1], u1), 0.86)
+        pen.line([c0, c1], w=pen.r(1.15, 1.35), hand=0.2, lift=0)
+        t += 5.6 + pen.r(-0.15, 0.25)
+
+
+def _along(pts, u):
+    """Point a share u of the way along a polyline."""
+    total = sum(dist(pts[i], pts[i + 1]) for i in range(len(pts) - 1))
+    want = u * total
+    for i in range(len(pts) - 1):
+        d = dist(pts[i], pts[i + 1])
+        if want <= d or i == len(pts) - 2:
+            return lerp(pts[i], pts[i + 1], min(1.0, want / (d or 1)))
+        want -= d
+    return pts[-1]
 
 
 for root, d, L, hwr in pegs:
