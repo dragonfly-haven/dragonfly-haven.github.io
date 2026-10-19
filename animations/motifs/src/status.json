@@ -127,13 +127,14 @@
       "when": "2026-10-17"
     },
     "neanderthals": {
-      "passed": false,
-      "last": [
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
         8,
-        6,
-        6
+        8,
+        8
       ],
-      "note": "legs, hands, hatching on skin, fire, empty corner"
+      "note": "second round; polish asked: spear clear of the nose, upper arm and kneecap, single knot, core hand, anchored overhang, livelier fire"
     },
     "couple-1690s": {
       "passed": true,
