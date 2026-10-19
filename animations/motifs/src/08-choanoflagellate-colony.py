@@ -70,7 +70,7 @@ for i, d0 in enumerate(fib_sphere(N_CELLS)):
     a = EZ if abs(d[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
     e1 = unit(np.cross(d, a))
     e2 = np.cross(d, e1)
-    W = 112 * rng.uniform(0.95, 1.05)
+    W = 105 * rng.uniform(0.96, 1.04)
     b = W / 2
     apex = R_APEX * rng.uniform(0.98, 1.02)
     a_up = 0.6 * W
@@ -83,7 +83,7 @@ for i, d0 in enumerate(fib_sphere(N_CELLS)):
     # collar: base ring where the dome is rb wide, flaring 1.3x, about a body long
     rb = 0.25 * W
     ub = a_up * math.sqrt(1 - (rb / b) ** 2)
-    c['rb'], c['rt'] = rb, 1.3 * rb
+    c['rb'], c['rt'] = rb, 1.38 * rb
     c['cbase'] = c['C'] + ub * d
     c['Lc'] = 0.62 * W
     c['ctip'] = c['cbase'] + c['Lc'] * d
@@ -309,7 +309,7 @@ def draw_outlines():
         for loop in trace(mask):
             if len(loop) < 12:
                 continue
-            P = smooth(np.column_stack([loop[:, 1] + x0, loop[:, 0] + y0]), 3)
+            P = smooth(smooth(np.column_stack([loop[:, 1] + x0, loop[:, 0] + y0]), 5), 4)
             t = np.roll(P, -2, axis=0) - np.roll(P, 2, axis=0)
             n = np.column_stack([t[:, 1], -t[:, 0]])
             n /= np.linalg.norm(n, axis=1)[:, None] + 1e-9
@@ -432,7 +432,7 @@ def draw_inside(c):
     """A small nucleus (with its nucleolus) and a food vacuole or two, seen
     through the lit flank of cells that are turned partly sideways."""
     d = c['d']
-    if not 0.1 < abs(d[2]) < 0.62:
+    if abs(d[2]) > 0.62:
         return
     lp = LIGHT - (LIGHT @ d) * d
     if np.linalg.norm(lp) < 0.2:
@@ -446,7 +446,7 @@ def draw_inside(c):
         i, j = look(ring[:, 0], ring[:, 1])
         return bool(((body_id[i, j] == c['id']) & ~(col_z[i, j] > body_z[i, j])).all())
 
-    for u, off, turn in ((-0.12, 0.22, 0.0), (-0.18, 0.18, 0.6), (-0.18, 0.18, -0.6), (-0.06, 0.3, 0.0), (-0.06, 0.3, 0.7), (-0.06, 0.3, -0.7)):
+    for u, off, turn in ((-0.16, 0.2, 0.0), (-0.12, 0.22, 0.0), (-0.18, 0.18, 0.6), (-0.18, 0.18, -0.6), (-0.06, 0.3, 0.0), (-0.06, 0.3, 0.7), (-0.06, 0.3, -0.7)):
         sd = math.cos(turn) * lp + math.sin(turn) * np.cross(d, lp)
         Nc = c['C'] + u * c['a_low'] * d + off * c['b'] * sd
         x, y = scr(Nc)
@@ -457,12 +457,8 @@ def draw_inside(c):
     c['nuc'] = (x, y, rn + 2.5)
     a0 = rng.uniform(0, 2 * math.pi)
     tt = np.linspace(a0, a0 + 2 * math.pi + 0.25, 44)
-    pen.line([(x + rn * math.cos(q), y + rn * 0.92 * math.sin(q)) for q in tt], w=0.8, occlude=False, hand=0.25, lift=0.15)
-    # shaded on its far side with a few short strokes (a central dot would read as an eye)
-    for off in (0.25, 0.6):
-        h = rn * math.sqrt(1 - off ** 2) * 0.85
-        cx_, cy_ = x + off * rn * 0.707, y + off * rn * 0.707
-        pen.line([(cx_ - h * 0.707, cy_ + h * 0.707), (cx_ + h * 0.707, cy_ - h * 0.707)], w=0.65, occlude=False, hand=0.1, lift=0)
+    pen.line([(x + rn * math.cos(q), y + rn * 0.88 * math.sin(q)) for q in tt], w=0.62, occlude=False, hand=0.35, lift=0.45,
+             piece=(6, 14))
     # food vacuoles toward the base
     for k in range(2):
         V = Nc - rng.uniform(0.18, 0.28) * c['a_low'] * d + rng.uniform(-0.25, 0.25) * c['b'] * np.cross(d, sd)
@@ -486,8 +482,16 @@ def collar_seen(c, P3):
 
 
 def draw_collar(c):
+    """Straight microvilli with staggered tips. Seen from the side only the near
+    half, the mouth left open; looked into, a broken mouth ring (and, end-on,
+    the base ring with short ticks round the rim). Collars of cells on the far
+    side are fewer, lighter, shorter lines."""
     d = c['d']
     open_mouth = d[2] > 0.5
+    endon = d[2] > 0.8
+    back = d[2] < -0.1
+    if d[2] < -0.28:
+        return                             # far side: hidden but for a stub, so the ball's edge stays clean
     M = 14
     ph = rng.uniform(0, 2 * math.pi)
     b2 = np.array(scr(c['cbase']))
@@ -496,29 +500,39 @@ def draw_collar(c):
     across = np.array([-ax2[1], ax2[0]])
     across = across / (np.linalg.norm(across) + 1e-9)
     for k in range(M):
+        if back and k % 2:
+            continue
         phi = ph + 2 * math.pi * k / M + rng.normal(0, 0.03)
         e = math.cos(phi) * c['e1'] + math.sin(phi) * c['e2']
         if not open_mouth and e[2] < -0.12:
             continue                       # the far half, behind the near one
         A = c['cbase'] + c['rb'] * e
-        B = c['ctip'] + c['rt'] * e * rng.uniform(0.97, 1.03) + rng.uniform(-0.05, 0.03) * c['Lc'] * d
-        if open_mouth and d[2] > 0.8:
+        B = c['ctip'] + c['rt'] * e * rng.uniform(0.97, 1.03) + rng.uniform(-0.02, 0.07) * c['Lc'] * d
+        if endon:
             A = A + 0.55 * (B - A)         # seen end-on: short ticks round the rim
+        if d[2] < -0.3:
+            B = A + 0.72 * (B - A)
         P = dense([A, B], 1.0)
         edge = abs(float(e[0] * across[0] + e[1] * across[1])) ** 8
-        w = (0.72 + 0.4 * edge) * rng.uniform(0.95, 1.05)
-        draw_runs(P[:, :2] + np.array([CX, CY]), collar_seen(c, P), w, min_len=3, hand=0.12, lift=0.0, piece=(60, 140))
-    # the mouth: whole when we look into it, else its near half; the base ring when open
-    for center, r, w in ((c['ctip'], c['rt'], 0.8 if open_mouth else 0.7), (c['cbase'], c['rb'], 0.75)):
-        if r == c['rb'] and d[2] <= 0.8:
-            continue                       # the base ring only when seen end-on
+        w = 0.6 if back else (0.7 + 0.25 * edge)
+        draw_runs(P[:, :2] + np.array([CX, CY]), collar_seen(c, P), w * rng.uniform(0.95, 1.05),
+                  min_len=3, hand=0.12, lift=0.0, piece=(60, 140))
+    rings = [(c['ctip'], c['rt'], 0.75 if open_mouth else 0.65)]
+    if endon:
+        rings.append((c['cbase'], c['rb'], 0.72))
+    for center, r, w in rings:
         a0 = rng.uniform(0, 2 * math.pi)
-        t = np.linspace(a0, a0 + 2 * math.pi + 0.12, 90)
+        t = np.linspace(a0, a0 + 2 * math.pi + 0.12, 120)
         P = center + r * (np.cos(t)[:, None] * c['e1'] + np.sin(t)[:, None] * c['e2'])
         keep = collar_seen(c, P)
         if not open_mouth:
-            keep &= (P - center)[:, 2] > -0.05 * r
-        draw_runs(P[:, :2] + np.array([CX, CY]), keep, w, min_len=4, hand=0.15, lift=0.05)
+            if back:
+                continue
+            keep &= (P - center)[:, 2] > -0.05 * r      # only the near half
+        if not endon:
+            # a broken mouth: the tips of the microvilli, not a hoop
+            keep &= np.sin(5 * (t - a0) + rng.uniform(0, 6.3)) > -0.35
+        draw_runs(P[:, :2] + np.array([CX, CY]), keep, w, min_len=4, hand=0.15, lift=0.08)
 
 
 def draw_flagellum(c):
@@ -549,6 +563,7 @@ def draw_flagellum(c):
     bid = body_id[i, j]
     hide = P[:, 2] < body_z[i, j] - 1.0
     hide |= (bid != -1) & (bid != c['id'])            # never over another cell
+    hide |= (col_id[i, j] != -1) & (col_id[i, j] != c['id'])   # nor across its collar
     other = (col_id[i, j] != -1) & (col_id[i, j] != c['id'])
     hide |= other & (P[:, 2] < col_z[i, j] - 0.5)
     P2 = np.column_stack([X, Y])

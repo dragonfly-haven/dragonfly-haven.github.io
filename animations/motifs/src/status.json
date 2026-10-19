@@ -54,7 +54,7 @@
         8,
         8
       ],
-      "note": "second round; polish asked: cleaner rim, open collars, round centre cell"
+      "note": "second round; polished: rim, open collars, round centre cell, flagella, nuclei"
     },
     "jellyfish": {
       "passed": true,
@@ -88,13 +88,14 @@
       "when": "2026-10-17"
     },
     "ginkgo-tree": {
-      "passed": false,
-      "last": [
-        7,
-        7,
-        7
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
+        8,
+        8,
+        8
       ],
-      "note": "symmetry, arms, leaf sprigs, crown density to fix"
+      "note": "second round; polish asked: hanging and high sprigs, stray marks, taproot tips, break the stem behind clumps"
     },
     "triceratops": {
       "passed": true,
