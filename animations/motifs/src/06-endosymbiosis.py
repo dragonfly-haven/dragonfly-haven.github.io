@@ -2,28 +2,33 @@
 """06 Endosymbiosis: an Asgard archaeon taking in an alphaproteobacterium.
 
 The origin of mitochondria as a clean textbook figure in ink (reworked for
-Maxim's note "a bit cleaner, more technical, less messy").
+Maxim's note "a bit cleaner, more technical, less messy", then after review).
 
 - The host: an Asgard archaeon (like Prometheoarchaeum), a roundish cell drawn
-  as a ball with one side sliced off by a tilted plane. The cut face looks up
-  and to the left, toward the light, and shows the inside on clean paper: the
-  single cell membrane as a firm edge, the circular chromosome as one
-  regularly supercoiled loop (broken where the strand passes under itself),
-  and ribosomes as small rings scattered evenly.
-- On the cut face, one alphaproteobacterium already taken in, its
-  gram-negative envelope cut through: outer and inner membrane as two clean
-  parallel lines, its own small circular genome (one loop, twisted twice) and
-  a few ribosomes.
-- The rest of the ball shows as a broad crescent on the shadow side, shaded
-  with rings of the sphere parallel to the cut (as in 07): every ring in the
-  shadow, every second and fourth ring into the half-tones, never closer than
-  5 where they crowd toward the limb.
-- Long, thin, smooth protrusions (two branching once) curve out from the
-  host. At the upper right a rod-shaped bacterium sits end-first in a shallow
-  cup of the host's membrane; the membrane runs on as one line up two arms
-  that rise along the rod and curl over its edges: the moment of engulfment.
-- Two free bacteria nearby, each with a single polar flagellum, shaded with
-  lines that follow their outline on the side turned from the light.
+  as a ball with one side sliced off by a tilted plane, lit from the upper left.
+- The cut face: light, staggered section hatching (13 apart, as on 07's cut
+  faces), thinning toward the light; the cell envelope as a firm edge with a
+  thin line just inside; the circular chromosome as one strand folded into
+  seven twisted-pair loops radiating from a small centre (a nucleoid, with no
+  outer ring that could read as a nucleus), broken where a strand passes under;
+  ribosomes as small dots in loose clusters.
+- On the face, one alphaproteobacterium already taken in, cut through: outer
+  and inner membrane as two clean lines, a thin broken host membrane round it,
+  its own small circular genome (one loop, twisted twice) and a few ribosomes.
+- The rest of the ball, on the shadow side, shaded with latitude rings about a
+  pole just behind the lower right limb (they shrink and close up toward it),
+  every ring in the shadow and every second or fourth into the half-tones, never
+  closer than 5; a short slanting second set deepens the core shadow.
+- The moment of uptake, on that shadow side: a rod goes in end-first through a
+  shaded dimple, rising toward the eye and over the limb. Two tapering membrane
+  lobes of the host rise round it: the near one in front, wrapping the rod's
+  face (its free edge drawn with a thickness line, its underside hatched along
+  its form), the far one behind; both end in rounded tips resting on the rod.
+- Long, thin, smooth protrusions (two branching once) curve out from the back
+  surface.
+- Two free bacteria, each with a single polar flagellum: gram-negative rods with
+  an inner line for the inner membrane and body lines that follow the outline,
+  close on the shadow side.
 
 Lines are steady (low hand wobble, no pen lifts on contours) and heavier on
 the side turned from the light; everything is deterministic. Not mirrored
@@ -42,7 +47,7 @@ pen = Pen(seed=SEED)
 rng = random.Random(SEED)
 
 HAND = 0.25                      # steady, technical line
-LIGHT = (-0.42, -0.91)           # toward the light (upper left), in the picture plane
+LIGHT = (-0.72, -0.69)           # toward the light (upper left), in the picture plane
 _l = math.hypot(*LIGHT)
 LIGHT = (LIGHT[0] / _l, LIGHT[1] / _l)
 LIGHT3 = (LIGHT[0] * 0.75, LIGHT[1] * 0.75, 0.66)   # ...and a little from the front
@@ -489,7 +494,7 @@ def sunk(p):
 
 
 # the dimple: a circle of the sphere round the entry, 62 across... in 3D
-_rho = 64.0 / R
+_rho = 78.0 / R
 _t1 = v_norm(v_cross(N_E, (0.0, 0.0, 1.0)))
 _t2 = v_cross(N_E, _t1)
 
@@ -526,14 +531,14 @@ def lobe(ctrl_out, tip_t, tip_o, ctrl_in, tip_r):
 
 
 # near lobe: in front, along the rod's lower side, wrapping over its face
-NL_OUT = [(T_E - 34, 54), (T_E - 4, 56), (T_E + 40, 51), (T_E + 82, 45), (T_E + 112, 40)]
-NL_IN = [(T_E + 112, 24), (T_E + 80, 24), (T_E + 40, 18), (T_E + 2, 6), (T_E - 30, -6)]
-nl_out, nl_tip, nl_in = lobe(NL_OUT, T_E + 113, 32, NL_IN, 8.0)
+NL_OUT = [(T_E - 8, 62), (T_E + 22, 58), (T_E + 62, 51), (T_E + 104, 44), (T_E + 134, 39)]
+NL_IN = [(T_E + 134, 21), (T_E + 104, 18), (T_E + 62, 10), (T_E + 24, 0), (T_E - 2, -8)]
+nl_out, nl_tip, nl_in = lobe(NL_OUT, T_E + 135, 30, NL_IN, 9.0)
 NEAR = Region(nl_out + nl_tip[1:-1] + nl_in)
 # far lobe: behind, along the rod's upper side; only its outer edge and tip show
-FL_OUT = [(T_E - 30, -58), (T_E + 6, -64), (T_E + 46, -58), (T_E + 80, -49)]
-FL_IN = [(T_E + 80, -30), (T_E + 40, -26), (T_E, -24), (T_E - 30, -30)]
-fl_out, fl_tip, fl_in = lobe(FL_OUT, T_E + 82, -40, FL_IN, 9.5)
+FL_OUT = [(T_E - 4, -64), (T_E + 24, -68), (T_E + 58, -63), (T_E + 92, -53)]
+FL_IN = [(T_E + 92, -30), (T_E + 58, -26), (T_E + 24, -24), (T_E - 4, -30)]
+fl_out, fl_tip, fl_in = lobe(FL_OUT, T_E + 94, -42, FL_IN, 11.0)
 FAR = Region(fl_out + fl_tip[1:-1] + fl_in)
 ROD_REG = Region(capsule_pts(RC[0], RC[1], RA, HLP, ROD_R, step=2.0))
 
@@ -665,15 +670,15 @@ for k in range(1, 3):
 eng_front = lambda p: p in NEAR or p in FAR or (p in ROD_REG and not sunk(p))
 ink_outline(DIMPLE, eng_front, 1.0, 1.6, sign=area_sign(DIMPLE[:-1]))
 _dc = (sum(p[0] for p in DIMPLE) / len(DIMPLE), sum(p[1] for p in DIMPLE) / len(DIMPLE))
-for k in range(1, 5):
-    s = 1.0 - 0.105 * k
-    ring = [(_dc[0] + (p[0] - _dc[0]) * s + 3.0 * k * 0.3, _dc[1] + (p[1] - _dc[1]) * s + 3.0 * k * 0.6) for p in DIMPLE]
+for k in range(1, 6):
+    s = 1.0 - 0.09 * k
+    ring = [(_dc[0] + (p[0] - _dc[0]) * s + 2.2 * k * -LIGHT[0], _dc[1] + (p[1] - _dc[1]) * s + 2.2 * k * -LIGHT[1]) for p in DIMPLE]
     pts = []
     for p in ring:
         v = unit((p[0] - _dc[0], p[1] - _dc[1]))
         # the wall on the far side of the hollow from the light is lit; the near side is in shade
         shade = v[0] * LIGHT[0] + v[1] * LIGHT[1]
-        pts.append(p if shade > 0.15 + 0.12 * k else None)
+        pts.append(p if shade > -0.2 + 0.12 * k else None)
     if None in pts and pts[0] is not None:
         i0 = pts.index(None)
         pts = pts[i0:] + pts[1:i0 + 1]
@@ -739,11 +744,11 @@ k = 0
 beta = D_BETA * 2
 while beta < math.radians(150):
     k += 1
-    lim = 0.20
+    lim = 0.26
     if k % 2 == 1:
-        lim = 0.42
+        lim = 0.48
     if k % 4 == 1:
-        lim = 0.62
+        lim = 0.68
     pts = []
     for i in range(721):
         f = 2 * math.pi * i / 720
@@ -761,20 +766,32 @@ while beta < math.radians(150):
         SHELL_GRID.add(cell)
     beta += D_BETA
 
-# a short second set in the core shadow: meridians through the pole
+# a short second set in the core shadow: arcs of the ball parallel to the cut,
+# crossing the latitude rings at a slant
 CORE_GRID = Grid()
-for i in range(0, 360, 4):
-    f = math.radians(i)
+_nf = (SIN_T * U[0], SIN_T * U[1], COS_T)              # the cut face's normal
+_e1 = (E1[0], E1[1], 0.0)
+_e2 = v_cross(_nf, _e1)
+cc = D_CUT - 30.0
+while cc > -R + 20:
+    rc = math.sqrt(R * R - cc * cc)
     pts = []
-    for j in range(0, 181):
-        b = math.radians(j * 0.8)
-        q = [R * (math.cos(b) * POLE[m] + math.sin(b) * (math.cos(f) * _b1[m] + math.sin(f) * _b2[m])) for m in range(3)]
+    for i in range(721):
+        f = 2 * math.pi * i / 720
+        q = [cc * _nf[m] + rc * (math.cos(f) * _e1[m] + math.sin(f) * _e2[m]) for m in range(3)]
         p = (C[0] + q[0], C[1] + q[1])
         ang = math.degrees(math.atan2(q[1], q[0]))
-        ok = q[2] > 2.0 and lam3((q[0] / R, q[1] / R, q[2] / R)) < -0.42 and 18 < ang < 78 and shell_ok(p)
+        ok = q[2] > 2.0 and lam3((q[0] / R, q[1] / R, q[2] / R)) < -0.40 and 14 < ang < 80 and shell_ok(p)
         pts.append(p if ok else None)
+    if None in pts and pts[0] is not None:
+        i0 = pts.index(None)
+        pts = pts[i0:] + pts[1:i0 + 1]
+    drawn = Grid()
     for sgm in split_none(pts):
-        ink_hatch(sgm, lambda p: CORE_GRID.near(p, 5.6), minlen=10, trim=3, grid=CORE_GRID, w=0.7)
+        ink_hatch(sgm, lambda p: CORE_GRID.near(p, 5.6), minlen=14, trim=6, grid=drawn, w=0.7)
+    for cell in drawn.g.values():
+        CORE_GRID.add(cell)
+    cc -= 11.0
 
 # ---- inside, on the cut face (plane coordinates)
 
@@ -898,7 +915,7 @@ for X, Y in centres:
     ribo += pts
 for X, Y in ribo:
     q = plane(X, Y)
-    pen.dot(q[0], q[1], r=2.2, w=1.3)
+    pen.dot(q[0], q[1], r=2.6, w=1.3)
 
 # the cut face: very light, widely spaced section hatching, broken and staggered
 # as in 07, kept clear of the chromosome, the bacterium and the dots
@@ -925,7 +942,10 @@ while Yh < R_FACE:
     while X < half:
         seg = _hr.uniform(50, 150)
         x1 = min(half, X + seg)
-        if x1 - X > 12:
+        # lighter toward the light: fewer strokes up and to the left
+        mid = plane((X + x1) / 2, Yh)
+        u = ((mid[0] - FC[0]) * -LIGHT[0] + (mid[1] - FC[1]) * -LIGHT[1]) / R_FACE
+        if x1 - X > 12 and _hr.random() < 0.18 + 0.62 * (u + 1) / 2:
             line = [plane(X, Yh), plane(x1, Yh)]
             for run in runs(line, face_clear, minlen=8):
                 ink(run, 0.62, hand=0.1, piece=(80, 160))
