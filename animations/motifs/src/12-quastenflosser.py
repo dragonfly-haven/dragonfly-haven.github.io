@@ -1,21 +1,24 @@
 """12 Quastenflosser: a lobe-finned tetrapodomorph (after Tiktaalik, Late Devonian)
 heaving its front half out of a shallow puddle onto a muddy bank.
 
-Flattened, crocodile-like head with the eyes on top, a short neck where the gill
-cover was lost, heavy rhombic scales, and fleshy lobed pectoral fins (a scaled,
-muscular stalk ending in a fan of fin rays) propping the chest off the mud. The
-rear half and the fringed tail still lie in the water, ripples spreading around.
-Drawn facing right; saved mirrored to face the text.
+Flattened, crocodile-like head with the eyes on top and no gill cover (a short
+neck instead), heavy rhombic scales, a broad chest tapering to a slim tail with a
+fringe of fin rays, and fleshy lobed fins: the pectoral bent back at the elbow,
+its outer part flexed and pressed on the mud, rays fringing its trailing and
+outer edge. The rear third still lies in the water, ripples spreading where it
+breaks the surface. Drawn facing right; saved mirrored to face the text.
 """
 
 import math
+import sys
 
 import numpy as np
 
 from pen import Pen, catmull, ellipse_pts, resample, lerp, dist, inside, clip_segments
 
-pen = Pen(seed=1207)
+pen = Pen(seed=1212)
 R, G = pen.r, pen.g
+DEBUG = 'debug' in sys.argv
 
 
 # ---------------------------------------------------------------- helpers
@@ -43,10 +46,6 @@ class Curve:
         """Unit normal to the left of travel (up, for a curve running right)."""
         tx, ty = self.tangent(t)
         return ty, -tx
-
-    def part(self, t0, t1, n=None):
-        n = n or max(4, int(abs(t1 - t0) * self.L / 1.5))
-        return [self.at(t0 + (t1 - t0) * k / n) for k in range(n + 1)]
 
 
 def poly_clip_below(poly, yfun):
@@ -83,15 +82,29 @@ def ALL(p):
     return True
 
 
+def band(center, widths, n=140):
+    """Both edges of a limb of varying width around a centre line (left = left of travel)."""
+    c = Curve(center, step=0.8)
+    left, right = [], []
+    for k in range(n + 1):
+        t = k / n
+        w = float(np.interp(t, np.linspace(0, 1, len(widths)), widths)) / 2
+        x, y = c.at(t)
+        nx, ny = c.normal(t)
+        left.append((x + nx * w, y + ny * w))
+        right.append((x - nx * w, y - ny * w))
+    return c, left, right
+
+
 # ---------------------------------------------------------------- body plan
 
-SPINE = Curve(catmull([(212, 700), (268, 690), (328, 668), (388, 637), (455, 599), (522, 561),
-                       (585, 526), (640, 494), (688, 469), (730, 451)], step=2.0), step=1.0)
+SPINE = Curve(catmull([(156, 711), (198, 714), (244, 714), (292, 704), (344, 687), (404, 661), (461, 627), (517, 591),
+                       (571, 557), (621, 527), (667, 502), (707, 483), (740, 470)], step=2.0), step=1.0)
 
-# half-depths (back, belly) along the spine, by x
-HX = [212, 224, 250, 290, 335, 388, 455, 522, 585, 640, 688, 712, 730]
-HD = [2, 8, 15, 22, 29, 37, 44, 49, 53, 56, 52, 46, 41]
-HV = [2, 9, 17, 25, 34, 44, 55, 62, 65, 63, 56, 51, 47]
+# half-depths (back, belly) along the spine, by x: a broad chest tapering to a slim tail
+HX = [156, 190, 240, 300, 360, 420, 480, 540, 600, 650, 695, 720, 740]
+HD = [1.5, 5, 10, 18, 27, 36, 45, 52, 58, 60, 57, 51, 46]
+HV = [1.5, 6, 12, 22, 33, 44, 55, 66, 74, 76, 68, 60, 53]
 
 
 def depth(t):
@@ -119,51 +132,77 @@ def t_at_x(x):
     return (lo + hi) / 2
 
 
-T_PELVIC = t_at_x(440)
-T_SHORE = t_at_x(410)
+DORSAL = [body(k / 600, 1.0) for k in range(601)]
+VENTRAL = [body(k / 600, -1.0) for k in range(601)]
+V_X = [p[0] for p in VENTRAL]
+V_Y = [p[1] for p in VENTRAL]
 
-DORSAL = [body(k / 500, 1.0) for k in range(501)]
-VENTRAL = [body(k / 500, -1.0) for k in range(501)]
+
+def belly_y(x):
+    return float(np.interp(x, V_X, V_Y))
 
 
-# ---------------------------------------------------------------- water and ground
+# ---------------------------------------------------------------- water
 
-# the waterline on the body: the tail half under, the belly leaving the water at the shore
+WATER_X = [156, 196, 240, 300, 350, 390, 420, 436]
+WATER_V = [0.9, 0.2, -0.3, -0.36, -0.45, -0.62, -0.85, -1.0]
+
+
 def v_water(t):
-    hv = depth(t)[1]
-    return -1.0
+    """The waterline across the flank: the tail lies awash, the belly leaves the water at the shore."""
+    return float(np.interp(SPINE.at(t)[0], WATER_X, WATER_V))
 
 
-WL = [body(t, v_water(t)) for t in np.linspace(0, T_SHORE, 300)]
+T_SHORE = t_at_x(WATER_X[-1])
+WL = [body(t, v_water(t)) for t in np.linspace(0, T_SHORE, 500)]
 WL_X = [p[0] for p in WL]
 WL_Y = [p[1] for p in WL]
 
 
 def water_y(x):
-    return float(np.interp(x, WL_X, WL_Y)) + 0.8 * math.sin(x / 11.0)
+    if x < WL_X[0]:
+        return WL_Y[0] - (WL_X[0] - x) * 0.5
+    if x > WL_X[-1]:
+        return WL_Y[-1] + (x - WL_X[-1]) * 0.6
+    return float(np.interp(x, WL_X, WL_Y))
 
 
 def dry(p):
-    return True  # the puddle is shallow: the fish lies on it, nothing of it hidden under water
+    return p[1] < water_y(p[0]) - 0.3
 
 
 def wet(p):
     return not dry(p)
 
 
-GROUND = [(414, 704), (450, 680), (500, 655), (550, 628), (600, 602), (640, 592), (700, 588), (780, 585),
-          (870, 578), (985, 564)]
+def ink(pts, w, faint=0.6, **kw):
+    """A stroke on the animal: firm above the water, faint and broken below it."""
+    for run in runs(pts, dry):
+        if len(run) > 1:
+            pen.line(run, w=w, **kw)
+    for run in runs(pts, wet):
+        if len(run) > 2 and faint and R() < 0.8:
+            pen.line(run, w=faint, hand=0.8, lift=0.55, piece=(4, 10))
+
+
+# ---------------------------------------------------------------- the ground
+
+# the bank rises out of the water; the belly lies on it, then the chest is propped above it
+GROUND = [(436, 726), (452, 706)] + [(x, belly_y(x) + 2.5) for x in (472, 500, 530, 560, 588)] + \
+         [(625, 603), (680, 600), (760, 597), (850, 592), (930, 586), (990, 580)]
+GROUND_C = catmull(GROUND, step=2.0)
 
 
 def ground_y(x):
-    return float(np.interp(x, [p[0] for p in GROUND], [p[1] for p in GROUND]))
+    return float(np.interp(x, [p[0] for p in GROUND_C], [p[1] for p in GROUND_C]))
 
 
-# ---- the head, drawn in its own frame: u forward from the back of the skull, v up
-H_ORIGIN = (745.0, 446.0)
-H_ANGLE = math.radians(11.0)
-H_V = 1.28  # head depth stretch
-H_U = 1.08  # head length stretch
+# ---------------------------------------------------------------- the head frame: u forward from the back of the skull, v up
+
+H_ORIGIN = (754.0, 466.0)
+H_ANGLE = math.radians(8.0)
+H_V = 1.28
+H_U = 1.08
 H_DIR = (math.cos(H_ANGLE), -math.sin(H_ANGLE))
 H_UP = (H_DIR[1], -H_DIR[0])
 
@@ -181,219 +220,327 @@ def hc(pts, step=1.5):
 SKULL_TOP = [(0, 37), (24, 39.5), (52, 41), (68, 43), (77, 47.5), (88, 49.5), (99, 47.5), (108, 42),
              (134, 37), (160, 30), (182, 21.5), (197, 12), (205, 2), (204, -5)]
 LIP = [(204, -5), (190, -9), (160, -12), (125, -14.5), (90, -16.5), (58, -18), (36, -18.5)]
-JAW = [(201, -9), (186, -16), (158, -23.5), (122, -30), (86, -36), (52, -41), (24, -44), (6, -44)]
+JAW = [(201, -9), (186, -16), (158, -23.5), (122, -30), (86, -36), (52, -41), (24, -44), (6, -44.5)]
+
+
+def lip_v(u):
+    return float(np.interp(u, [0, 36, 58, 90, 125, 160, 190, 204], [-17, -18.5, -18, -16.5, -14.5, -12, -9, -5]))
+
+
+def jaw_v(u):
+    return float(np.interp(u, [0, 6, 24, 52, 86, 122, 158, 186, 201], [-44, -44.5, -44, -41, -36, -30, -23.5, -16, -9]))
+
+
+def top_v(u):
+    return float(np.interp(u, [p[0] for p in SKULL_TOP[:-1]], [p[1] for p in SKULL_TOP[:-1]]))
+
 
 HEAD_TOP = hc(SKULL_TOP)
 UPPER_LIP = hc(LIP)
 JAW_LOW = hc(JAW)
 
-# the neck: from the shoulders to the back of the skull, a little waisted
+# the neck flows from the back into the skull roof, and from the chest into the throat
 NT0, NB0 = DORSAL[-1], VENTRAL[-1]
-NECK_TOP = catmull([NT0, (NT0[0] * 0.5 + hp(0, 37)[0] * 0.5, NT0[1] * 0.5 + hp(0, 37)[1] * 0.5 + 2.0), hp(0, 37)], step=1.5)
-NECK_BOT = catmull([NB0, lerp(NB0, hp(6, -44), 0.5), hp(6, -44)], step=1.5)
+NECK_TOP = catmull([DORSAL[-14], NT0, lerp(NT0, hp(0, 37), 0.5), hp(0, 37), hp(14, 38.5)], step=1.5)[8:-10]
+NECK_BOT = catmull([VENTRAL[-14], NB0, lerp(NB0, hp(6, -44.5), 0.55), hp(6, -44.5), hp(20, -44)], step=1.5)[8:-10]
 
-SILHOUETTE = DORSAL + NECK_TOP[1:] + HEAD_TOP[1:] + JAW_LOW[::-1] + NECK_BOT[::-1][1:] + VENTRAL[::-1]
+SILHOUETTE = DORSAL + NECK_TOP + HEAD_TOP[1:] + JAW_LOW[::-1] + NECK_BOT[::-1] + VENTRAL[::-1]
 
-
-# ---------------------------------------------------------------- lobed fins
-
-def band(center, widths, n=90):
-    c = Curve(center, step=0.8)
-    left, right = [], []
-    for k in range(n + 1):
-        t = k / n
-        w = float(np.interp(t, np.linspace(0, 1, len(widths)), widths)) / 2
-        x, y = c.at(t)
-        nx, ny = c.normal(t)
-        left.append((x + nx * w, y + ny * w))
-        right.append((x - nx * w, y - ny * w))
-    return c, left, right
+if DEBUG:
+    for x in (436, 470, 500, 540, 600, 650, 690, 720):
+        t = t_at_x(x)
+        print(x, 'spine', [round(c) for c in SPINE.at(t)], 'belly', [round(c) for c in body(t, -1)],
+              'back', [round(c) for c in body(t, 1)], 'ground', round(ground_y(x)))
+    print('snout', hp(205, 0), 'jaw', hp(6, -44.5))
 
 
-def lobed_fin(center, widths, root_from, fan_edge, rays=16, weight=1.0, keep=ALL,
-              w_out=1.9, scale=10.0, base_arc=None, side='right'):
-    """A sarcopterygian fin: a scaled fleshy lobe along `center` (base first) whose
-    distal part carries a fan of fin rays out to `fan_edge`. The fan grows from the
-    lobe's `side` edge (from `root_from` along it) round its tip; `fan_edge` runs
-    the same way. Returns the lobe and fan outlines as polygons."""
-    c, left, right = band(center, widths)
-    k0 = int(root_from * (len(right) - 1))
-    end, pre = c.at(1.0), c.at(0.96)
-    nose = (end[0] + (end[0] - pre[0]) * 1.6, end[1] + (end[1] - pre[1]) * 1.6)
-    if side == 'right':
-        tip_round = catmull([right[-1], nose, left[-1]], step=0.6)
-        root_pts = right[k0:] + tip_round[1:]
-    else:
-        tip_round = catmull([left[-1], nose, right[-1]], step=0.6)
-        root_pts = left[k0:] + tip_round[1:]
-    root = Curve(root_pts, step=0.5)
-    edge = Curve(fan_edge, step=0.5)
-    # rays: fine, bowed a little, starting just off the lobe
-    for i in range(rays):
-        u = (i + 0.5) / rays
-        a, b = root.at(u), edge.at(u)
-        a = lerp(a, b, 0.05)
+# ---------------------------------------------------------------- fins
+
+def rays(bases, tips, w=0.8, keep=ALL, bow=0.6, margin_w=1.1, faint=False):
+    """Fin rays from each base to its tip, slightly bowed, and the fringed margin through the tips."""
+    def draw(pts, ww, **kw):
+        if faint:
+            ink(pts, ww, faint=0.62, **kw)
+        else:
+            for run in runs(pts, keep):
+                if len(run) > 1:
+                    pen.line(run, w=ww, **kw)
+    for a, b in zip(bases, tips):
+        if dist(a, b) < 2.5:
+            continue
         m = lerp(a, b, 0.5)
-        tx, ty = b[0] - a[0], b[1] - a[1]
-        L = math.hypot(tx, ty) or 1
-        bow = 1.2 + G(0.5)
-        m = (m[0] + ty / L * bow, m[1] - tx / L * bow)
-        for run in runs(catmull([a, m, b], step=1.2), keep):
-            pen.line(run, w=0.75 * weight * R(0.9, 1.1), hand=0.25, lift=0.03, piece=(14, 40))
-    # the fan's margin, finely frayed
-    for run in runs(edge.part(0, 1), keep):
-        pen.line(run, w=1.25 * weight, hand=0.5, lift=0.2, piece=(6, 16))
-    # the lobe: front edge, hind edge, rounded end
-    for s_, wt in ((left, w_out), (right, w_out * 0.9)):
-        for run in runs(s_, keep):
-            pen.line(run, w=wt * weight, hand=0.5, lift=0.05)
-    for run in runs(tip_round, keep):
-        pen.line(run, w=w_out * 0.8 * weight, hand=0.3, lift=0)
-    if base_arc:
-        for run in runs(catmull([left[0], base_arc, right[0]], step=1.0), keep):
-            pen.line(run, w=1.1 * weight, hand=0.4, lift=0.15, piece=(8, 20))
-    # small scales on the lobe: a light lattice of short strokes
-    L = c.L
-    for fam in (1, -1):
-        for j in range(-8, int(L / scale) + 8):
-            pts = []
-            for q in range(25):
-                v = -0.9 + 1.8 * q / 24
-                t = (j * scale + fam * v * scale * 0.85) / L
-                if 0.05 < t < 0.9:
-                    x, y = c.at(t)
-                    nx, ny = c.normal(t)
-                    w = float(np.interp(t, np.linspace(0, 1, len(widths)), widths)) / 2
-                    vv = math.sin(v * math.pi / 2)
-                    pts.append((x + nx * w * vv, y + ny * w * vv))
-                elif pts:
-                    break
-            if len(pts) > 2:
-                for run in runs(pts, keep):
-                    pen.line(run, w=0.72 * weight, hand=0.25, lift=0.35, piece=(5, 11))
-    lobe_poly = left + tip_round[::-1][1:-1] + list(reversed(right))
-    fan_poly = root_pts + list(reversed(fan_edge))
-    return lobe_poly, fan_poly
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(dx, dy)
+        bb = G(bow)
+        m = (m[0] - dy / L * bb, m[1] + dx / L * bb)
+        draw(catmull([lerp(a, b, 0.04), m, b], step=1.2), w * R(0.9, 1.1), hand=0.15, lift=0.03, piece=(14, 40))
+    draw(catmull(tips, step=1.0), margin_w, hand=0.4, lift=0.3, piece=(4, 12))
 
 
-# ---------------------------------------------------------------- 1. near pectoral fin (in front)
-
-def prop_fin(S, E, W, widths, back, front, drop, rays=24, weight=1.0, keep=ALL, w_out=1.9, base_arc=None):
-    """A lobed fin used as a prop: a scaled fleshy stalk from the shoulder S through
-    E to W on the mud, ending in a fan of fin rays spread flat around W (from `back`
-    units behind it to `front` units ahead, bulging `drop` units toward us)."""
-    k1 = lerp(S, E, 0.55)
-    k2 = lerp(E, W, 0.45)
-    center = catmull([S, k1, lerp(lerp(k1, E, 0.6), lerp(E, k2, 0.4), 0.5), k2, W], step=1.0)
-    c, left, right = band(center, widths)
-    end, pre = c.at(1.0), c.at(0.95)
-    nose = (end[0] + (end[0] - pre[0]) * 1.2, end[1] + (end[1] - pre[1]) * 1.2)
-    tip_round = catmull([right[-1], nose, left[-1]], step=0.6)
-    # fan root: hind edge of the stalk's last third, round the tip, up the front edge a little
-    k0 = int(0.62 * (len(right) - 1))
-    k1 = int(0.88 * (len(left) - 1))
-    root_pts = right[k0:] + tip_round[1:-1] + list(reversed(left[k1:]))
-    root = Curve(root_pts, step=0.5)
-    gy = W[1] + 3
-    margin = catmull([(W[0] - back, gy - 6), (W[0] - back * 0.7, gy + drop * 0.55), (W[0] - back * 0.2, gy + drop),
-                      (W[0] + front * 0.35, gy + drop * 0.95), (W[0] + front * 0.8, gy + drop * 0.45), (W[0] + front, gy - 5)], step=1.0)
-    edge = Curve(margin, step=0.5)
-    for i in range(rays):
-        u = (i + 0.5) / rays
-        a, b = root.at(u), edge.at(u)
-        a = lerp(a, b, 0.04)
-        m = lerp(a, b, 0.5)
-        tx, ty = b[0] - a[0], b[1] - a[1]
-        L = math.hypot(tx, ty) or 1
-        bow = 1.0 + G(0.5)
-        m = (m[0] + ty / L * bow, m[1] - tx / L * bow)
-        for run in runs(catmull([a, m, b], step=1.2), keep):
-            pen.line(run, w=0.75 * weight * R(0.9, 1.1), hand=0.25, lift=0.03, piece=(14, 40))
-    for run in runs(margin, keep):
-        pen.line(run, w=1.25 * weight, hand=0.5, lift=0.2, piece=(6, 16))
-    for s_, wt in ((left, w_out), (right, w_out * 0.92)):
-        for run in runs(s_, keep):
-            pen.line(run, w=wt * weight, hand=0.5, lift=0.05)
-    for run in runs(tip_round, keep):
-        pen.line(run, w=w_out * 0.7 * weight, hand=0.3, lift=0)
-    if base_arc:
-        for run in runs(catmull([left[0], base_arc, right[0]], step=1.0), keep):
-            pen.line(run, w=0.95 * weight, hand=0.4, lift=0.25, piece=(8, 20))
-    # small scales on the stalk
-    L = c.L
-    sc = 13.0
-    for fam in (1, -1):
-        for j in range(-8, int(L / sc) + 8):
-            pts = []
-            for q in range(25):
-                v = -0.9 + 1.8 * q / 24
-                t = (j * sc + fam * v * sc * 0.85) / L
-                if 0.04 < t < 0.8:
-                    x, y = c.at(t)
-                    nx, ny = c.normal(t)
-                    w = float(np.interp(t, np.linspace(0, 1, len(widths)), widths)) / 2
-                    vv = math.sin(v * math.pi / 2)
-                    pts.append((x + nx * w * vv, y + ny * w * vv))
-                elif pts:
-                    break
-            if len(pts) > 2:
-                for run in runs(pts, keep):
-                    pen.line(run, w=0.66 * weight, hand=0.25, lift=0.45, piece=(5, 11))
-    lobe_poly = left + tip_round[::-1][1:-1] + list(reversed(right))
-    fan_poly = root_pts + list(reversed(margin))
-    return lobe_poly, fan_poly
+def limb_shade(left, right, f0, f1, spacing=4.8, w=0.85, keep=ALL, t0=0.0, t1=1.0):
+    """Shade strokes across a limb, from fraction f0 to f1 of the way from its left to its right edge."""
+    c = Curve(left, step=1.0)
+    n = max(1, int(c.L * (t1 - t0) / spacing))
+    N = len(left) - 1
+    for k in range(n):
+        t = t0 + (t1 - t0) * (k + 0.5 + G(0.1)) / n
+        i = min(N, max(0, int(t * N)))
+        a = lerp(left[i], right[i], f0 + G(0.03))
+        b = lerp(left[i], right[i], f1)
+        for run in runs([a, lerp(a, b, 0.5), b], keep):
+            if len(run) > 1:
+                pen.line(run, w=w * R(0.9, 1.1), hand=0.15, lift=0)
 
 
-P_S, P_E, P_W = (701, 498), (690, 543), (712, 581)
-P_WIDTHS = [52, 44, 34, 25]
-for poly in prop_fin(P_S, P_E, P_W, P_WIDTHS, 54, 72, 19, rays=32, base_arc=(703, 468)):
+def limb_scales(left, right, f0, f1, size=11.0, w=0.75, keep=ALL, t0=0.08, t1=0.9):
+    """Small scales on a fin lobe: short arcs, staggered in rows."""
+    c = Curve(left, step=1.0)
+    n = max(1, int(c.L * (t1 - t0) / size))
+    N = len(left) - 1
+    rows = max(1, int((f1 - f0) * dist(left[N // 2], right[N // 2]) / (size * 0.7)))
+    for j in range(n):
+        for r in range(rows):
+            t = t0 + (t1 - t0) * (j + 0.5 + (0.5 if r % 2 else 0)) / n
+            if t > t1:
+                continue
+            i = min(N, int(t * N))
+            i2 = min(N, i + max(1, int(N * size * 0.28 / c.L)))
+            f = f0 + (f1 - f0) * (r + 0.5) / rows
+            p0 = lerp(left[i], right[i], f - 0.07)
+            pm = lerp(left[i2], right[i2], f)
+            p1 = lerp(left[i], right[i], f + 0.07)
+            for run in runs(catmull([p0, pm, p1], step=1.0), keep):
+                if len(run) > 1:
+                    pen.line(run, w=w * R(0.9, 1.1), hand=0.1, lift=0)
+
+
+def paired(post, ant, n=120):
+    """Two edges of a lobe resampled to matching points (left = front edge, right = hind edge)."""
+    a, b = Curve(ant, step=0.6), Curve(post, step=0.6)
+    return [a.at(k / n) for k in range(n + 1)], [b.at(k / n) for k in range(n + 1)]
+
+
+SH = body(t_at_x(692), -0.62)
+
+
+def pectoral(shift=(0, 0), scale=1.0, weight=1.0, front=True):
+    """The pectoral fin, a fleshy lobe: back from the shoulder to the elbow, then forward and down
+    to the wrist, its outer part flexed flat on the mud. Rays fringe its hind edge and splay
+    forward from its end over the mud."""
+    ox, oy = SH[0] + shift[0], SH[1] + shift[1]
+    scale *= 1.2
+    sy_ = (ground_y(ox + 40 * scale) + shift[1] - oy - 1.0) / 72.0
+
+    def P(dx, dy):
+        return (ox + dx * scale, oy + dy * sy_)
+
+    POST = catmull([P(-24, -4), P(-33, 12), P(-37, 30), P(-31, 46), P(-15, 58.5), P(4, 67), P(28, 71.5), P(48, 72.5),
+                    P(62, 70.5)], step=1.0)
+    ANT = catmull([P(22, -2), P(15, 14), P(9, 28), P(11, 40), P(21, 49.5), P(36, 56.5), P(51, 62), P(62, 70.5)], step=1.0)
+    left, right = paired(POST, ANT)
+    N = len(left) - 1
+    ground = lambda x: ground_y(x) + shift[1]
+
+    # the fringe on the hind edge, elbow to wrist: rays leaning toward the wrist, longer toward it
+    pc = Curve(POST, step=0.5)
+    bases, tips = [], []
+    u0, u1 = 0.3, 0.66
+    nr = int((u1 - u0) * pc.L / 3.4)
+    for k in range(nr):
+        u = u0 + (u1 - u0) * (k + 0.5) / nr
+        a = pc.at(u)
+        nx, ny = pc.normal(u)          # left of travel along the hind edge: outward, away from the lobe
+        tx, ty = pc.tangent(u)
+        Lr = (8 + 12 * (k / nr)) * R(0.9, 1.1) * scale
+        d = (nx * 0.62 + tx * 0.78, ny * 0.62 + ty * 0.78)
+        b = (a[0] + d[0] * Lr, a[1] + d[1] * Lr)
+        b = (b[0], min(b[1], ground(b[0]) - 0.5))
+        bases.append(a)
+        tips.append(b)
+    # the fan over the mud, from the flexed outer part: seen low, so flattened
+    ac = Curve(ANT, step=0.5)
+    fan_b, fan_t = [], []
+    C = P(38, 66)
+    a0 = 0.5
+    nf = int((1 - a0) * ac.L / 1.9)
+    for k in range(nf):
+        u = (k + 0.5) / nf
+        a = ac.at(a0 + (1 - a0) * u)
+        phi = math.radians(-58 + 100 * u)
+        Lx, Ly = (60 - 8 * u) * scale * R(0.96, 1.04), 24 * scale * R(0.96, 1.04)
+        b = (C[0] + math.cos(phi) * Lx, C[1] + math.sin(phi) * Ly)
+        fan_b.append(a)
+        fan_t.append(b)
+    # and a few short rays round the end, on the near side
+    for k in range(5):
+        a = pc.at(0.86 + 0.13 * k / 5)
+        b = (a[0] + 4 + 3 * k, a[1] + 7 - k * 0.6)
+        fan_b.append(a)
+        fan_t.append(b)
+    fan_t_margin = fan_t[:nf]
+
+    def draw_rays():
+        rays(fan_b[:nf], fan_t_margin, w=0.82 * weight, margin_w=1.15 * weight)
+        rays(fan_b[nf:], fan_t[nf:], w=0.8 * weight, margin_w=0.8 * weight)
+        rays(bases, tips, w=0.8 * weight, margin_w=1.05 * weight)
+
+    if not front:
+        # the far fin: only its fan shows, spread on the mud beyond the near one
+        rays(fan_b[:nf], fan_t_margin, w=0.8 * weight, margin_w=1.05 * weight)
+        return []
+    draw_rays()
+    # the lobe
+    stroke(ANT, w=2.0 * weight, hand=0.5, lift=0.03)
+    stroke(POST, w=2.5 * weight, hand=0.5, lift=0.03)
+    # its root on the chest
+    stroke(catmull([P(-24, -4), P(-10, -16), P(8, -17), P(22, -2)], step=1.0), w=1.4 * weight, hand=0.4, lift=0.12)
+    # the hind half and the underside in shadow; the lit front with small scales
+    limb_shade(left, right, 0.45, 0.97, w=0.95 * weight, t0=0.02, t1=0.97)
+    limb_shade(left, right, 0.72, 0.97, w=0.95 * weight, t0=0.04, t1=0.92, spacing=4.8)
+    limb_scales(left, right, 0.08, 0.42, size=10.0, w=0.78 * weight, t0=0.04, t1=0.8)
+    # the elbow's crease, on the inside of the bend
+    stroke(catmull([P(8, 29), P(0, 33), P(-9, 40)], step=1.0), w=1.0 * weight, hand=0.2, lift=0)
+    lobe = POST + ANT[::-1]
+    return [lobe, POST[int(len(POST) * u0):int(len(POST) * u1)] + tips[::-1], ANT[int(len(ANT) * a0):] + fan_t_margin[::-1]]
+
+
+# ---------------------------------------------------------------- 1. near pectoral fin (in front of everything)
+
+for poly in pectoral():
     pen.occlude(poly)
 
 
-# near pelvic fin on the slope: a smaller lobed fin, pressed back against the mud
-PV = body(T_PELVIC, -0.55)
-PV_C = catmull([PV, (PV[0] - 20, PV[1] + 13), (PV[0] - 38, PV[1] + 20)], step=1.0)
-PV_FAN = catmull([(PV[0] - 12, PV[1] + 26), (PV[0] - 30, PV[1] + 35), (PV[0] - 52, PV[1] + 36), (PV[0] - 68, PV[1] + 28),
-                  (PV[0] - 70, PV[1] + 17)], step=1.0)
-for poly in lobed_fin(PV_C, [30, 24, 16], 0.3, PV_FAN, rays=16, weight=0.85, w_out=1.7, scale=9.0, side='left'):
-    pen.occlude(poly)
+# ---------------------------------------------------------------- 2. near pelvic fin, robust, swept back at the waterline
+
+def pelvic():
+    P0 = body(t_at_x(474), -0.6)
+
+    def P(dx, dy):
+        return (P0[0] + dx * 1.3, P0[1] + dy * 1.25)
+
+    # a stout lobe swept back along the flank, its end down at the water
+    ANT = catmull([P(14, -2), P(9, 14), P(-2, 27), P(-20, 36), P(-38, 41), P(-50, 42)], step=1.0)  # lower, leading edge
+    POST = catmull([P(-16, -8), P(-25, 2), P(-36, 12), P(-46, 21), P(-53, 28)], step=1.0)          # upper, trailing edge
+    CAP = catmull([P(-53, 28), P(-59, 35), P(-50, 42)], step=0.8)                                   # its rounded end
+    left, right = paired(POST, ANT)
+    # rays fringe the trailing edge and splay back from the end
+    pc = Curve(POST, step=0.5)
+    bases, tips = [], []
+    nr = int(pc.L * 0.75 / 3.2)
+    for k in range(nr):
+        u = 0.25 + 0.75 * (k + 0.5) / nr
+        a = pc.at(u)
+        nx, ny = pc.normal(u)
+        tx, ty = pc.tangent(u)
+        Lr = (10 + 22 * u) * R(0.9, 1.08)
+        d = (-nx * 0.55 + tx * 0.83, -ny * 0.55 + ty * 0.83)
+        bases.append(a)
+        tips.append((a[0] + d[0] * Lr, a[1] + d[1] * Lr))
+    cc = Curve(CAP, step=0.5)
+    for k in range(12):
+        u = (k + 0.5) / 12
+        a = cc.at(u)
+        ang = math.radians(150 + 55 * u)
+        L = 26 * R(0.92, 1.06)
+        bases.append(a)
+        tips.append((a[0] + math.cos(ang) * L, a[1] - math.sin(ang) * L * 0.8))
+    rays(bases, tips, w=0.8, faint=True)
+    ink(ANT, w=2.2, faint=0.7, hand=0.5, lift=0.03)
+    ink(POST, w=1.9, faint=0.7, hand=0.5, lift=0.03)
+    ink(CAP, w=1.8, faint=0.7, hand=0.3, lift=0)
+    limb_shade(left, right, 0.02, 0.5, w=0.9, t0=0.06, t1=0.95, keep=dry)
+    limb_scales(left, right, 0.55, 0.92, size=8.5, w=0.72, t0=0.1, t1=0.8, keep=dry)
+    return [POST + CAP[1:-1] + ANT[::-1], POST + tips[:nr][::-1], CAP + tips[nr:][::-1]]
 
 
-# ---------------------------------------------------------------- 2. head
+for poly in pelvic():
+    pen.occlude(poly_clip_below(poly, lambda x: water_y(x) + 6))
 
-stroke(HEAD_TOP, w=2.4, lift=0.1)
-stroke(UPPER_LIP, w=1.7, lift=0.08)
-stroke(JAW_LOW, w=2.3, lift=0.08)
-stroke(NECK_TOP, w=2.3, lift=0.05)
-stroke(NECK_BOT, w=2.2, lift=0.05)
 
-# near eye, high on the flat skull; the orbit rim rises above the roof line
+# ---------------------------------------------------------------- 3. head
+
+stroke(HEAD_TOP, w=2.4, lift=0.08)
+stroke(UPPER_LIP, w=1.7, lift=0.06)
+stroke(JAW_LOW, w=2.6, lift=0.06)
+stroke(NECK_TOP, w=2.4, lift=0.04)
+stroke(NECK_BOT, w=2.7, lift=0.04)
+
+# eye, high on the flat skull in a raised socket
 EYE = hp(88, 37.5)
-pen.ellipse(EYE[0], EYE[1], 13.0, 10.0, rot=-H_ANGLE, w=1.6)
+pen.ellipse(EYE[0], EYE[1], 13.0, 10.0, rot=-H_ANGLE, w=1.7)
 pen.ellipse(EYE[0] + 0.6, EYE[1] + 0.6, 8.2, 6.6, rot=-H_ANGLE, w=1.0)
 pen.blot(EYE[0] + 1.6, EYE[1] + 0.8, 4.5, 4.0, w=1.8)
-# lid crease under the eye, and the near edge of the flat skull roof
-stroke(hc([(70, 31.5), (78, 27.5), (90, 26.5), (102, 29), (108, 33.5)], step=1.0), w=0.9, hand=0.3)
-stroke(hc([(8, 33), (30, 34.5), (60, 35.5)], step=1.0), w=0.95, hand=0.4)
-stroke(hc([(116, 35), (140, 31), (164, 24.5), (184, 16), (197, 7)], step=1.0), w=0.95, hand=0.4)
-# spiracle: a slit at the back corner of the skull roof
-stroke(hc([(5, 29.5), (13, 31), (21, 29.5)], step=0.7), w=1.7, hand=0.1)
-# nostril
+# the near edge of the flat skull roof; the roof lit, with a few sutures between its plates
+stroke(hc([(-8, 32.5), (30, 34.5), (64, 35)], step=1.0), w=1.0, hand=0.4)
+stroke(hc([(114, 35), (140, 31), (164, 24.5), (184, 16), (197, 7)], step=1.0), w=1.0, hand=0.4)
+for (u, v0, v1) in [(22, 34.5, 39.5), (46, 35, 41), (130, 32.5, 37.5), (158, 26, 30.5)]:
+    stroke([hp(u, v0), hp(u + 2.5, v1)], w=0.8, hand=0.2, lift=0)
+# spiracle slit at the back corner of the roof; nostril
+stroke(hc([(6, 29.5), (13, 31), (20, 29.5)], step=0.7), w=1.6, hand=0.1)
 EN = hp(191, 1.5)
 pen.ellipse(EN[0], EN[1], 3.2, 2.1, rot=-H_ANGLE + 0.3, w=1.0)
 
-# back edge of the skull roof and cheek (no gill cover behind it: the neck)
-stroke(hc([(0, 37), (-2, 22), (-3, 6), (-2, -6)], step=1.0), w=1.5, lift=0.08, taper=0.4)
-stroke(hc([(2, -24), (4, -33), (8, -41)], step=1.0), w=1.3, lift=0)
-# cheek: one plate margin curving down behind the eye
-stroke(hc([(64, 24), (56, 8), (46, -4), (34, -12)], step=1.0), w=0.8, hand=0.5, lift=0.3)
-# infraorbital sensory canal: a row of pores under the eye
-for p in resample(hc([(186, 4), (160, 8), (134, 13), (110, 17), (86, 18), (62, 16), (40, 12), (20, 4)], step=1.0), 7.5):
-    pen.dot(p[0], p[1], r=0.85, w=0.8)
-# mandibular canal along the lower jaw
-for p in resample(hc([(180, -13.5), (150, -19.5), (118, -25), (84, -30), (50, -34.5)], step=1.0), 8.0):
+stroke(hc([(68, 29), (78, 25), (90, 24), (102, 26), (110, 30.5)], step=1.0), w=1.1, hand=0.3)
+# the cheek: bony plates, each hatched in its own direction, darker low on the head; the maxilla a
+# dark band along the lip
+def plate(pts, angle, spacing, w, skip=0.0, shrink=(0.04, 0.14)):
+    poly = [hp(u, v) for u, v in catmull(pts, closed=True, step=2.0)]
+    pen.hatch(poly, angle=angle - math.degrees(H_ANGLE), spacing=spacing, w=w, skip=skip, shrink=shrink, hand=0.3)
+
+
+MAX_TOP = lambda u: lip_v(u) + 8.5
+plate([(4, 28.5), (26, 30), (52, 28), (56, 16), (48, MAX_TOP(48) + 1), (24, MAX_TOP(24) + 1), (2, MAX_TOP(2) + 1),
+       (-4, 10)], 62, 5.0, 1.05)                                               # squamosal, behind the eye
+plate([(60, 16), (72, 21), (90, 22), (106, 20), (118, 14), (116, MAX_TOP(116) + 1), (88, MAX_TOP(88) + 1),
+       (58, MAX_TOP(58) + 1)], -55, 5.0, 0.98)                                 # jugal, under the eye
+plate([(124, 22), (146, 24), (170, 17), (184, 8), (180, MAX_TOP(180) + 1), (150, MAX_TOP(150) + 1),
+       (124, MAX_TOP(124) + 1)], 40, 6.0, 0.78, skip=0.15)                     # lacrimal, before the eye
+# sutures between them
+for pts in ([(56, 28), (56, 16), (50, MAX_TOP(50))],
+            [(118, 24), (120, 14), (120, MAX_TOP(120))]):
+    stroke(hc(pts, step=1.0), w=0.85, hand=0.3, lift=0.15)
+# the maxilla: short strokes across the strip above the lip
+for k in range(40):
+    u = 4 + k * 4.7
+    if u > 188:
+        break
+    stroke([hp(u + 0.8, MAX_TOP(u) - 0.8), hp(u - 0.8, lip_v(u) + 1.6)], w=0.9, hand=0.1, lift=0)
+# the lower jaw dark underneath: strokes across it, a long line low along it
+for k in range(46):
+    u = -12 + k * 4.6
+    if u > 194:
+        break
+    lo, hi = jaw_v(max(u, 0)), lip_v(max(u, 0))
+    top = lo + (hi - lo) * (0.88 if k % 2 else 0.6) * R(0.9, 1.0)
+    if u < 0 and R() > 1 + u / 16:
+        continue
+    stroke([hp(u + 1.2, lo + 0.8), hp(u - 1.2, top)], w=1.05 if k % 2 else 1.2, hand=0.1, lift=0)
+pen.line([hp(u, jaw_v(u) + 5.0) for u in np.linspace(4, 186, 80)], w=1.05, hand=0.3, lift=0.25, piece=(10, 30))
+# the neck: strokes across it, from the back of the skull to the first scales, darker below
+NECK_U = Curve(NECK_TOP, step=0.5)
+NECK_L = Curve(NECK_BOT, step=0.5)
+for k in range(5):
+    f = (k + 0.5) / 5
+    a = lerp(DORSAL[-1], hp(0, 37), f)
+    b = lerp(VENTRAL[-1], hp(6, -44.5), f)
+    a = lerp(a, b, 0.3 + 0.25 * R())
+    stroke([a, lerp(a, b, 0.5), lerp(a, b, 0.96)], w=0.7 + 0.15 * R(), hand=0.3, lift=0.1, piece=(20, 40))
+    if k % 2:
+        c = lerp(lerp(DORSAL[-1], hp(0, 37), f), b, 0.08)
+        stroke([c, lerp(c, b, 0.18)], w=0.8, hand=0.2, lift=0)
+# throat and the underside of the neck in shadow, carried on from the jaw
+for k in range(8):
+    u = -4 - k * 4.8
+    stroke([hp(u, jaw_v(0) - 2 + k * 0.6), hp(u + 2.0, jaw_v(0) + 16 - k * 0.8)], w=0.95, hand=0.2, lift=0)
+# bony pitting on the roof and cheek
+for (u, v) in [(10, 36), (34, 37), (56, 38), (124, 34), (146, 29), (170, 21), (186, 12),
+               (140, 10), (160, 6), (176, 2)]:
+    p = hp(u + G(1.2), v + G(1.0))
+    pen.dot(p[0], p[1], r=0.7, w=0.75)
+# sensory canal pores along the jaw
+for p in resample(hc([(180, -14.5), (150, -20.5), (118, -26), (84, -31), (50, -35.5), (20, -38)], step=1.0), 8.0):
     pen.dot(p[0], p[1], r=0.8, w=0.75)
-# teeth: small cones along the upper jaw, with two fangs
+# teeth along the upper jaw, two fangs
 lip = Curve(UPPER_LIP, step=0.5)
 for k in range(17):
     t = 0.035 + k * 0.055
@@ -403,49 +550,22 @@ for k in range(17):
     L = 7.0 if k in (1, 5) else R(3.5, 4.8)
     dx, dy = -H_UP[0], -H_UP[1]
     stroke([(x - 1.6 * H_DIR[0], y - 1.6 * H_DIR[1]), (x + dx * L + 0.5 * H_DIR[0], y + dy * L + 0.5 * H_DIR[1]),
-            (x + 1.6 * H_DIR[0], y + 1.6 * H_DIR[1])], w=0.9, hand=0, lift=0)
-# the lower jaw rounded in shade: contour lines along it
-for f, (u0, u1), wt in ((0.2, (14, 186), 0.8), (0.4, (24, 168), 0.72)):
-    pts = []
-    for u in np.linspace(u0, u1, 50):
-        bot = float(np.interp(u, [2, 10, 24, 52, 86, 122, 158, 186, 201], [-42, -44.5, -44, -41, -36, -30, -23.5, -16, -9]))
-        top = float(np.interp(u, [36, 58, 90, 125, 160, 190], [-18.5, -18, -16.5, -14.5, -12, -9]))
-        if u < 36:
-            top = -18.5 + (36 - u) * 0.1
-        pts.append(hp(u, bot + (top - bot) * f))
-    pen.line(pts, w=wt, hand=0.4, lift=0.25, piece=(10, 30))
-# shade low on the cheek: short strokes rising from the lip, following the head
-for k in range(15):
-    u = 16 + k * 7.5 + G(1.0)
-    if R() < 0.2:
-        continue
-    lo = float(np.interp(u, [36, 58, 90, 125], [-18.5, -18, -16.5, -14.5])) if u >= 36 else -18.5
-    hi = lo + R(6, 11) * (1.0 - 0.4 * k / 15)
-    stroke([hp(u + 2.5, lo + 2.5), hp(u - 2.0, hi)], w=0.62, hand=0.15, lift=0)
-
-# bony pitting
-for (u, v) in [(10, 8), (20, -12), (24, 12), (48, -8), (60, 4), (70, -10), (98, 6), (112, -6), (140, 2), (152, -6),
-               (166, 4), (176, 10), (130, 22), (150, 20), (60, 26)]:
-    p = hp(u + G(1.2), v + G(1.2))
-    pen.dot(p[0], p[1], r=0.7, w=0.7)
-
-# the neck: small folds where it bends, at top and bottom
-for a, m, b in ((hp(-10, 33), hp(-13, 25), hp(-12, 17)), (hp(-12, -37), hp(-15, -30), hp(-14, -23))):
-    stroke(catmull([a, m, b], step=1.0), w=0.8, hand=0.3, lift=0)
+            (x + 1.6 * H_DIR[0], y + 1.6 * H_DIR[1])], w=0.95, hand=0, lift=0)
 
 
-# ---------------------------------------------------------------- 3. trunk and tail
+# ---------------------------------------------------------------- 4. trunk and tail
 
-stroke(DORSAL[60:], w=2.4, lift=0.08)
-stroke(DORSAL[:64], w=1.8, taper=0.5, lift=0.08)
-for run in runs(VENTRAL, dry):
-    stroke(run, w=2.3, lift=0.08)
+# contours: heavy, the belly heaviest
+ink(DORSAL[80:], w=2.4, lift=0.06)
+ink(DORSAL[:86], w=1.5, taper=0.4, lift=0.06, faint=0.0)
+ink(VENTRAL[70:], w=2.9, lift=0.04)
+ink(VENTRAL[:76], w=1.5, taper=0.4, lift=0.06)
 
-
-# ---- rhombic scales: a lattice in (sigma, theta), sized with the body
-ts = np.linspace(0, 1, 801)
+# ---- rhombic scales in rows along the body, their hind margins slanting in oblique rows. Rows are
+# lines of constant theta; each scale is a parallelogram whose hind margin is a short heavy stroke.
+ts = np.linspace(0, 1, 1001)
 hs = np.array([sum(depth(t)) / 2 for t in ts])
-sig = np.concatenate([[0.0], np.cumsum(np.diff(ts) * SPINE.L / np.maximum(hs[1:], 5.0))])
+sig = np.concatenate([[0.0], np.cumsum(np.diff(ts) * SPINE.L / np.maximum(hs[1:], 7.0))])
 
 
 def t_of_sigma(s):
@@ -456,241 +576,253 @@ def flank(s, th):
     return body(t_of_sigma(s), math.sin(th * math.pi / 2) * 0.985)
 
 
-M = 5.0          # slant of the scale rows (edges at about 50 degrees to the body axis)
-DELTA = 0.46     # scale length, in body half-depths
-SIG_LO = float(np.interp(t_at_x(285), ts, sig))
-SIG_HI = float(np.interp(0.985, ts, sig))
-HB = DELTA / M * 2  # half a scale's height, in theta
+NROWS = 14
+DELTA = 0.32
+SLANT = 0.32 * DELTA
+SIG_LO = float(np.interp(t_at_x(250), ts, sig))
+SIG_HI = float(np.interp(1.0, ts, sig))
+
+
+def tone(th, s):
+    """Light falls from above: the back pale, the lower flank and belly in a dark band."""
+    base = 0.62 - 0.56 * th
+    if s > SIG_HI - 2.4 and th < 0.4:
+        base += 0.15 * min(1.0, (s - SIG_HI + 2.4) / 1.2)
+    return min(1.0, max(0.0, base))
 
 
 def in_scales(s, th):
-    return SIG_LO <= s <= SIG_HI and -1.0 <= th <= 1.0
+    return SIG_LO <= s <= SIG_HI + 0.02 and -1.0 <= th <= 1.0
 
 
-KR = range(int(SIG_LO / DELTA) - 40, int(SIG_HI / DELTA) + 40)
-
-# scale rows ("/": down and back from the back), drawn through, fading out high on the back
-for k in KR:
+def lat(a, b, n=6):
     pts = []
-    for q in range(61):
-        th = -1 + 2 * q / 60
-        s_ = k * DELTA + th * DELTA / HB
+    for q in range(n + 1):
+        s_, th = lerp(a, b, q / n)
         if in_scales(s_, th):
-            pts.append((s_, th))
-    if len(pts) < 3:
-        continue
-    th_top = 0.6 + G(0.14)
-    s_cut = SIG_LO + R(0.0, 3.0) * DELTA
-    seg = [flank(s_, th) for s_, th in pts if th < th_top and s_ > s_cut]
-    if len(seg) < 3:
-        continue
-    for run in runs(seg, dry):
-        if len(run) > 3:
-            pen.line(run, w=R(0.82, 0.95), hand=0.3, lift=0.12, piece=(12, 26), taper=0.2)
+            pts.append(flank(s_, th))
+    return pts
 
-# the other edges ("\"), one scale at a time, lower down the flank only
-for ka in KR:
-    for kb in KR:
-        s0 = (ka + kb) * DELTA / 2
-        th0 = (kb - ka) * HB / 2
-        if not (-1.3 < th0 < 0.6) or not (SIG_LO - DELTA < s0 < SIG_HI + DELTA):
-            continue
-        ds, dth = DELTA / 2, -HB / 2
-        pts = []
-        for q in range(9):
-            f = 0.1 + 0.8 * q / 8
-            s_, th = s0 + ds * f, th0 + dth * f
-            if in_scales(s_, th):
-                pts.append(flank(s_, th))
-        if len(pts) < 3:
-            continue
-        thm = th0 + dth / 2
-        if thm > 0.1 and R() < (thm - 0.1) * 2.6:
-            continue
-        if R() < 1.0 - (s0 - SIG_LO) / (3.5 * DELTA):
-            continue
-        for run in runs(pts, dry):
-            if len(run) > 2 and dist(run[0], run[-1]) > 3:
-                pen.line(run, w=0.78 * R(0.92, 1.08), hand=0.3, lift=0, piece=(30, 60))
 
-# shade: in each scale low on the flank, a short stroke inside its lower edge
-for ka in KR:
-    for kb in KR:
-        sc = (ka + kb) * DELTA / 2 + DELTA / 2
-        thc = (kb - ka) * HB / 2
-        if not (-0.98 < thc < -0.15) or not (SIG_LO + DELTA * 2.5 < sc < SIG_HI - DELTA * 0.5):
+def scale_ink(pts, w):
+    for run in runs(pts, dry):
+        if len(run) > 2 and dist(run[0], run[-1]) > 1.8:
+            pen.line(run, w=w * R(0.92, 1.08), hand=0.15, lift=0, piece=(40, 80))
+
+
+for k in range(NROWS):
+    th0 = -1 + 2 * k / NROWS
+    th1 = -1 + 2 * (k + 1) / NROWS
+    thm = (th0 + th1) / 2
+    shift = (k % 2) * DELTA * 0.5
+    j0 = int((SIG_LO - shift) / DELTA) - 1
+    j1 = int((SIG_HI - shift) / DELTA) + 2
+    for j in range(j0, j1):
+        s0 = j * DELTA + shift + G(0.012)
+        tn = tone(thm, s0)
+        fade = min(1.0, (s0 - SIG_LO) / (2.0 * DELTA)) * min(1.0, (SIG_HI + 0.25 - s0) / 0.4)
+        if R() > fade:
             continue
-        bottom, front, cen = (sc, thc - HB / 2), (sc + DELTA / 2, thc), (sc, thc)
-        for f, lim in ((0.3, -0.15), (0.58, -0.6)):
-            if thc > lim:
-                continue
-            a_, b_ = lerp(bottom, cen, f), lerp(front, cen, f)
-            a_, b_ = lerp(a_, b_, 0.12), lerp(a_, b_, 0.88)
-            pa, pb = flank(*a_), flank(*b_)
-            if dry(pa) and dry(pb) and dist(pa, pb) > 4:
-                stroke([pa, pb], w=0.72, hand=0.15, lift=0)
+        # hind margin: from the row's lower edge up to its upper edge, leaning forward
+        a, b = (s0, th0), (s0 + SLANT, th1)
+        a_, b_ = lerp(a, b, 0.06), lerp(a, b, 0.94)
+        if tn < 0.15 and R() < 0.35:
+            continue
+        w_m = 0.9 + 1.7 * tn
+        scale_ink(lat(a_, b_), w_m)
+        # the lower edge of the scale, along the row, lighter
+        if tn > 0.2 or R() < 0.5:
+            c0, c1 = (s0 + 0.12 * DELTA, th0), (s0 + 0.88 * DELTA, th0)
+            scale_ink(lat(c0, c1, 8), 0.65 + 0.95 * tn)
+        # shade: strokes behind the margin, parallel to it, about 4.6 apart, more of them lower down
+        span = dist(flank(s0, thm), flank(s0 + DELTA, thm))
+        n_in = min(int(tn * 4.6), int(span / 4.1) - 1)
+        for i in range(1, n_in + 1):
+            f = i * 4.1 / span * DELTA
+            aa, bb = (s0 + f, th0), (s0 + f + SLANT, th1)
+            scale_ink(lat(lerp(aa, bb, 0.12), lerp(aa, bb, 0.9)), 0.66 + 0.75 * tn)
 
-# the body's roundness: broken contour lines along the belly, closer toward it, and one along the back
-for v, w_, t0, t1 in ((-0.9, 0.75, 0.3, 0.97), (-0.78, 0.72, 0.34, 0.95), (-0.64, 0.7, 0.38, 0.92), (-0.5, 0.66, 0.45, 0.88),
-                      (0.9, 0.7, 0.35, 0.9)):
-    pts = [body(t, v) for t in np.linspace(t0 + R(0, 0.03), t1 - R(0, 0.03), 300)]
-    pen.line(pts, w=w_, hand=0.4, lift=0.5, piece=(8, 28))
+# on the slim tail beyond the scales: lines along it, darker below
+for v, w_ in ((-0.72, 0.95), (-0.4, 0.8), (-0.05, 0.7), (0.35, 0.62)):
+    pts = [body(t, v) for t in np.linspace(0.03, t_of_sigma(SIG_LO + 1.5 * DELTA), 90)]
+    ink(pts, w=w_, faint=0.0, hand=0.4, lift=0.3, piece=(8, 24))
 
-# lateral line pores
-for p in resample([body(t, 0.22) for t in np.linspace(0.16, 0.97, 300)], 11.0):
+# lateral line along the mid-flank
+for p in resample([body(t, 0.24) for t in np.linspace(0.2, 0.99, 300)], 12.0):
     if dry(p):
-        pen.dot(p[0], p[1], r=0.9, w=0.8)
+        pen.dot(p[0], p[1], r=1.0, w=0.9)
 
 
-# ---- tail fin: a lancet of rays above and below the tapering tail, the lower lobe dipping in the water
-def caudal(sign, prof, n_rays, w_ray=0.75, w_edge=1.45):
-    """One lobe of the tail fin: `prof` lists (t, height) from where the fin starts to the tail tip."""
-    tip = body(0, 0)
-    tx, ty = SPINE.tangent(0.02)
-    E = (tip[0] - tx * 44, tip[1] - ty * 44 - sign * 1)
-    ts_ = [p[0] for p in prof][::-1]
-    hs_ = [p[1] for p in prof][::-1]
+# ---- the tail fin: a fringe of rays above and below the tail; body and fin together taper evenly to a
+# point behind the tip, so there is no paddle
+TAIL_TIP = body(0, 0)
+TX, TY = SPINE.tangent(0.004)
+TAIL_END = (TAIL_TIP[0] - TX * 54, TAIL_TIP[1] - TY * 54 + 1)
 
-    def margin_at(t):
-        h = float(np.interp(t, ts_, hs_))
-        p = body(t, sign)
+
+def fringe(sign, t0, h_tip, spacing=3.6):
+    """The fin along the dorsal (sign 1) or ventral (sign -1) edge of the tail, from t0 to the tip."""
+    h0 = depth(t0)[0 if sign > 0 else 1]
+
+    def total(t):
+        u = t / t0                                    # 1 where the fin starts, 0 at the tip
+        return h_tip + (h0 - h_tip) * u ** 1.15
+
+    def margin(t):
+        p = SPINE.at(t)
         nx, ny = SPINE.normal(t)
-        tx_, ty_ = SPINE.tangent(t)
-        return (p[0] + nx * h * sign - tx_ * h * 0.55, p[1] + ny * h * sign - ty_ * h * 0.55)
+        tx, ty = SPINE.tangent(t)
+        h = total(t)
+        lean = (h - depth(t)[0 if sign > 0 else 1]) * 0.8
+        return (p[0] + nx * h * sign - tx * lean, p[1] + ny * h * sign - ty * lean)
 
-    t0 = prof[0][0]
-    edge = [margin_at(t0 * k / 60) for k in range(60, -1, -1)]
-    last = edge[-1]
-    nx, ny = SPINE.normal(0.0)
-    bulge = lerp(last, E, 0.55)
-    bulge = (bulge[0] + nx * sign * 9 - tx * 4, bulge[1] + ny * sign * 9 - ty * 4)
-    edge = catmull(edge[:-6:5] + [edge[-1], bulge, E], step=1.0)
-    for i in range(n_rays):
-        t = t0 * (1 - (i + 0.6) / n_rays)
-        a = body(t, sign * 0.95)
-        b = margin_at(t)
-        if dist(a, b) < 3:
-            continue
-        m = lerp(a, b, 0.5)
-        for run in runs([a, m, b], dry):
-            pen.line(run, w=w_ray * R(0.88, 1.1), hand=0.2, lift=0.04, piece=(12, 40))
-    # rays fanning from the very tip
-    ec = Curve(edge, step=0.5)
-    t_last = ec.L - dist(last, E) * 1.15
-    for k in range(1, 7):
-        b = ec.at((t_last + (ec.L - t_last) * k / 7) / ec.L)
-        a = lerp(tip, E, 0.07 * k)
-        for run in runs([a, b], dry):
-            pen.line(run, w=w_ray * 0.9, hand=0.2, lift=0)
-    for run in runs(edge, dry):
-        pen.line(run, w=w_edge, hand=0.4, lift=0.1)
-    for run in runs(edge, wet):
-        pen.line(run, w=0.65, hand=0.8, lift=0.5, piece=(5, 12))
-    spine_part = [body(t, sign * 0.5) for t in np.linspace(0, t0, 40)]
-    return spine_part[::-1] + edge
+    n = 40
+    edge = [margin(t0 * (1 - k / n)) for k in range(n + 1)]
+    tip_side = margin(0)
+    tx, ty = SPINE.tangent(0.004)
+    nx, ny = SPINE.normal(0.004)
+    d_end = dist(TAIL_TIP, TAIL_END)
+    # the end of the fin rounds off into a soft point
+    r1 = (TAIL_TIP[0] - tx * d_end * 0.6 + nx * sign * h_tip * 0.7, TAIL_TIP[1] - ty * d_end * 0.6 + ny * sign * h_tip * 0.7)
+    r2 = (TAIL_TIP[0] - tx * d_end * 0.85 + nx * sign * h_tip * 0.35, TAIL_TIP[1] - ty * d_end * 0.85 + ny * sign * h_tip * 0.35)
+    edge = catmull(edge[::2] + [r1, r2, TAIL_END], step=1.0)
+    L_body = sum(dist(body(t0 * k / 80, sign), body(t0 * (k + 1) / 80, sign)) for k in range(80))
+    nr = int(L_body / spacing)
+    for i in range(nr):
+        t = t0 * (1 - (i + 0.5) / nr)
+        a, b = body(t, sign * 0.97), margin(t)
+        if dist(a, b) > 2.5:
+            ink([a, lerp(a, b, 0.5), b], w=0.82 * R(0.88, 1.1), faint=0.0, hand=0.15, lift=0.04, piece=(12, 40))
+    # rays on behind the tip
+    for k in range(1, 9):
+        a = lerp(TAIL_TIP, TAIL_END, 0.09 * k)
+        b = Curve(edge[-int(len(edge) * 0.3):], step=1.0).at(0.1 * k)
+        ink([a, b], w=0.78, faint=0.0, hand=0.15, lift=0)
+    ink(edge, w=1.4, faint=0.75 if sign > 0 else 0.0, hand=0.4, lift=0.15)
+    return [body(t, sign * 0.5) for t in np.linspace(t0, 0, 30)] + edge
 
 
-T_C1, T_C2 = t_at_x(372), t_at_x(350)
-CAUDAL = [caudal(1, [(T_C1, 0), (T_C1 * 0.75, 13), (T_C1 * 0.5, 27), (T_C1 * 0.28, 36), (T_C1 * 0.1, 34), (0.0, 26)], 30),
-          caudal(-1, [(T_C2, 0), (T_C2 * 0.75, 15), (T_C2 * 0.5, 31), (T_C2 * 0.28, 40), (T_C2 * 0.1, 36), (0.0, 27)], 26)]
+TAIL_FINS = [fringe(1, t_at_x(360), 19), fringe(-1, t_at_x(320), 17)]
 
 
-# everything of the animal above the water hides what lies behind it
-pen.occlude(SILHOUETTE)
-for poly in CAUDAL:
-    pen.occlude(poly)
+# ---- the waterline across the flank, with a thin lip of water against it
+for run in runs(WL, ALL):
+    stroke(run, w=1.8, hand=0.4, lift=0.12, piece=(10, 30))
+WLC = Curve(WL, step=1.0)
+for k in range(34):
+    x, y = WLC.at(0.015 + k * 0.029)
+    y += R(3.0, 4.5)
+    stroke([(x - R(5, 9), y), (x + R(5, 9), y + G(0.4))], w=1.0, hand=0.3, lift=0)
 
 
-# ---------------------------------------------------------------- 4. far pectoral fin (behind)
+# the animal hides what lies behind it, above the water
+pen.occlude(poly_clip_below(SILHOUETTE, water_y))
+for poly in TAIL_FINS:
+    pen.occlude(poly_clip_below(poly, water_y))
 
-F = (12, -7)
-prop_fin((P_S[0] + F[0], P_S[1] + F[1]), (P_E[0] + F[0], P_E[1] + F[1]), (P_W[0] + F[0], P_W[1] + F[1]),
-         P_WIDTHS, 50, 66, 14, rays=26, weight=0.78, w_out=1.7)
 
+# ---------------------------------------------------------------- 5. far pectoral fin (behind)
+
+pectoral(shift=(22, -6), scale=0.95, weight=0.8, front=False)
 
 N_FISH = len(pen.strokes)
 
-# ---------------------------------------------------------------- 5. water
+
+# ---------------------------------------------------------------- 6. the puddle
+
+PUDDLE = catmull([(84, 716), (112, 680), (180, 655), (270, 646), (370, 646), (440, 662), (470, 700), (462, 742),
+                  (410, 780), (310, 800), (200, 800), (118, 782), (88, 752)], closed=True, step=2.0)
+P_C, P_R = (280.0, 722.0), (205.0, 84.0)
 
 
-# the puddle: no hard outline, just its level water lines fading out toward the edges
-PUDDLE = catmull([(140, 715), (168, 680), (232, 656), (320, 642), (398, 640), (440, 676), (452, 718), (432, 760),
-                  (362, 790), (272, 800), (192, 788), (150, 758)], closed=True, step=2.0)
-P_CX, P_CY, P_RX, P_RY = 300.0, 722.0, 165.0, 80.0
+def in_water(p):
+    if not inside(p, PUDDLE):
+        return False
+    return p[0] < 436 or p[1] > ground_y(p[0]) + 1
+
+
+ANIMAL = [SILHOUETTE] + TAIL_FINS
+
+
+def off_animal(p):
+    return in_water(p) and not any(inside(p, a) for a in ANIMAL)
+
+
 RIPPLES = []
-for t, radii, dy_ in ((0.0, [(62, 12), (96, 18)], 14), (0.2, [(66, 12), (104, 19), (142, 25)], 8), (T_SHORE * 0.95, [(40, 7), (68, 12)], 4)):
-    cx, cy = body(t, -1.0)
-    RIPPLES.append((cx, cy + dy_, radii))
+for x, radii in ((196, [(26, 6), (48, 10)]), (316, [(40, 8), (70, 13), (100, 18)]),
+                 (418, [(34, 7), (60, 12)])):
+    t = t_at_x(x)
+    cx, cy = body(t, v_water(t))
+    RIPPLES.append((cx, cy + 3, radii))
 
 
-def ripple(cx, cy, rx, ry, w, gaps):
-    for run in runs(ellipse_pts(cx, cy, rx, ry, 0.0, 0, 2 * math.pi, step=2.0), lambda p: inside(p, PUDDLE)):
-        pen.line(run, w=w, hand=0.6, lift=gaps, piece=(8, 26))
+def near_ripple(p):
+    return any(abs(((p[0] - cx) / rx) ** 2 + ((p[1] - cy - i * 1.5) / ry) ** 2 - 1) < 0.25
+               for cx, cy, radii in RIPPLES for i, (rx, ry) in enumerate(radii))
 
 
 for (cx, cy, radii) in RIPPLES:
     for i, (rx, ry) in enumerate(radii):
-        ripple(cx + G(3), cy + i * 1.5, rx, ry, w=max(0.7, 1.25 - i * 0.2), gaps=0.25 + i * 0.1)
+        for run in runs(ellipse_pts(cx + G(2), cy + i * 1.5, rx, ry, 0.0, 0, 2 * math.pi, step=2.0), off_animal):
+            if len(run) > 2:
+                pen.line(run, w=max(0.8, 1.45 - i * 0.25), hand=0.6, lift=0.3 + i * 0.12, piece=(6, 20))
 
-
-def near_ripple(p):
-    return any(abs(((p[0] - cx) / rx) ** 2 + ((p[1] - cy - i * 1.5) / ry) ** 2 - 1) < 0.2
-               for cx, cy, radii in RIPPLES for i, (rx, ry) in enumerate(radii))
-
-
-# little wavelets where the belly lies in the water, and its dark reflection
-wl = Curve(WL, step=1.0)
-for k in range(30):
-    t = 0.40 + k * 0.025
-    if t > 0.98:
-        break
-    x, y = wl.at(t)
-    y += R(3, 5)
-    stroke([(x - R(5, 9), y), (x + R(4, 9), y + G(0.5))], w=0.9, hand=0.3, lift=0)
-    if R() < 0.7:
-        y2 = y + R(5, 9)
-        stroke([(x - R(3, 7), y2), (x + R(3, 7), y2 + G(0.5))], w=0.7, hand=0.3, lift=0)
-
-# water surface: level strokes, denser near the fish, thinning out toward the edges
-y = 646.0
-while y < 800:
-    x = 140 + R(0, 20)
-    while x < 450:
+# level strokes of the water: dense near the fish and over the sunken tail, thinning out to the edges
+y = 648.0
+while y < 802:
+    x = 86 + R(0, 18)
+    while x < 474:
         L = R(12, 34)
-        p0, p1 = (x, y + G(0.6)), (x + L, y + G(0.6))
+        p0, p1 = (x, y + G(0.5)), (x + L, y + G(0.5))
         mid = lerp(p0, p1, 0.5)
-        rr = ((mid[0] - P_CX) / P_RX) ** 2 + ((mid[1] - P_CY) / P_RY) ** 2
-        if inside(p0, PUDDLE) and inside(p1, PUDDLE) and not near_ripple(mid) and R() < 0.95 * (1 - rr) + 0.2:
-            stroke([p0, p1], w=0.65 if rr > 0.4 else 0.75, hand=0.3, lift=0)
-        x += L + R(10, 30)
-    y += R(6.0, 7.5)
-
-# where the bank slips into the water
-pen.line(catmull([(414, 704), (432, 724), (444, 748), (448, 770)], step=1.5), w=1.2, hand=0.6, lift=0.35, piece=(8, 24))
-
-
-# ---------------------------------------------------------------- 6. the muddy bank
-
-stroke(catmull(GROUND, step=2.0), w=1.9, lift=0.15)
-# hatching down the bank's face, fading downward
-for k in range(70):
-    x = 440 + k * 8.0 + G(1.5)
-    if x > 980:
-        break
-    y0 = ground_y(x) + 4
-    if R() < 0.25:
-        continue
-    L = R(6, 18) * (1.0 if k % 3 else 1.5)
-    stroke([(x, y0 + R(0, 2)), (x - L * 0.3, y0 + L)], w=0.7, hand=0.2, lift=0)
-    if R() < 0.35:
-        y1 = y0 + L + R(8, 22)
-        stroke([(x + R(-3, 3), y1), (x - 3 + R(-3, 3), y1 + R(5, 12))], w=0.65, hand=0.2, lift=0)
-# mud pushed up at the planted fins; pebbles
-for (x, y, r) in [(530, 662, 2.2), (590, 630, 1.6), (850, 600, 2.0), (900, 594, 1.5), (960, 588, 2.2), (640, 612, 1.4)]:
-    pen.ellipse(x, y, r * 1.4, r, w=0.9)
+        rr = ((mid[0] - P_C[0]) / P_R[0]) ** 2 + ((mid[1] - P_C[1]) / P_R[1]) ** 2
+        over = any(inside(mid, a) for a in ANIMAL)
+        if in_water(p0) and in_water(p1) and not near_ripple(mid) and \
+                R() < (1.0 if over else 0.95 * (1 - rr) + 0.25):
+            stroke([p0, p1], w=1.25 if over else (0.72 if rr > 0.45 else 0.88), hand=0.3, lift=0)
+        x += L + (R(2, 6) if over else R(6, 22))
+    y += R(5.4, 6.6)
+# the far shore, a broken line behind the water
+for seg in ([(112, 672), (150, 658), (196, 650)], [(220, 647), (290, 643), (360, 645)]):
+    stroke(catmull(seg, step=2.0), w=1.0, hand=0.6, lift=0.35, piece=(8, 22))
 
 
-# ---------------------------------------------------------------- 7. a hint of early land plants
+# ---------------------------------------------------------------- 7. the muddy bank
+
+stroke(GROUND_C, w=2.1, lift=0.1)
+# the bank's face below its lip: hatching that fades downward
+x = 452.0
+while x < 985:
+    y0 = ground_y(x) + 3
+    if R() > 0.15:
+        L = R(8, 20) * (1.0 if R() < 0.7 else 1.5)
+        stroke([(x, y0 + R(0, 2)), (x - L * 0.3, y0 + L)], w=0.8, hand=0.2, lift=0)
+        if R() < 0.45:
+            y1 = y0 + L + R(6, 18)
+            stroke([(x + R(-3, 3), y1), (x - 3 + R(-3, 3), y1 + R(5, 12))], w=0.7, hand=0.2, lift=0)
+    x += R(5.5, 8.0)
+x = 640.0
+while x < 985:
+    y0 = ground_y(x) + 2.5
+    if R() < 0.8:
+        stroke([(x, y0), (x - 2.5, y0 + R(5, 10))], w=0.9, hand=0.1, lift=0)
+    x += R(4.8, 6.4)
+x = 466.0
+while x < 640:
+    y0 = ground_y(x) + 2.5
+    L = R(10, 22) * (1.25 if x < 600 else 0.8)
+    stroke([(x, y0), (x - L * 0.35, y0 + L)], w=1.0, hand=0.2, lift=0)
+    x += R(4.6, 5.6)
+# the mud under the chest and fins, darker in their shadow
+for k in range(30):
+    x = 580 + k * 5.6 + G(1)
+    y = ground_y(x) - 1.5
+    stroke([(x, y), (x + R(8, 14), y - 1.0)], w=0.9, hand=0.2, lift=0)
+for (x, r) in [(560, 2.2), (612, 1.6), (870, 2.0), (912, 1.5), (956, 2.2), (520, 1.4)]:
+    pen.ellipse(x, ground_y(x) + 7 + r, r * 1.4, r, w=0.9)
+
+
+# ---------------------------------------------------------------- 8. a hint of early land plants
 
 def sprig(x, y, h, lean, w=1.0, levels=3):
     """A tiny leafless, forking stem (rhyniophyte-like) with sporangia at its tips."""
@@ -706,26 +838,31 @@ def sprig(x, y, h, lean, w=1.0, levels=3):
     branch((x, y), -math.pi / 2 + lean, h * 0.45, levels)
 
 
-for (x, y, h, lean) in [(150, 672, 40, -0.1), (164, 666, 28, 0.15), (138, 680, 22, -0.2)]:
+for (x, y, h, lean) in [(150, 657, 36, -0.1), (163, 654, 26, 0.15), (139, 661, 20, -0.2)]:
     sprig(x, y, h, lean)
-for (x, y, h, lean) in [(940, 572, 42, 0.12), (954, 574, 30, -0.12)]:
-    sprig(x, y, h, lean)
+for (x, dy, h, lean) in [(940, 0, 42, 0.12), (954, 1, 30, -0.12)]:
+    sprig(x, ground_y(x) + dy, h, lean)
 
 
 # ---------------------------------------------------------------- place it in the square
 
-# the animal about 850 across, the whole drawing centred
+# weight: the animal carries the darkest ink; the water and the bank stay a step lighter
+pen.strokes = [(p, min(3.0, 0.15 + w * 1.2) if i < N_FISH else min(2.6, 0.08 + w * 1.08))
+               for i, (p, w) in enumerate(pen.strokes)]
+
 fx = [x for p, _ in pen.strokes[:N_FISH] for x, _ in p]
 SC = 830 / (max(fx) - min(fx))
 cx = (min(fx) + max(fx)) / 2 - 8
 ys = [y for p, _ in pen.strokes for _, y in p]
 cy = (min(ys) + max(ys)) / 2
 pen.strokes = [([(500 + (x - cx) * SC, 505 + (y - cy) * SC) for x, y in p], w) for p, w in pen.strokes]
-# nothing of the ground runs off the square
-pen.strokes = [(p, w) for p, w in pen.strokes if max(x for x, _ in p) < 985 and min(x for x, _ in p) > 15] + \
+inside_sq = lambda p: all(15 < x < 985 for x, _ in p)
+pen.strokes = [(p, w) for p, w in pen.strokes if inside_sq(p)] + \
     [([(x, y) for x, y in p if 15 < x < 985], w) for p, w in pen.strokes
-     if not (max(x for x, _ in p) < 985 and min(x for x, _ in p) > 15) and sum(1 for x, _ in p if 15 < x < 985) > 1]
-
+     if not inside_sq(p) and sum(1 for x, _ in p if 15 < x < 985) > 1]
 pen.strokes = [(p, max(0.6, w)) for p, w in pen.strokes]  # the set's finest line is 0.6
+
+if DEBUG:
+    print('scale', SC)
 pen.save('../12-quastenflosser.svg', mirror=True)
 pen.report()
