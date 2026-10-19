@@ -1239,34 +1239,22 @@ def man(ox=236):
     elF, wrF = (24.5, 100.5, 9.5), (19.4, 110.9, 25.6)
 
     # the trunk: a broad pelvis, little waist, a deep barrel of a chest, wide shoulders
-    keys = [(0, 16, 8.5, 11, 2.4), (6, 18.5, 9.5, 12.5, 2.4), (12, 18, 10.5, 12, 2.3), (18, 17.3, 12, 11, 2.2),
-            (23, 17.5, 12.5, 10.5, 2.2), (29, 18.6, 13.6, 11, 2.2), (36, 19.6, 14.6, 11.5, 2.2),
-            (42, 20, 14.6, 12, 2.2), (48, 20, 13, 11.5, 2.3), (53, 20.4, 10, 10.5, 2.5), (56, 15, 7.5, 8, 2.3),
+    keys = [(0, 18, 9.0, 11.5, 2.4), (6, 20, 10, 12.8, 2.4), (12, 19.5, 11, 12.2, 2.3), (18, 18.8, 12.4, 11.2, 2.2),
+            (23, 18.8, 13.2, 10.8, 2.2), (29, 19.4, 14.4, 11.3, 2.2), (36, 20.2, 15.4, 11.8, 2.2),
+            (42, 20.4, 15.2, 12.2, 2.2), (48, 20.2, 13.4, 11.7, 2.3), (53, 20.4, 10, 10.5, 2.5), (56, 15, 7.5, 8, 2.3),
             (59, 8.5, 6, 6.5, 2.0)]
     Tr = Trunk(V, (0.0, 76.0, 0.0), (0.0, 1.0, 0.0), keys)
     torso = F.part('torso', Tr.poly(), 0, w=2.2, joins=('neck', 'thighN', 'thighF'))
     Tr.rows(torso, Lt, spacing=5.8, thr=0.36, mid=0.58, ln=(10, 22), gap=(2, 4), h0=14)
-    # collarbones, the chest muscles' lower edges, nipples, the breastbone, the
-    # rib arch and the belly's midline, the navel, the saw-toothed serratus
+    # the collarbones; the barrel of the chest modelled by rows wrapping
+    # round it, a half-tone under its swell where it turns in to the belly
     for pts, wt in (([(54.6, 0.04), (55.0, -0.35), (54.4, -0.75), (53.5, -1.1), (52.8, -1.3)], 1.2),
-                    ([(54.6, 0.04), (55.0, 0.35), (54.4, 0.75), (53.6, 1.05)], 1.05),
-                    ([(45.5, -1.3), (41.8, -1.05), (39.6, -0.72), (39.3, -0.38), (40.6, -0.06)], 1.1),
-                    ([(40.6, 0.06), (39.5, 0.38), (39.9, 0.72), (42.0, 1.0)], 1.0)):
+                    ([(54.6, 0.04), (55.0, 0.35), (54.4, 0.75), (53.6, 1.05)], 1.05)):
         torso.add(Tr.curve(pts), w=wt, hand=0.1)
-    for pec in ([(45.5, -1.3), (41.8, -1.05), (39.6, -0.72), (39.3, -0.38), (40.6, -0.06)],
-                [(40.6, 0.06), (39.5, 0.38), (39.9, 0.72)]):
-        edge_shade(torso, Tr.curve(pec), -1, depth=6.5, every=5.4, ang=0.15)
-    for ph in (-0.6, 0.62):
-        c = Tr.at(42.3, ph)
-        torso.add(ellipse_pts(c[0], c[1], 2.0, 1.6, 0, step=0.7), w=0.85, hand=0, lift=0)
-    for pts, wt in (([(53.5, 0.0), (47.0, 0.0), (42.0, 0.0)], 0.75), ([(37.0, -0.04), (33.5, -0.32), (30.0, -0.66), (27.6, -1.0)], 0.8),
-                    ([(37.0, 0.04), (33.5, 0.32), (30.6, 0.6)], 0.75), ([(36.0, 0.0), (29.0, 0.0), (21.6, 0.0)], 0.72)):
-        for seg in broken(Tr.curve(pts), (16, 40), (4, 8)):
-            torso.add(seg, w=wt, hand=0.1)
-    c = Tr.at(19.2, 0.0)
-    torso.add(catmull([(c[0] - 3.2, c[1] - 1.0), (c[0], c[1] + 1.8), (c[0] + 3.0, c[1] - 0.8)], step=0.8), w=1.0, hand=0)
-    for h in (36.8, 34.0, 31.2):
-        torso.add(Tr.curve([(h + 0.7, -1.24), (h - 0.5, -1.02)]), w=0.85, hand=0.1)
+    Tr.rows(torso, Lt, spacing=8.5, thr=0.8, mid=0.8, ln=(8, 16), gap=(5, 9), h0=33, h1=50,
+            keep=lambda p3, n: vdot(n, Lt) >= 0.5 and pen.rng.random() < 0.8)
+    Tr.rows(torso, Lt, spacing=5.6, thr=0.8, mid=0.8, ln=(8, 14), gap=(3, 6), h0=22, h1=30,
+            keep=lambda p3, n: vdot(n, Lt) >= 0.5 and n[1] < -0.02 or (vdot(n, Lt) >= 0.5 and pen.rng.random() < 0.35))
 
     # arms: big deltoids, thick upper arms, short heavy forearms
     uaN, LuaN = limb(F, 'uarmN', V, [shN, vlerp(shN, elN, 0.5), elN],
@@ -1377,34 +1365,33 @@ def man(ox=236):
     head.beard([(12.3, 5.1), (13.1, 5.2), (13.1, 6.6), (12.6, 7.3), (11.8, 7.0)], lambda x, y: math.pi / 2 + 0.5,
                spacing=0.6, ln=(0.8, 1.3))
 
-    # the hide wrap round the hips: lapped at the front of the near side, laced
-    # through holes in both edges and knotted at the top, the top turned over
-    K0, C0 = (17.9, 12.6, 12.4, 2.3), (0.0, 91.0, 0.3)
-    K1, C1 = (20.5, 14.8, 14.6, 2.2), (0.0, 66.0, 0.6)
-    sag_t = lambda ph: 1.0 * math.cos(ph) + 0.4 * math.sin(3 * ph)
-    sag_h = lambda ph: (1.4 * math.cos(2 * ph) + 0.7 * math.sin(5 * ph + 1) - 5.0 * math.exp(-((ph + 0.6) / 0.2) ** 2)
-                        + 3.5 * math.sin(ph + 0.3))
+    # the hide wrap round the hips: an uneven skin wound round and tied by
+    # its corners over the near hip, the tied ends hanging, the hem uneven
+    K0, C0 = (19.6, 13.0, 12.8, 2.3), (0.0, 90.0, 0.3)
+    K1, C1 = (22.0, 15.2, 15.0, 2.2), (0.0, 69.0, 0.6)
+    sag_t = lambda ph: 1.0 * math.cos(ph) + 0.7 * math.sin(3 * ph + 0.4) + 0.5 * math.sin(5 * ph + 1.3)
+    sag_h = lambda ph: (2.6 * math.sin(ph + 0.3) + 1.2 * math.sin(3 * ph + 1.0) + 0.7 * math.sin(5 * ph + 2.0)
+                        + 7.0 * math.exp(-((ph + 1.25) / 0.14) ** 2))
     WP = lambda f, ph: band_pt(V, C0, K0, C1, K1, f, ph, sag_t, sag_h)
-    wtop = near_arc(V, ring_pts(C0, *K0, sag=sag_t))
-    whem = rag(near_arc(V, ring_pts(C1, *K1, sag=sag_h))[::-1], 0.9, 7)
+    wtop = rag(near_arc(V, ring_pts(C0, *K0, sag=sag_t)), 0.7, 9)
+    whem = rag(near_arc(V, ring_pts(C1, *K1, n=240, sag=sag_h))[::-1], 1.0, 6)
     wrap = F.part('wrap', resample(wtop, 2.0) + whem[1:-1], -11, w=2.0)
-    roll = catmull([WP(0.075, ph) for ph in frange(-2.35, 0.7, 0.12)], step=1.5)
-    wrap.add(roll, w=1.15, hand=0.15)
-    edge_shade(wrap, roll, -1, depth=5, every=5.2, ang=0.1)
-    lap = catmull([WP(f, -0.5 - 0.14 * f) for f in (0.07, 0.3, 0.55, 0.8, 1.0)], step=1.5)
-    wrap.add(lap, w=1.6, hand=0.1)
+    kn = WP(0.07, -1.25)
+    lap = rag(catmull([kn] + [WP(f, -1.25 + 0.08 * f) for f in (0.3, 0.6, 0.9, 1.0)], step=1.5), 0.5, 8)
+    wrap.add(lap, w=1.5, hand=0.1)
     edge_shade(wrap, lap, 1, depth=5, every=5.0, ang=0.0)
-    lacing(wrap, [WP(f, -0.47 - 0.14 * f) for f in (0.22, 0.44, 0.66)], [WP(f, -0.64 - 0.14 * f) for f in (0.22, 0.44, 0.66)])
-    thong_ends(wrap, WP(0.1, -0.55), [(6, 26), (-2, 21)])
-    for ph0, f0, f1 in ((-1.6, 0.12, 0.9), (-1.25, 0.16, 0.95), (-0.9, 0.2, 0.85), (-0.2, 0.14, 0.9), (0.08, 0.2, 0.96),
-                        (0.36, 0.12, 0.8)):
-        c = catmull([WP(f, ph0 + 0.07 * math.sin(f * 5 + ph0 * 3)) for f in (f0, (f0 + f1) / 2, f1)], step=1.5)
+    fur_edge(wrap, sub(lap, 0.25, 0.95), every=7.0, ln=(3, 5), inward=-1, keep=0.6)
+    thong_ends(wrap, kn, [(5, 30), (-3, 24)])
+    for ph0, f1 in ((-1.75, 0.8), (-1.55, 0.95), (-0.95, 0.9), (-0.7, 0.75), (-0.35, 0.95), (0.05, 0.85), (0.4, 0.8)):
+        c = catmull([WP(0.1, -1.25 + 0.35 * (ph0 + 1.25)), WP(f1 * 0.5, -1.25 + 0.8 * (ph0 + 1.25)), WP(f1, ph0)],
+                    step=1.5)
         for seg in broken(c, (24, 60), (5, 10), 0.9):
             wrap.add(seg, w=0.95)
     xs = [q[0] for q in wrap.poly]
     x0, x1 = min(xs), max(xs)
-    field(wrap, wrap.poly, 62, 5.6, lambda q: keep_prob((q[0] - x0) / (x1 - x0), 0.12, 0.5, 0.0), ln=(7, 13))
-    fur_edge(wrap, whem, every=6.5, ln=(4, 8), inward=1, keep=0.75)
+    field(wrap, wrap.poly, 62, 5.8, lambda q: keep_prob((q[0] - x0) / (x1 - x0), 0.12, 0.45, 0.0), ln=(7, 13))
+    edge_shade(wrap, wtop, 1, depth=4, every=5.6, ang=0.1, keep=0.6)
+    fur_edge(wrap, whem, every=6.0, ln=(4, 8), inward=1, keep=0.8)
 
     # the cape: a hide thrown back over the shoulders, tied at the throat,
     # hanging behind to the knees
@@ -1487,9 +1474,9 @@ def woman(cx=830):
     # knee up; the core held on the far knee, the hammerstone raised over it
     hipN, hipF = (-9.0, 32.5, 0.5), (9.0, 32.5, 0.5)
     knN, anN = (-10.0, 5.5, 29.5), (-10.0, 11.0, -0.5)
-    knF, anF = (10.0, 33.0, 38.5), (10.0, 7.5, 35.0)
+    knF, anF = (10.0, 30.5, 38.0), (10.0, 7.5, 33.5)
     shN, shF = T3(44, -16), T3(44, 16)
-    elF, wrF = (19.0, 44.0, 21.0), (11.0, 43.5, 40.5)
+    elF, wrF = (19.0, 43.0, 21.0), (11.0, 41.0, 40.0)
 
     torso = F.part('torso', Tr.poly(), 0, w=2.2, joins=('neck', 'thighN', 'thighF'))
 
