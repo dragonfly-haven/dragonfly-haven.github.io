@@ -2,24 +2,28 @@
 
 Redrawn with pen.py; the earlier drawing served only as a reference for the head.
 A deep chest and shoulder, a slight dip behind the shoulders and a high rounded rump
-over a well-muscled haunch; the hind leg runs from the thigh to the knee, down to
-the heel and along a long plantigrade foot with five clawed toes; the foreleg shows
-its elbow, the forearm and a small hand of four clawed fingers and a thumb nub.
-Blunt snout with its nose pad and cleft lip, the upper incisors, a large rounded
-ear with its rim and inner fold, a dark eye with a highlight, whiskers in a fan.
-The naked tail is about as long as the body, thick at the root and tapering, ringed
-with fine scale bands and a few sparse hairs; it sweeps down behind and forward
-along the ground.
+over a well-muscled haunch whose front edge is drawn down to the knee; the hind leg
+runs on down the shank to the heel and along a long plantigrade foot with five
+clawed toes fanned on the ground (the short first toe on the far side); the foreleg
+shows its elbow, the forearm and a small hand of four clawed fingers and a thumb
+nub. Blunt snout with its nose pad and nostril, the cleft lip, the upper incisors,
+a whisker pad with rows of follicles and a neat fan of whiskers, a dark eye with a
+highlight, a large rounded ear with its rim and inner fold. The naked tail is about
+as long as the body: thick at the root, where a tuft of the rump's fur runs over
+it, tapering to a fine tip, ringed with fine regular scale bands and a few sparse
+hairs; it sweeps down behind and forward along the ground. The far legs show,
+in shadow, a little ahead of the near ones.
 
-The fur is engraving strokes that follow the lie of the hair and so the form:
-back along the body, over the shoulder and down the foreleg, in arcs around the
-haunch and down the shank; dark along the back and upper flank, lighter on the
-cheek and haunch where the light falls, pale on the belly; guard hairs break the
-outline along the back. Drawn facing right; saved mirrored.
+The fur is engraving strokes laid along streamlines of the lie of the hair, and so
+of the form: back along the body, over the shoulder and down the foreleg, in arcs
+around the haunch and down the shank. Their spacing, length and weight follow a
+tone map: dark along the back and in the shadows behind the haunch, the shoulder
+and the elbow, lighter where the light falls on the haunch, the shoulder and the
+cheek, a pale belly; guard hairs break the outline along the back, belly and rump.
+Light ground line and a cast shadow of three ruled strokes. Drawn facing right;
+saved mirrored.
 """
-
 import math
-import os
 import random
 
 import numpy as np
@@ -320,7 +324,7 @@ def fur(region, field, D, box, wbase=0.62, wvar=0.95, maxlen=220.0, seedstep=7, 
             deep = max(0.0, min(0.35, raw - 1.0))
             dl = (7 + 14 * d + 10 * d ** 3 + rng.uniform(-2.5, 3.0)) * lenscale
             gap = 1.5 + 5.0 * (1 - d) ** 1.4 + rng.uniform(-0.5, 1.6)
-            if rng.random() < 0.25 + 1.0 * d:
+            if rng.random() < 0.3 + 1.0 * d:
                 seg = Cl.part(s / Cl.L, min(1.0, (s + dl) / Cl.L), 1.0)
                 seg = hair_stroke(seg)
                 draw(seg, w=wbase + wvar * d ** 1.6 + 1.3 * deep, hand=0.15, lift=0, piece=(40, 90), taper=0.45)
@@ -332,26 +336,27 @@ def fur(region, field, D, box, wbase=0.62, wvar=0.95, maxlen=220.0, seedstep=7, 
 # ---------------------------------------------------------------- the rat's plan (facing right)
 
 GROUND = 646
+SHIFT = (-45, -12)      # the drawing is planned off-centre; moved to the middle when saved
 
 # head and back, from the top of the nose pad to the root of the tail
 TOPLINE = Curve(C([(877, 410), (862, 403), (843, 396), (822, 388), (800, 380), (780, 374), (760, 371),
                    (740, 373), (722, 379), (705, 389), (688, 398), (668, 403), (648, 405), (626, 410),
-                   (602, 417), (578, 419), (548, 414), (512, 405), (478, 400), (450, 401), (422, 407),
-                   (397, 419), (375, 435), (356, 456), (341, 479), (332, 500)]))
+                   (602, 417), (578, 419), (548, 414), (512, 405), (478, 400), (450, 401), (424, 406),
+                   (400, 415), (380, 429), (364, 447), (353, 469), (347, 490), (345, 506)]))
 # snout tip: nose pad, cleft upper lip, chin
 NOSE = C([(877, 410), (884, 414), (888, 421), (887, 429), (882, 435), (875, 437)], step=1.0)
 LIP = C([(875, 437), (874, 444), (870, 451), (862, 455), (850, 456)], step=1.0)
 CHIN = C([(863, 461), (858, 467), (850, 471)], step=1.0)
 # under the jaw, the throat and the chest to the front of the foreleg
-UNDER = Curve(C([(850, 471), (828, 477), (806, 485), (787, 495), (770, 508), (757, 524), (749, 542),
-                 (744, 558)]))
+UNDER = Curve(C([(850, 471), (828, 477), (806, 485), (788, 495), (772, 507), (760, 522), (752, 540),
+                 (746, 557)]))
 # near foreleg: front and back of the forearm, from the chest and the elbow to the wrist
-FL_FRONT = Curve(C([(744, 558), (737, 580), (730, 600), (725, 616), (722, 630)]))
+FL_FRONT = Curve(C([(746, 557), (738, 580), (730, 600), (725, 616), (722, 630)]))
 FL_BACK = Curve(C([(700, 566), (689, 571), (684, 580), (688, 594), (696, 612), (703, 631)]))
 # belly from the knee forward to the elbow
-BELLY = Curve(C([(520, 570), (545, 576), (580, 580), (620, 580), (655, 576), (680, 570), (700, 566)]))
+BELLY = Curve(C([(520, 570), (545, 574), (580, 576), (620, 577), (655, 575), (680, 570), (700, 566)]))
 # hind leg: buttock down to the heel; shank front from the knee to the ankle
-REAR = Curve(C([(334, 522), (338, 544), (349, 566), (366, 591), (388, 611), (408, 623), (422, 630)]))
+REAR = Curve(C([(346, 527), (351, 549), (362, 572), (379, 595), (399, 613), (413, 624), (422, 630)]))
 SHANK = Curve(C([(520, 570), (506, 583), (491, 598), (478, 612), (469, 622)]))
 THIGH = Curve(C([(533, 436), (540, 476), (539, 515), (532, 547), (520, 570)]))   # front of the thigh mass
 EYE = (806, 400)
@@ -408,8 +413,8 @@ def digit(base, tip, thick=5.0, claw=5.0, w=1.3, knuckle=0.45, bottom=True):
 def near_hand():
     """Near forefoot: the palm on the ground, four slender clawed fingers fanned
     forward, a thumb nub behind them."""
-    for base, tip, th in (((728, 646.5), (743, 646.8), 5.0), ((732, 642.5), (750, 644.5), 5.2),
-                          ((734, 638.5), (754, 640.5), 5.2), ((732, 634.5), (750, 635.5), 4.8)):
+    for base, tip, th in (((727, 643), (739, 650), 4.8), ((732, 640.5), (749, 645.5), 5.2),
+                          ((734, 637), (753, 638.5), 5.2), ((732, 633.5), (749, 630.5), 4.8)):
         occlude(digit(base, tip, thick=th, claw=4.0, w=1.25))
     dors = C([(722, 630), (729, 632.5), (736, 635)], step=1)
     palm = C([(705, 633), (707, 640), (713, 645.2), (729, 646.5)], step=1)
@@ -426,11 +431,11 @@ def near_hand():
 def near_foot():
     """Near hind foot: plantigrade, the long sole flat from the heel to the toes, five
     clawed toes (the short first toe on the far side)."""
-    toes = [((513, 647), (532, 647.5), 5.8, 0.45),          # fifth, the outer, nearest
-            ((517, 642.5), (545, 644.5), 6.2, 0.4),
-            ((520, 638), (552, 639.5), 6.2, 0.4),
-            ((518, 633.5), (548, 633.5), 5.8, 0.4),
-            ((509, 629.5), (526, 628.5), 5.0, 0.5)]            # first, short, on the far side
+    toes = [((511, 643), (527, 651.5), 6.0, 0.45),          # fifth, the outer, nearest
+            ((516, 640.5), (541, 647), 6.4, 0.4),
+            ((520, 637), (549, 639), 6.4, 0.4),
+            ((518, 633), (544, 629), 6.0, 0.4),
+            ((508, 629), (522, 623.5), 5.2, 0.5)]            # first, short, on the far side
     for base, tip, th, kn in toes:
         occlude(digit(base, tip, thick=th, claw=5.0, w=1.3, knuckle=kn))
     top = C([(469, 622), (484, 628), (500, 632.5), (514, 635), (520, 637)], step=1.5)
@@ -455,7 +460,7 @@ def near_foot():
 
 def draw_eye():
     cx, cy = EYE
-    rx, ry = 7.8, 7.2
+    rx, ry = 8.4, 7.8
     hx, hy, hr = cx - 2.4, cy - 2.6, 2.5          # the highlight
     w = 1.7
     turns = max(1.0, max(rx, ry) / (w * 0.75))
@@ -477,7 +482,7 @@ def draw_eye():
     if len(run) > 1:
         pen.line(run, w=w, hand=0, lift=0, piece=(400, 800), occlude=False)
     # lids: a fine ring around the bulging eye, fuller above
-    draw(ellipse_pts(cx, cy, rx + 2.6, ry + 2.4, 0, math.pi * 0.95, math.pi * 2.05, step=0.8), w=1.0, hand=0, lift=0, clip=False)
+    draw(ellipse_pts(cx, cy, rx + 2.6, ry + 2.4, 0, math.pi * 1.0, math.pi * 1.95, step=0.8), w=0.85, hand=0, lift=0, clip=False)
     draw(ellipse_pts(cx, cy, rx + 2.3, ry + 2.0, 0, math.pi * 0.2, math.pi * 0.75, step=0.8), w=0.8, hand=0, lift=0, clip=False)
     occlude(ellipse_pts(cx, cy, rx + 4.5, ry + 4.2, step=1.5))
 
@@ -538,7 +543,7 @@ def whiskers():
         u = i / (n - 1)
         root = (860 - 7 * math.sin(math.pi * u) + rng.uniform(-1, 1), 420 + 30 * u)
         ang = math.radians(-26 + 56 * u + rng.uniform(-2, 2))
-        L = 70 + 44 * math.sin(math.pi * (0.25 + 0.6 * u)) + rng.uniform(-6, 6)
+        L = 62 + 38 * math.sin(math.pi * (0.25 + 0.6 * u)) + rng.uniform(-5, 5)
         dx, dy = math.cos(ang), math.sin(ang)
         bend = 0.12 * L
         mid = (root[0] + dx * L * 0.5, root[1] + dy * L * 0.5 + bend * 0.25)
@@ -619,7 +624,7 @@ def body_lines():
 
 # ---------------------------------------------------------------- tail
 
-TAIL_C = Curve(C([(342, 511), (310, 522), (280, 540), (254, 562), (235, 594), (225, 628), (228, 659),
+TAIL_C = Curve(C([(354, 516), (320, 527), (288, 544), (260, 566), (239, 596), (227, 629), (229, 660),
                   (245, 679), (273, 690), (311, 695), (352, 695), (393, 690), (430, 683)]))
 
 
@@ -651,7 +656,7 @@ def draw_tail():
         sh.append((p[0] + ty * (r - 3.0), p[1] - tx * (r - 3.0)))
     draw(sh, w=0.75, hand=0.1, lift=0.1, taper=0.4)
     # scale rings: fine regular bands across the tail
-    s = 20.0
+    s = 31.0
     while s < T.L - 6:
         t = s / T.L
         p = T.at(t)
@@ -682,38 +687,70 @@ def draw_tail():
     occlude(A + list(reversed(B)))
 
 
+def tail_cuff():
+    """The fur of the rump runs out over the root of the tail in a short tuft of
+    pointed locks, from under which the naked, ringed tail comes."""
+    T = TAIL_C
+    ends = []
+    for k, (v, reach) in enumerate(((-0.95, 17), (-0.58, 27), (-0.2, 21), (0.2, 30), (0.58, 23), (0.95, 15))):
+        t1 = (reach + rng.uniform(-2, 2)) / T.L
+        pts = []
+        for t in np.linspace(0.0, t1, 16):
+            p = T.at(t)
+            tx, ty = T.tangent(t)
+            r = tail_r(t) + 1.0
+            vv = v * (1 - 0.4 * (t / t1) ** 1.6)            # each lock closes to a point
+            pts.append((p[0] - ty * r * vv, p[1] + tx * r * vv))
+        ends.append(pts)
+        draw(pts, w=1.3 if k in (0, 5) else 1.0, hand=0, lift=0, taper=0.6)
+    # the tail's own outline starts where the shortest locks end
+    t0 = 14.0 / T.L
+    poly = []
+    for t in np.linspace(0, t0, 10):
+        p = T.at(t)
+        tx, ty = T.tangent(t)
+        r = tail_r(t) + 2.0
+        poly.append((p[0] + ty * r, p[1] - tx * r))
+    for t in np.linspace(t0, 0, 10):
+        p = T.at(t)
+        tx, ty = T.tangent(t)
+        r = tail_r(t) + 2.0
+        poly.append((p[0] - ty * r, p[1] + tx * r))
+    occlude(poly)
+
+
 # ---------------------------------------------------------------- far legs (in shadow)
 
 def far_legs():
     """The far fore- and hind leg, mostly hidden, in shadow: close fur down the limb."""
-    # far foreleg: a strip of forearm ahead of the near one, and its hand
-    front = C([(752, 548), (750, 578), (748, 605), (748, 628)], step=1.5)
-    for base, tip, th in (((757, 636), (774, 640.5), 4.2), ((759, 633.5), (777, 636.5), 4.2),
-                          ((757, 631), (773, 631.5), 3.8)):
+    # far foreleg: a little ahead of the near one
+    front = C([(753, 546), (752, 574), (749, 600), (746, 618), (747, 628)], step=1.5)
+    for base, tip, th in (((756, 640), (770, 644), 4.4), ((758, 636.5), (775, 637.5), 4.4),
+                          ((756, 632.5), (771, 629.5), 4.0)):
         occlude(digit(base, tip, thick=th, claw=3.8, w=1.15))
-    draw(front, w=1.7, hand=0.2, lift=0)
-    draw(C([(748, 628), (753, 630), (759, 631)], step=1), w=1.4, hand=0, lift=0)
-    draw(C([(737, 638), (745, 640.5), (757, 641)], step=1), w=1.5, hand=0, lift=0)
-    poly = [(700, 540)] + front + [(759, 631), (757, 641), (736, 640)]
+    draw(front, w=1.8, hand=0.2, lift=0)
+    draw(C([(747, 628), (753, 630), (758, 632.5)], step=1), w=1.4, hand=0, lift=0)
+    draw(C([(736, 640.5), (746, 641.2), (757, 641.2)], step=1), w=1.5, hand=0, lift=0)
+    poly = [(700, 540)] + front + [(758, 632.5), (757, 641.5), (736, 641)]
     reg = poly_mask(poly) & ~OCC
-    limb_fur(reg, [(front, 1.0), ([(735, 560), (733, 600), (735, 632)], 0.8)], (722, 540, 760, 642))
+    limb_fur(reg, [(front, 1.0), ([(737, 560), (734, 600), (735, 632)], 0.8)], (722, 540, 760, 642), 0.8)
     occlude(poly)
-    # far hind leg: the shank under the belly, the foot ahead of the near one
-    shank = C([(568, 578), (555, 595), (541, 611), (531, 624)], step=1.5)
-    for base, tip, th in (((573, 637), (594, 641), 5.0), ((575, 634.5), (598, 637), 5.0),
-                          ((572, 632), (591, 632.5), 4.4)):
+    # far hind leg: the shank under the belly, the foot a little ahead of the near one
+    shank = C([(550, 577), (539, 592), (528, 607), (518, 619)], step=1.5)
+    for base, tip, th in (((560, 640), (575, 644.5), 5.0), ((562, 636.5), (582, 637.5), 5.0),
+                          ((560, 632.5), (577, 629), 4.6)):
         occlude(digit(base, tip, thick=th, claw=4.4, w=1.2))
-    draw(shank, w=1.7, hand=0.2, lift=0)
-    draw(C([(531, 624), (550, 629.5), (569, 633)], step=1), w=1.4, hand=0, lift=0)
-    draw(C([(520, 641), (548, 642), (572, 641)], step=1), w=1.5, hand=0, lift=0)
-    poly = [(505, 572)] + shank + [(569, 633), (572, 641), (500, 642)]
+    draw(shank, w=1.8, hand=0.2, lift=0)
+    draw(C([(518, 619), (535, 625.5), (552, 629.5), (561, 631)], step=1), w=1.4, hand=0, lift=0)
+    draw(C([(505, 641.5), (535, 641.8), (560, 641.2)], step=1), w=1.5, hand=0, lift=0)
+    poly = [(505, 572)] + shank + [(561, 631), (560, 641.5), (500, 642)]
     reg = poly_mask(poly) & ~OCC
-    limb_fur(reg, [(shank, 1.0), ([(530, 580), (515, 600), (505, 625)], 0.8)], (495, 570, 575, 642))
+    limb_fur(reg, [(shank, 1.0), ([(520, 578), (508, 598), (498, 620)], 0.8)], (495, 570, 565, 642), 0.8)
     occlude(poly)
 
 
-def limb_fur(reg, guides, box):
-    D = np.full(GXX.shape, 0.95)
+def limb_fur(reg, guides, box, tone=0.95):
+    D = np.full(GXX.shape, tone)
     fur(reg, Field(guides), D, box, seedstep=4)
 
 
@@ -751,13 +788,13 @@ def main():
         return 1.0 / (1.0 + np.exp(-(v - v0) / w))
 
     thx = THIGH.at(0.6)[0]
-    D = 0.32 + 0.8 * np.exp(-dtop / 50.0)                            # dark along the back
+    D = 0.38 + 0.72 * np.exp(-(dtop / 75.0) ** 1.5)                  # dark along the back
     D = D - 0.45 * np.exp(-((dtop - 5.0) / 3.2) ** 2)                 # a lit rim along the back
     # the barrel turns under: a shade above the pale belly fringe
     D = D + 0.18 * np.exp(-((dbel - 34) / 15.0) ** 2) * step(GXX, 525, 8) * (1 - step(GXX, 690, 8))
     D = D - 0.34 * np.exp(-dbel / 14.0) * (1 - step(GXX, 696, 5))
     # the haunch: lit on its upper front, dark behind and below, dark in the flank fold
-    D = D - 0.42 * blob(468, 468, 36)
+    D = D - 0.34 * blob(476, 458, 30)
     D = D + 0.35 * np.exp(-drear / 26.0) * step(GYY, 470, 15)
     D = D + 0.25 * np.exp(-dthigh / 12.0) * step(GXX, thx - 4, 4) * step(GYY, 470, 10)
     D = D + 0.2 * np.exp(-dshank / 18.0)
@@ -775,11 +812,6 @@ def main():
     D[np.minimum(np.minimum(dtop, dund), np.minimum(dbel, drear)) < 3.2] = -1
 
     region = poly_mask(body_poly()) & ~OCC & ~halo(lines, 2.6) & ~halo(wl, 1.2)
-    if os.environ.get('RAT_DEBUG'):
-        m = poly_mask(body_poly())[::2, ::2][280:760, 60:960]
-        img = np.clip(D, 0, 1.2)[:, :] / 1.2
-        img = np.where(m[:img.shape[0] * 2:2, :img.shape[1] * 2:2][:img.shape[0], :img.shape[1]] if False else True, img, 0)
-        Image.fromarray((255 - img * 255).astype(np.uint8)).resize((900, 480)).save(os.environ['RAT_DEBUG'])
     field = Field([
         (TOPLINE.part(0.25, 1.0), 1.0),
         (TOPLINE.part(0.0, 0.3), 0.6),
@@ -795,8 +827,8 @@ def main():
         (C([(640, 432), (600, 444), (560, 458), (530, 472)]), 0.6),
         (C([(660, 520), (620, 538), (580, 550), (545, 558)]), 0.5),
         # the haunch: arcs about the hip
-        (C([(545, 425), (500, 416), (455, 418), (418, 430), (390, 452), (372, 485), (372, 520),
-            (382, 556), (402, 590), (428, 614)]), 1.0),
+        (C([(545, 425), (500, 416), (455, 418), (422, 428), (396, 448), (380, 480), (379, 515),
+            (388, 552), (405, 588), (428, 614)]), 1.0),
         (C([(515, 465), (485, 460), (458, 470), (440, 495), (436, 525), (446, 558), (465, 588),
             (480, 605)]), 0.9),
         (THIGH.pts(), 0.8),
@@ -809,16 +841,15 @@ def main():
     nfur = fur(region, field, D, (340, 360, 890, 640))
     occlude(body_poly())
 
+    tail_cuff()
     draw_tail()
-    for k in range(5):
-        p = TAIL_C.at(0.02)
-        q = (p[0] - 9 + rng.uniform(-1, 1), p[1] + (k - 2) * 3.5)
-        draw([(p[0] + 2, p[1] + (k - 2) * 3.8), q], w=0.75, hand=0, lift=0, taper=0.5, clip=False)
 
     far_legs()
     ground()
 
     print('fur strokes', nfur)
+    # centre the drawing in the square
+    pen.strokes = [([(x + SHIFT[0], y + SHIFT[1]) for x, y in pts], w) for pts, w in pen.strokes]
     pen.save('../17-rat.svg', mirror=True)
     pen.report()
 
