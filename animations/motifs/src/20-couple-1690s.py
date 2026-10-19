@@ -202,73 +202,48 @@ def tone(poly, angle, spacing, w=0.7, skip=0.0, shrink=(0.0, 0.1), keep=None, cu
 
 # ================================================================ THE MAN
 
-# ---- joined hands (front-most). We see the back of her left hand. His right
-# hand holds it: his thumb lies over the back of her hand, his fingers come
-# round its lower edge, their tips (nails showing) resting on it; her fingers
-# pass behind his palm and their tips curl round the far edge of his hand.
-# his thumb, over the back of her hand
-thumb = [(521, 559), (510, 557.5), (499, 558.5), (492, 560.5), (488, 564), (489, 568.5), (494, 570.5), (506, 571),
-         (515, 573), (522, 575)]
-F([(521, 559), (510, 557.5), (499, 558.5), (492, 560.5), (488, 564), (489, 568.5), (494, 570.5)], w=1.5)
-F([(494, 570.5), (506, 571), (515, 573), (521, 575)], w=1.6)
-F([(491, 561.5), (495.5, 561), (497, 564.5), (494, 567.5), (490.5, 567)], w=0.9)    # nail
-F([(503.5, 559), (504.5, 563), (503.5, 567)], w=0.7)                                # joint
-pen.occlude(R(thumb))
-# his fingers round the lower edge of her hand, tips on its back
-edge = [(463, 556), (468, 566), (476, 575), (486, 583), (497, 590), (509, 594), (521, 596)]
-outer = [(457, 567), (464, 578), (474, 588), (486, 596), (500, 601), (515, 604), (530, 602)]
-E = resample(C(edge), 0.5)
-O = resample(C(outer), 0.5)
-cuts = [0.22, 0.4, 0.57, 0.73, 0.86]                 # where one finger meets the next, along the edge
-for k in range(4):
-    t0, t1 = cuts[k], cuts[k + 1]
+# ---- joined hands (front-most), hand in hand: his right hand hangs from the
+# cuff with its back to us; her left hand lies palm to palm behind it, and her
+# fingers come round its far edge and across its back, nails showing. His
+# fingers curl round behind her hand; their bent joints show below.
+mh = frame((522, 558), 108, 0.9)       # s down his hand from the wrist, t across it (+ to the right)
+# her fingers across the back of his hand, the nearer ones over the further
+her_f = [(6.0, 12.6, -1.0), (11.8, 18.6, -4.5), (17.8, 24.4, -2.5), (23.6, 29.4, 1.5)]
+for k, (s0, s1, tt) in enumerate(her_f):
+    r = (s1 - s0) / 2
+    sc = (s0 + s1) / 2
+    cap = [(sc - r * math.cos(q), tt + r - r * math.sin(q)) for q in [i * math.pi / 10 for i in range(11)]]
+    F(mh([(s0, 15.5), (s0, 8)] + cap + [(s1, 8), (s1, 15.5)]), w=1.3 if k in (0, 3) else 1.2)
+    F(mh([(s0 + 0.4, 15.5), (s0 + 1.5, 18.0), (sc, 19.2), (s1 - 1.5, 18.0), (s1 - 0.4, 15.5)]), w=1.2)   # round his edge
+    nail = [(sc - r * 0.55 * math.cos(q), tt + r + 0.8 - r * 0.55 * math.sin(q)) for q in [i * math.pi / 8 for i in range(1, 8)]]
+    F(mh(nail), w=0.75)
+    F(mh([(s0 + 1.6, 10 + k), (sc, 9.5 + k), (s1 - 1.6, 10 + k)]), w=0.65)                         # a joint
+    pen.occlude(R(mh([(s0, 19.5), (s0, tt + r)] + cap + [(s1, tt + r), (s1, 19.5)])))
+# her thumb, over the back of his hand by the wrist
+thumbW = [(495, 550), (505, 552.5), (513, 556.5), (517.5, 560), (517, 564), (513, 565), (505, 562.5), (497, 559.5)]
+F([(495, 550), (505, 552.5), (513, 556.5), (517.5, 560), (517, 564), (513, 565)], w=1.3)
+F([(513, 565), (505, 562.5), (498, 560)], w=1.3)
+F([(512.5, 558.5), (515.5, 560.5), (514.5, 563)], w=0.7)                                           # its nail
+pen.occlude(R(thumbW))
+# his hand: the back, from the wrist to where the fingers bend round her hand
+his_hand = mh([(-2, -14), (18, -15.2), (34, -15.5), (42, -13), (45, -4), (44, 6), (41, 13), (34, 15.5),
+               (18, 15.5), (-2, 14)])
+F(mh([(-2, -14), (10, -14.8), (22, -15.4), (33, -15.5)]), w=1.6)
+F(mh([(-2, 14), (8, 15), (12, 15.5)]), w=1.5)
+F(mh([(30, 15.5), (34, 15.5), (36, 15)]), w=1.4)
+for k, (t0, t1, sb) in enumerate([(-15.5, -8, 44.0), (-8, -0.5, 46.0), (-0.5, 7.5, 45.0), (7.5, 15, 41.5)]):
     tm = (t0 + t1) / 2
-    e0, e1, em = E[int(t0 * (len(E) - 1))], E[int(t1 * (len(E) - 1))], E[int(tm * (len(E) - 1))]
-    o0, o1, om = O[int(t0 * (len(O) - 1))], O[int(t1 * (len(O) - 1))], O[int(tm * (len(O) - 1))]
-    inn = (em[0] - om[0], em[1] - om[1])
-    L = math.hypot(*inn)
-    u = (inn[0] / L, inn[1] / L)
-    n = (-u[1], u[0])
-    r = dist(e0, e1) * 0.42
-    reach = 7.0 if k < 3 else 5.0
-    c = (em[0] + u[0] * reach, em[1] + u[1] * reach)
-    s0 = (c[0] + n[0] * r, c[1] + n[1] * r)
-    s1 = (c[0] - n[0] * r, c[1] - n[1] * r)
-    if dist(s0, e0) > dist(s1, e0):
-        s0, s1 = s1, s0
-        n = (-n[0], -n[1])
-    cap = [(c[0] + n[0] * r * math.cos(q) + u[0] * r * math.sin(q), c[1] + n[1] * r * math.cos(q) + u[1] * r * math.sin(q))
-           for q in [i * math.pi / 10 for i in range(11)]]
-    if k == 0:
-        F([lerp(o0, e0, 0.1), e0, s0], w=1.2)
-    F([s0] + cap + [s1], w=1.25)
-    F([s1, e1, lerp(o1, e1, 0.1)], w=1.2)
-    nail = [(c[0] + n[0] * r * 0.55 * math.cos(q) + u[0] * (r * 0.55 * math.sin(q) - r * 0.15),
-             c[1] + n[1] * r * 0.55 * math.cos(q) + u[1] * (r * 0.55 * math.sin(q) - r * 0.15))
-            for q in [i * math.pi / 8 for i in range(9)]]
-    F(nail[1:-1], w=0.7)
-outer = [O[int(cuts[0] * (len(O) - 1))]] + [p_ for p_ in outer if dist(p_, outer[0]) > dist(O[int(cuts[0] * (len(O) - 1))], outer[0])]
-S(outer, w=1.6, hand=0.5)
-his_fingers = [E[int(cuts[0] * (len(E) - 1))]] + edge[4:] + [(533, 600)] + outer[::-1]
-pen.occlude(R(his_fingers))
-# her fingertips curling round the far edge of his hand
-for (y0, y1) in ((563, 572), (572, 581), (581, 590)):
-    F([(541, y0), (546, y0 + 1.5), (548, (y0 + y1) / 2), (546, y1 - 1), (540, y1)], w=1.2)
-pen.occlude(R([(540, 563), (547, 564), (549, 576), (548, 590), (540, 590)]))
-# her hand: the back from the wrist to the knuckles
-her_hand = [(462, 551), (484, 546), (497, 551), (509, 557), (521, 562), (521, 590), (506, 594), (490, 585),
-            (476, 573), (467, 562)]
-F([(484, 546), (491, 549), (499, 553), (508, 557)], w=1.5)
-F([(463, 553), (466, 561), (472, 569)], w=1.5)
-for (q0, m_, q1) in (((514, 575), (517, 578), (516, 583)), ((511, 584), (514, 587), (512, 591))):
-    F([q0, m_, q1], w=0.9)                                                          # her knuckles
-pen.occlude(R(her_hand))
-# his hand from the wrist: the thumb's root, the edge of the palm
-his_hand = [(507, 556), (538, 557), (543, 570), (546, 584), (542, 596), (533, 603), (521, 596), (521, 575)]
-S([(538, 557), (542, 568), (544, 582), (542, 594), (535, 601)], w=1.7)
-F([(521, 575), (522, 586), (524, 594)], w=0.8)                                      # the palm's edge
-F([(525, 561), (530, 570), (531, 580)], w=0.7)                                      # the thumb's root
+    F(mh([(33.5, t0), (sb - 3.5, t0 + 0.3), (sb, tm), (sb - 3.5, t1 - 0.3), (33.5, t1)]), w=1.3)   # a bent finger
+    F(mh([(31.5, t0 + 1.6), (33.2, tm), (31.5, t1 - 1.6)]), w=0.85)                               # its knuckle
+F(mh([(2, -7), (13, -8)]), w=0.6)                                                                   # tendons
+F(mh([(2, 0), (5, 1)]), w=0.6)
 pen.occlude(R(his_hand))
+# her hand behind, from her wrist to his hand
+her_hand = [(463, 552), (483, 547), (496, 550), (511, 556), (502, 582), (496, 581), (485, 578), (475, 571), (468, 563)]
+F([(483, 547), (490, 548.5), (496, 550)], w=1.5)
+F([(464, 553), (467, 562), (474, 570), (484, 577), (495, 581), (500, 581.5)], w=1.5)
+F([(478, 557), (487, 564), (494, 571)], w=0.65)
+pen.occlude(R(her_hand))
 
 # ---- his right sleeve (near arm) with a plain turned-back cuff
 cuffN = [(511, 509), (531, 514), (552, 520), (546, 540), (540, 557), (521, 553), (502, 548), (506, 528)]
@@ -491,8 +466,8 @@ coat_front_top = [(676, 314), (673, 360), (674, 410), (677, 470)]
 S(coat_front_top, w=1.6)
 for y in range(328, 468, 16):                                      # hooks and eyes down the front
     x = 673 + (y - 314) * 0.024
-    F([(x - 6, y), (x + 1, y - 0.3), (x + 3.5, y + 1.6), (x + 1.5, y + 3)], w=1.3)
-    F([(x + 3, y + 4.5), (x + 7, y + 4)], w=1.0)
+    F([(x - 4, y), (x + 0.8, y - 0.2), (x + 2.6, y + 1.2), (x + 1.2, y + 2.3)], w=0.95)
+    F([(x + 2.4, y + 3.6), (x + 5.2, y + 3.3)], w=0.75)
 S([(560, 323), (569, 331), (579, 341), (586, 352)], w=0.9)         # armhole seam
 S([(588, 360), (591, 410), (594, 484)], w=1.15)                    # side-front seam
 S([(729, 307), (735, 324), (737, 344)], w=0.85)
@@ -574,17 +549,22 @@ tone(R([(657, 686), (670, 691), (685, 695), (712, 684), (715, 709), (680, 718), 
 pen.occlude(R([(677, 472), (681, 472), (712, 682), (715, 709), (655, 714), (660, 640)]))
 
 
-def buckle(cx, cy, ang, bw, bh):
-    """A plain square buckle on the shoe's latchets: frame and pin."""
+def tie(cx, cy, ang, sc=1.0):
+    """A shoe tied over the tongue: a lace through a hole in each latchet,
+    knotted in a small bow, its two ends hanging."""
     a = math.radians(ang)
     d, n = (math.cos(a), math.sin(a)), (-math.sin(a), math.cos(a))
 
     def P(s_, t_):
-        return (cx + d[0] * s_ + n[0] * t_, cy + d[1] * s_ + n[1] * t_)
-    box = [P(-bw / 2, -bh / 2), P(bw / 2, -bh / 2), P(bw / 2, bh / 2), P(-bw / 2, bh / 2)]
-    pen.line(box + [box[0], box[1]], w=1.35, hand=0.0, lift=0.0)
-    pen.line([P(0, -bh / 2), P(0, bh / 2)], w=0.9, hand=0.0, lift=0.0)
-    pen.occlude(box)
+        return (cx + sc * (d[0] * s_ + n[0] * t_), cy + sc * (d[1] * s_ + n[1] * t_))
+    for side in (-1, 1):
+        pen.ellipse(*P(side * 5.6, -0.6), 0.9 * sc, 0.9 * sc, w=0.75, hand=0.0, lift=0.0)        # the holes
+        F([P(side * 5.0, -0.4), P(side * 2.5, -0.2), P(side * 1.0, 0)], w=0.9)                 # lace to the knot
+        F([P(side * 1.0, -0.3), P(side * 2.6, -2.4), P(side * 4.4, -2.2), P(side * 4.2, 0.2), P(side * 1.2, 0.5)],
+          w=1.15)                                                                                # a loop
+        F([P(side * 0.6, 0.8), P(side * 1.6, 3.6), P(side * 2.0, 6.2)], w=1.05)                # an end
+    pen.blot(*P(0, 0), 1.2 * sc, w=1.1)
+    pen.occlude([P(-6.6, -3.0), P(6.6, -3.0), P(6.6, 1.5), P(2.6, 6.6), P(-2.6, 6.6), P(-6.6, 1.5)])
 
 
 # ---- legs: breeches below the coat, knee bands, stockings, plain tied shoes
@@ -601,7 +581,7 @@ S([(627, 902), (617, 905), (608, 899)], w=1.5)                            # topl
 S([(619, 931), (640, 939.5), (659, 946.5), (670, 949)], w=1.25)          # the sole's edge
 S([(652, 925), (648.5, 933), (647, 943)], w=1.1)                          # seam over the toe
 S([(619, 905), (630, 908), (640, 913)], w=1.1)                            # latchets
-buckle(631, 908.5, 21, 10, 7)
+tie(631, 908, 21, 1.3)
 tone(R([(617, 912), (641, 919), (654, 929), (666, 939), (670, 945), (659, 945), (640, 938), (620, 929)]), 30, 6.5,
      w=0.65, skip=0.2)
 pen.occlude(R(shoeN))
@@ -617,7 +597,7 @@ S([(713, 895), (702, 898), (692, 897)], w=1.4)
 S([(710, 924.5), (732, 926.5), (752, 928.5), (764, 927.5)], w=1.2)        # the sole's edge
 S([(745, 908.5), (742, 916), (741, 925)], w=1.05)                          # seam over the toe
 S([(704, 899), (716, 898), (729, 902)], w=1.0)
-buckle(718, 899.5, 5, 9, 6.5)
+tie(718, 899, 5, 1.2)
 tone(R([(703, 904), (730, 905), (744, 911), (760, 918), (765, 924), (752, 926), (730, 923), (710, 920)]), 30, 6.5,
      w=0.65, skip=0.2)
 pen.occlude(R(shoeF))
@@ -648,8 +628,10 @@ S(legN_back, w=2.1)
 S(legN_front, w=1.9)
 S(legF_back, w=1.9)
 S(legF_front, w=2.0)
-across(legN_back, legN_front, spacing=7.0, frac=(0.28, 0.45), bow=3, w=0.65, t0=0.05, t1=0.97)
-across(legF_back, legF_front, spacing=7.0, frac=(0.42, 0.62), bow=3, w=0.65, t0=0.05, t1=0.97)
+across(legN_back, legN_front, spacing=7.0, frac=(0.28, 0.45), bow=3, w=0.65, t0=0.05, t1=0.97,
+       fprof=lambda t: 1.0 - 0.55 * math.exp(-((t - 0.3) / 0.11) ** 2))
+across(legF_back, legF_front, spacing=7.0, frac=(0.42, 0.62), bow=3, w=0.65, t0=0.05, t1=0.97,
+       fprof=lambda t: 1.0 - 0.5 * math.exp(-((t - 0.3) / 0.11) ** 2))
 tone(R([(678, 743), (728, 743), (727, 766), (675, 764)]), 62, 6.5, w=0.6)
 F([(611, 885), (615, 892)], w=0.8)                                 # ankle bones
 F([(606, 878), (616, 882), (628, 879)], w=0.7)                     # stockings wrinkling
