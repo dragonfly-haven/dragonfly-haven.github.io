@@ -134,9 +134,10 @@ def turn(start, h0, dh, r, n=30):
 
 H_DOWN = math.degrees(math.atan2(-D[1], -D[0]))   # heading down the stem
 # 3' tail: one long, even turn the same way as the 5' arm's, so its bases fan out below
-TR3, TT3 = 190.0, 95.0
-foot2 = []
-tail3 = turn(fp(S / 2, -E0), H_DOWN, -TT3, TR3)
+# 3' tail: a short turn at the foot, then one long, even sweep out to the lower right,
+# turning the same way throughout, so its bases fan out below it
+foot2 = turn(fp(S / 2, -E0), H_DOWN, -40.0, 80.0)
+tail3 = turn(foot2[-1], H_DOWN - 40.0, -58.0, 300.0)[1:]
 
 path = []
 for part in (arm5, foot1, stem1, loop, stem2, foot2, tail3):
@@ -259,17 +260,17 @@ n_loop = 7                                  # a loop of seven unpaired bases
 centre = fp(0, LC)
 for k in range(n_loop):
     rod(s_a + (s_b - s_a) * (k + 1) / (n_loop + 1), LB, inward=centre)
-# the 5' arm and the 3' tail
-# (none on the turns at the foot of the stem, where they would cross under it)
-s_turn1 = nearest_s(fp(-S / 2 - RC, -E0 - RC))
-s_turn2 = nearest_s(tail3[len(tail3) // 4])
+# the 5' arm and the 3' tail, on at the same spacing from the stem's end pairs; on the 5' turn
+# at the stem's foot the one that would point in under the stem, across to the 3' strand, is
+# left out, so the bases either side of the foot point away from each other
 for k in range(1, 12):
     s = s_pair1[0] - SP * k
-    if 30 < s < s_turn1 - 6:
+    t = at(s)[1]
+    if s > 30 and (-t[1]) * P[0] + t[0] * P[1] < 0.3:
         rod(s, LB)
 for k in range(1, 12):
     s = s_pair2[0] + SP * k
-    if s_turn2 + 6 < s < TOTAL - 30:
+    if s < TOTAL - 30:
         rod(s, LB)
 
 # centre the drawing in the square
@@ -277,7 +278,12 @@ xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
 print('extent', round(max(xs) - min(xs)), round(max(ys) - min(ys)), 'loop bases', n_loop)
-SCALE = 1.05
-pen.strokes = [([((x - cx) * SCALE + 500, (y - cy) * SCALE + 500) for x, y in p], w) for p, w in pen.strokes]
+wsum = sum(length(p) * w for p, w in pen.strokes)
+mx = sum(length(p) * w * (p[0][0] + p[-1][0]) / 2 for p, w in pen.strokes) / wsum
+my = sum(length(p) * w * (p[0][1] + p[-1][1]) / 2 for p, w in pen.strokes) / wsum
+# set a little down and to the left, so the weight of the loop sits nearer the middle
+SCALE, NUDGE = 1.0, (-42.0, 28.0)
+pen.strokes = [([((x - cx) * SCALE + 500 + NUDGE[0], (y - cy) * SCALE + 500 + NUDGE[1]) for x, y in p], w) for p, w in pen.strokes]
+print('ink centre', round((mx - cx) * SCALE + 500 + NUDGE[0]), round((my - cy) * SCALE + 500 + NUDGE[1]))
 pen.save('../03-rna.svg', mirror=False)
 pen.report()

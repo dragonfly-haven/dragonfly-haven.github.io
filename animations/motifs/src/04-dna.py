@@ -232,9 +232,47 @@ def cut_end(S, uend, sgn):
                 smp['cut_' + key] = True
 
 
+TUCK_ENDS = (-1,)                            # ends where the strand behind is tucked in (see below)
 for uend, sgn in ((U_LO, -1), (U_HI, 1)):
-    for S in strands.values():
-        cut_end(S, uend, sgn)
+    zs = {}
+    for tag, S in strands.items():
+        j = min(range(len(S)), key=lambda k: abs(S[k]['u'] - uend))
+        zs[tag] = S[j]['c'][2]
+    front = max(zs, key=zs.get)
+    back = min(zs, key=zs.get)
+    cut_end(strands[front], uend, sgn)
+    if sgn not in TUCK_ENDS:
+        cut_end(strands[back], uend, sgn)
+        continue
+    # The strand behind ends on the line of the front ribbon's nearer edge, so it reads as
+    # passing in behind that ribbon rather than poking out beside the ribbon's end.
+    F, B = strands[front], strands[back]
+    j = min(range(len(F)), key=lambda k: abs(F[k]['u'] - uend))
+    jb = min(range(len(B)), key=lambda k: abs(B[k]['u'] - uend))
+    key = min(('e1', 'e2'), key=lambda kk: dist(F[j][kk], B[jb]['c']))
+    other = 'e2' if key == 'e1' else 'e1'
+    p0, p1 = F[j - sgn * 12][key], F[j][key]
+    ed = norm((p1[0] - p0[0], p1[1] - p0[1]))
+    n = (-ed[1], ed[0])
+    if (F[j][other][0] - p1[0]) * n[0] + (F[j][other][1] - p1[1]) * n[1] < 0:
+        n = (-n[0], -n[1])                   # n points across the front ribbon
+    order = range(len(B) // 2, len(B)) if sgn > 0 else range(len(B) // 2, -1, -1)
+    for kk in ('e1', 'e2', 'c'):
+        stop = None
+        for k in order:
+            smp = B[k]
+            e = smp[kk]
+            if stop is None and abs(smp['u'] - uend) <= 40:
+                s = (e[0] - p1[0]) * n[0] + (e[1] - p1[1]) * n[1]
+                if s > 0:
+                    # pulled back along the strand onto the line
+                    q = B[k - sgn][kk] if 0 <= k - sgn < len(B) else e
+                    sq = (q[0] - p1[0]) * n[0] + (q[1] - p1[1]) * n[1]
+                    f = sq / (sq - s) if sq != s else 0.0
+                    stop = lerp3(q, e, f)
+            if stop is not None:
+                smp[kk] = stop
+                smp['cut_' + kk] = True
 
 
 depth = Depth()
@@ -255,6 +293,31 @@ for tag, S in strands.items():
 
 # ---------------------------------------------------------------- base pairs
 
+def root_band(tag, u):
+    """The patch of ribbon a base is fixed to: the bar is tucked under it, front or back."""
+    S = strands[tag]
+    i = (u - S[0]['u']) / (S[-1]['u'] - S[0]['u']) * (len(S) - 1)
+    return [(poly, bb) for j, poly, bb in quads[tag] if abs(j - i) <= 14]
+
+
+def in_band(p, band):
+    return any(bb[0] <= p[0] <= bb[2] and bb[1] <= p[1] <= bb[3] and inside(p[:2], poly) for poly, bb in band)
+
+
+CAPGAP = 4.0                                # a bar in front of its own ribbon stops this short of it
+
+
+def trim(quad, band):
+    """A bar that rises toward us from its ribbon would lie across that ribbon's inner edge:
+    it stops a little short of the edge instead, square, so the edge runs on unbroken."""
+    L = dist(lerp3(quad[0], quad[3], 0.5), lerp3(quad[1], quad[2], 0.5)) or 1
+    t = 0.0
+    while t < 0.9 and (in_band(lerp3(quad[0], quad[1], t), band) or in_band(lerp3(quad[3], quad[2], t), band)):
+        t += 0.25 / L
+    t = min(0.9, t + CAPGAP / L)
+    return [lerp3(quad[0], quad[1], t), quad[1], quad[2], lerp3(quad[3], quad[2], t)]
+
+
 RISE = PITCH / BP_PER_TURN
 NBP = int(round(TURNS * BP_PER_TURN))
 GAP = 4.0                                   # half the gap where the two bases of a pair meet
@@ -265,10 +328,15 @@ for k in range(NBP):
     pa, pb = pos(u, theta('a', u)), pos(u, theta('b', u))
     m = lerp3(pa, pb, 0.5)
     d = norm(tuple(y - x for x, y in zip(pa, pb)))
-    halves = []
-    for s, e in ((pa, add(m, mul(d, -GAP))), (pb, add(m, mul(d, GAP)))):
-        halves.append([add(s, mul(a3, RT)), add(e, mul(a3, RT)), add(e, mul(a3, -RT)), add(s, mul(a3, -RT))])
-    pairs.append((u, halves))
+    halves, capped = [], []
+    for tag, s, e in (('a', pa, add(m, mul(d, -GAP))), ('b', pb, add(m, mul(d, GAP)))):
+        quad = [add(s, mul(a3, RT)), add(e, mul(a3, RT)), add(e, mul(a3, -RT)), add(s, mul(a3, -RT))]
+        rises = e[2] > s[2] + 1.0
+        if rises:
+            quad = trim(quad, root_band(tag, u))
+        halves.append(quad)
+        capped.append(rises)
+    pairs.append((u, halves, capped))
     for h, quad in enumerate(halves):
         nseg = 6
         for j in range(nseg):
@@ -277,13 +345,6 @@ for k in range(NBP):
             c2 = lerp3(quad[3], quad[2], (j + 1) / nseg)
             c3 = lerp3(quad[3], quad[2], j / nseg)
             depth.add([c0[:2], c1[:2], c2[:2], c3[:2]], (c0[2] + c1[2] + c2[2] + c3[2]) / 4, ('p', k))
-
-
-def root_band(tag, u):
-    """The patch of ribbon a base is fixed to: the bar is tucked under it, front or back."""
-    S = strands[tag]
-    i = (u - S[0]['u']) / (S[-1]['u'] - S[0]['u']) * (len(S) - 1)
-    return [(poly, bb) for j, poly, bb in quads[tag] if abs(j - i) <= 14]
 
 
 def own(tag, i, win):
@@ -331,8 +392,8 @@ for tag, S in strands.items():
 
 # ---------------------------------------------------------------- the base pairs
 
-for k, (u, halves) in enumerate(pairs):
-    for tag, q in zip(('a', 'b'), halves):
+for k, (u, halves, capped) in enumerate(pairs):
+    for tag, q, cap in zip(('a', 'b'), halves, capped):
         force = root_band(tag, u)
         skip = (lambda t, k=k: t is not None and t[0] == 'p' and t[1] == k)
         kw = dict(skip=skip, eps=0.6, force=force, minlen=4.0, hand=0.12)
@@ -344,6 +405,8 @@ for k, (u, halves) in enumerate(pairs):
             draw3([q[0], q[1]], w, **kw)
             draw3([q[3], q[2]], w, **kw)
             draw3([q[1], q[2]], w, **kw)
+            if cap:
+                draw3([q[0], q[3]], w, **kw)
 
 # centre the drawing in the square
 xs = [x for p, _ in pen.strokes for x, _ in p]
