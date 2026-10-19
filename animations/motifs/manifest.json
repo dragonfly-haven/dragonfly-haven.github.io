@@ -1,0 +1,110 @@
+{
+  "draft": true,
+  "motifs": [
+    {
+      "order": 1,
+      "slug": "galaxy",
+      "title": "Galaxy"
+    },
+    {
+      "order": 2,
+      "slug": "organic-molecule",
+      "title": "Organic molecule"
+    },
+    {
+      "order": 3,
+      "slug": "rna",
+      "title": "RNA"
+    },
+    {
+      "order": 4,
+      "slug": "dna",
+      "title": "DNA"
+    },
+    {
+      "order": 5,
+      "slug": "prokaryotic-cell",
+      "title": "Prokaryotic cell"
+    },
+    {
+      "order": 6,
+      "slug": "endosymbiosis",
+      "title": "Endosymbiosis"
+    },
+    {
+      "order": 7,
+      "slug": "eukaryotic-cell",
+      "title": "Eukaryotic cell"
+    },
+    {
+      "order": 8,
+      "slug": "choanoflagellate-colony",
+      "title": "Choanoflagellate colony"
+    },
+    {
+      "order": 9,
+      "slug": "jellyfish",
+      "title": "Jellyfish"
+    },
+    {
+      "order": 10,
+      "slug": "trilobite",
+      "title": "Trilobite"
+    },
+    {
+      "order": 11,
+      "slug": "fish",
+      "title": "Fish"
+    },
+    {
+      "order": 12,
+      "slug": "quastenflosser",
+      "title": "Quastenflosser"
+    },
+    {
+      "order": 13,
+      "slug": "cynodont",
+      "title": "Cynodont"
+    },
+    {
+      "order": 14,
+      "slug": "ginkgo-tree",
+      "title": "Ginkgo tree"
+    },
+    {
+      "order": 15,
+      "slug": "triceratops",
+      "title": "Triceratops"
+    },
+    {
+      "order": 16,
+      "slug": "crow",
+      "title": "Crow"
+    },
+    {
+      "order": 17,
+      "slug": "rat",
+      "title": "Rat"
+    },
+    {
+      "order": 18,
+      "slug": "early-primate",
+      "title": "Early primate"
+    },
+    {
+      "order": 19,
+      "slug": "neanderthals",
+      "title": "Neanderthals"
+    },
+    {
+      "order": 20,
+      "slug": "couple-1690s",
+      "title": "Couple, 1690s"
+    },
+    {
+      "order": 21,
+      "slug": "neural-net",
+      "title": "Neural net"
+    }
+  ]
+}
