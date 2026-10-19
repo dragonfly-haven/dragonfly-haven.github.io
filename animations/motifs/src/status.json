@@ -108,13 +108,14 @@
       "when": "2026-10-17"
     },
     "crow": {
-      "passed": false,
-      "last": [
-        7,
-        7,
-        6
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
+        8,
+        8,
+        8
       ],
-      "note": "lighter now, but stripes; wing, legs, tail, bill to fix"
+      "note": "redrawn from scratch, about a third less ink; polish asked: shaggier thighs, toes clear of the ground lines, firmer lowest coverts"
     },
     "rat": {
       "passed": true,
