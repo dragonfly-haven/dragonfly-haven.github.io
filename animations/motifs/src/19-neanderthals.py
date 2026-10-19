@@ -26,9 +26,10 @@ Every body part is a closed outline with a depth (z). An outline is hidden
 where a nearer part covers it, or where it runs inside a part it is joined to
 (so a thigh flows into a hip without a seam). Outlines are heavy where they
 bound a figure against the ground and lighter where they cross another part.
-Skin is modelled engraver-fashion: cross-contour rows wrapping round the
-trunk's barrel, sagging where it faces us, gathered on the side away from the
-fire and in a band under the swell of the chest, the fire-lit side left open;
+Skin is modelled engraver-fashion: on the trunk, contour rows that follow the
+ribs round the barrel, climbing into the far flank and running down toward the
+breastbone, gathered on the side away from the fire and in a band under the
+swell of the chest, the fire-lit side left open;
 short slanted strokes in from the shadow side of each limb. The hides are
 lofted round the body as bands with uneven edges, folds, thongs, knots and
 fur: the man's cape, held by a bone toggle at the front of the near shoulder,
@@ -581,27 +582,33 @@ class Trunk:
         top = sorted([q for q in top if q[1] <= lerp(left[-1], right[-1], 0.5)[1] + 0.5], key=lambda q: -q[0])
         return left[::-1] + bot + right + top
 
-    def rows(self, part, light, spacing=6.0, thr=0.42, mid=0.62, ln=(10, 22), gap=(2, 4), w=0.72, h0=None, h1=None,
-             keep=None, bow=0.0):
-        """Cross-contour hatching: the visible arc of every section a row apart,
-        inked where it turns away from the light; every other row runs on into
-        the half-tone. With bow (cm) each row sags where the surface faces us,
-        as the rings of a barrel do seen a little from above."""
+    def ribs(self, part, light, h0s, rise, thr=0.36, mid=0.6, keep=None, ln=(40, 90), gap=(3, 5), w=0.72, bow=1.5):
+        """Contour hatching that follows the ribs: each row a curve on the
+        surface at height h0 + rise(h0, phi), so it climbs toward the spine and
+        runs down toward the breastbone, inked where it turns from the light;
+        every other row runs on into the half-tone."""
         view = self.view
-        dh = spacing / (view.s * view.cp)
-        h = (h0 if h0 is not None else self.secs[0][0]) + pen.r(0, dh)
-        top = h1 if h1 is not None else self.secs[-1][0]
-        k = 0
-        hs = [s[0] for s in self.secs]
-        while h < top:
-            i = min(range(len(hs)), key=lambda j: abs(hs[j] - h))
-            sec = self.secs[i]
+        hs = [s_[0] for s_ in self.secs]
+
+        def sec_at(h):                                  # a section between the stored ones
+            i = max(0, min(len(hs) - 2, int((h - hs[0]) / (hs[1] - hs[0]))))
+            t = (h - hs[i]) / (hs[i + 1] - hs[i])
+            return [h] + [self.secs[i][m] + (self.secs[i + 1][m] - self.secs[i][m]) * t for m in range(1, 5)]
+
+        for k, h0 in enumerate(h0s):
             lim = thr if k % 2 else mid
             run, runs = [], []
-            for phi in [2 * math.pi * m / 240 for m in range(240)]:
-                n = self.normal(sec, phi)
-                p3 = self.point(sec, phi)
-                ok = view.facing(n) > 0.05 and vdot(n, light) < lim and (keep is None or keep(p3, n))
+            for m in range(360):
+                phi = -math.pi + 2 * math.pi * m / 360
+                h = h0 + rise(h0, phi)
+                ok = hs[1] <= h <= hs[-2]
+                if ok:
+                    sec = sec_at(h)
+                    p3 = self.point(sec, phi)
+                    nh = self.normal(sec, phi)
+                    p0, p1 = self.point(sec_at(h - 0.7), phi), self.point(sec_at(h + 0.7), phi)
+                    n = vnorm(vsub(nh, vmul(self.up, vdot(vsub(p1, p0), nh) / 1.4)))
+                    ok = view.facing(n) > 0.05 and vdot(n, light) < lim and (keep is None or keep(p3, n))
                 if ok:
                     q = view.P(p3)
                     run.append((q[0], q[1] + bow * view.s * max(0.0, view.facing(n))))
@@ -611,13 +618,10 @@ class Trunk:
             if run:
                 runs.append(run)
             for r in runs:
-                if len(r) < 2:
+                if len(r) < 3:
                     continue
-                r = sorted(r, key=lambda q: q[0])
-                for seg in broken(r, ln, gap, 1.0):
+                for seg in broken(catmull(r, step=1.5), ln, gap, 1.0):
                     part.add(seg, w=w * pen.r(0.92, 1.08), hand=0.1, lift=0)
-            h += dh
-            k += 1
 
     def at(self, h, phi):
         """The page point on the surface at height h along the spine and angle phi."""
@@ -767,7 +771,7 @@ class Head:
         # modelling: the side plane of the face hatched from the ear forward to
         # the line from the brow's outer end over the cheek to the jaw's angle,
         # under the jaw, and in the hollow under the brow
-        lite = 0.55 if self.sex == 'F' else 1.0
+        lite = 0.18 if self.sex == 'F' else 1.0
 
         def prob(q):
             x, y = self.inv(q)
@@ -1252,15 +1256,15 @@ def man(ox=236):
     knN, knF = (-9.5, 36.0, -4.0), (10.5, 36.3, 10.0)
     anN, anF = (-9.5, 7.5, -8.0), (11.0, 7.5, 6.0)
     shN, shF = (-19.5, 127.0, -1.5), (19.5, 127.0, -1.5)
-    elN, wrN = (-26.5, 98.5, -5.0), (-26.5, 79.5, -4.0)
+    elN, wrN = (-28.5, 99.0, -7.0), (-28.5, 80.0, -5.5)
     elF, wrF = (24.5, 100.5, 9.5), (19.4, 110.9, 25.6)
 
     # the trunk: a broad pelvis, the belly barely narrower, the rib cage a
     # deep barrel swelling out from it, the shoulders sloping down from the
     # neck under a heavy trapezius
-    keys = [(0, 17.5, 9.0, 11.5, 2.3), (6, 19.0, 10.0, 12.5, 2.3), (12, 18.0, 10.6, 12.0, 2.2),
-            (18, 17.4, 11.8, 11.0, 2.1), (24, 18.2, 13.0, 11.0, 2.1), (30, 20.4, 16.6, 11.6, 2.1),
-            (36, 21.4, 18.0, 12.2, 2.1), (42, 21.2, 17.4, 12.6, 2.1), (47, 20.0, 15.0, 12.2, 2.1),
+    keys = [(0, 17.5, 9.0, 11.5, 2.3), (6, 19.0, 10.0, 12.5, 2.3), (12, 17.6, 10.6, 11.4, 2.2),
+            (18, 16.9, 11.8, 10.4, 2.1), (24, 18.4, 13.0, 11.6, 2.1), (30, 21.0, 16.6, 12.8, 2.1),
+            (36, 21.6, 18.0, 13.2, 2.1), (42, 21.2, 17.4, 12.6, 2.1), (47, 20.0, 15.0, 12.2, 2.1),
             (51, 18.2, 11.6, 11.4, 2.2), (54, 15.4, 8.2, 10.4, 2.2), (57, 12.0, 6.0, 9.0, 2.1), (60, 8.5, 4.5, 7.5, 2.0)]
     Tr = Trunk(V, (0.0, 76.0, 0.0), (0.0, 1.0, 0.0), keys)
     torso = F.part('torso', Tr.poly(), 0, w=2.2, joins=('neck', 'thighN', 'thighF'))
@@ -1270,7 +1274,12 @@ def man(ox=236):
     LtT = vnorm((0.7, 0.6, 1.0))
     LtH = vnorm((0.7, 0.0, 1.0))
     band = lambda p3, n: vdot(vnorm((n[0], 0.0, n[2])), LtH) < 0.4 + 0.5 * math.exp(-((p3[1] - 102.0) / 4.5) ** 2)
-    Tr.rows(torso, LtT, spacing=5.8, thr=0.36, mid=0.6, ln=(30, 70), gap=(2, 4), h0=12, bow=2.6, keep=band)
+    # the rows follow the ribs: climbing into the flank toward the spine,
+    # running down toward the front, fewer and longer over the lower chest
+    def rib_rise(h0, phi):
+        A = 11.0 if h0 <= 32 else max(4.0, 11.0 - 0.35 * (h0 - 32))
+        return A * (max(0.0, -phi) / 2.4) ** 1.6 - (1.5 * phi if phi > 0 else 0.0)
+    Tr.ribs(torso, LtT, frange(2.0, 33.0, 2.0) + frange(34.8, 58.0, 1.8), rib_rise, keep=band)
     # a hint of the collarbones and of the arch of the lower ribs
     for pts in ([(52.4, -0.1), (53.1, -0.32), (52.9, -0.55), (52.2, -0.72)], [(52.4, 0.1), (53.1, 0.3), (52.9, 0.5)]):
         torso.add(Tr.curve(pts), w=0.85, hand=0.1)
