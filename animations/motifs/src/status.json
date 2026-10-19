@@ -50,7 +50,17 @@
     },
     "endosymbiosis": {
       "passed": true,
-      "when": "2026-10-17"
+      "when": "2026-10-17",
+      "rework": {
+        "round": "w1",
+        "scores": [
+          6,
+          7,
+          6
+        ],
+        "maxim": "not a clear yes: cleaner but too empty; dot grid, coil ring and clip arms read as decoration",
+        "passed": false
+      }
     },
     "eukaryotic-cell": {
       "passed": true,
