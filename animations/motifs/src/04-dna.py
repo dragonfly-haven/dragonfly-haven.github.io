@@ -119,6 +119,7 @@ BP_PER_TURN = 10.0
 DELTA = math.radians(132)                   # angle between the strands across the minor groove
 K = -2 * math.pi / PITCH                    # right-handed: dtheta/du
 END_DEG = 90.0
+TUCK_USE = {('a', 1)}                       # which strand ends are tucked behind the other ribbon
 LIGHT = norm((-0.55, -0.65, 0.55))          # from upper left, a little in front
 
 
@@ -166,10 +167,10 @@ def strand(tag):
 strands = {'a': strand('a'), 'b': strand('b')}
 
 
-def cut_planes(S):
+def cut_planes(S, ends):
     """The two end cuts of a strand: (point, direction along the strand) in the picture."""
     out = []
-    for uend, sgn in ((U_LO, 1), (U_HI, -1)):
+    for uend, sgn in ((ends[0], 1), (ends[1], -1)):
         j = min(range(len(S)), key=lambda k: abs(S[k]['u'] - uend))
         p, q = S[max(0, j - 4)]['c'], S[min(len(S) - 1, j + 4)]['c']
         t = (q[0] - p[0], q[1] - p[1])
@@ -184,14 +185,19 @@ def ax(p):
 
 
 def side(p, cut):
-    """Signed distance past a cut (negative: cut away); cuts only act near their own end."""
+    """Signed distance past a cut (negative: cut away); the cut line acts near its own end,
+    and everything well past the end is cut away."""
     c, t, uend = cut
-    if abs(ax(p) - uend) > 70:
+    beyond = (ax(p) - uend) * (1 if t[0] * A[0] + t[1] * A[1] > 0 else -1)
+    if beyond > 70:
         return 1.0
+    if beyond < -70:
+        return -1.0
     return (p[0] - c[0]) * t[0] + (p[1] - c[1]) * t[1]
 
 
-CUTS = {tag: cut_planes(S) for tag, S in strands.items()}
+ENDS = {'a': [U_LO, U_HI], 'b': [U_LO, U_HI]}
+CUTS = {tag: cut_planes(S, ENDS[tag]) for tag, S in strands.items()}
 
 
 def keep_side(tag, p):
@@ -238,19 +244,74 @@ def cut_poly(tag, poly3):
     return pts
 
 
-depth = Depth()
-
-# occluders: each ribbon in small quads
 QSTEP = 3
-quads = {'a': [], 'b': []}
-for tag, S in strands.items():
+
+
+def ribbon_quads(tag):
+    """A ribbon as small quads: (index, 2D polygon, depth)."""
+    S = strands[tag]
+    out = []
     for i in range(0, len(S) - QSTEP, QSTEP):
         p, q = S[i], S[i + QSTEP]
         poly3 = cut_poly(tag, [p['e1'], q['e1'], q['e2'], p['e2']])
-        if len(poly3) < 3:
-            continue
-        z = sum(c[2] for c in poly3) / len(poly3)
-        poly = [c[:2] for c in poly3]
+        if len(poly3) >= 3:
+            out.append((i, [c[:2] for c in poly3], sum(c[2] for c in poly3) / len(poly3)))
+    return out
+
+
+def cap_points(tag, cut):
+    """Points along a strand's cut end (and the last bit of each edge), with depths."""
+    S = strands[tag]
+    hits = []
+    for key in ('e1', 'e2'):
+        pts = [s[key] for s in S]
+        for i in range(1, len(pts)):
+            dq, dp = side(pts[i - 1], cut), side(pts[i], cut)
+            if dq * dp < 0 and abs(S[i]['u'] - cut[2]) < EXT + 20:
+                hits.append((lerp3(pts[i - 1], pts[i], dq / (dq - dp)), i, key))
+                break
+    if len(hits) < 2:
+        return None
+    a, b = hits[0][0], hits[1][0]
+    out = [p for p in over3(a, b, 3.0, 3.0)]
+    out += [lerp3(a, b, k / 8) for k in range(9)]
+    for x, i, key in hits:
+        # a few units back along each edge, into the ribbon
+        for back in (1, 2, 3, 4):
+            j = i - back if cut[1][0] * (S[i]['c'][0] - S[i - 1]['c'][0]) + cut[1][1] * (S[i]['c'][1] - S[i - 1]['c'][1]) > 0 else i + back
+            if 0 <= j < len(S):
+                out.append(S[j][key])
+    return out
+
+
+# A strand whose cut end would stand out from behind the other strand's near ribbon ends
+# a little earlier instead, its end tucked out of sight behind that ribbon.
+TUCK = {}
+for tag, other in (('a', 'b'), ('b', 'a')):
+    probe = Depth()
+    for i, poly, z in ribbon_quads(other):
+        probe.add(poly, z, (other, i))
+    for e, sgn in ((0, 1), (1, -1)):
+        start = ENDS[tag][e]
+        best, score = None, 0.9
+        for step in range(1, 170):
+            u = start + sgn * step
+            pts = cap_points(tag, cut_planes(strands[tag], [u, u])[e])
+            if pts:
+                hid = sum(probe.hidden(p[:2], p[2], None, 1.0) for p in pts) / len(pts)
+                if hid > score:
+                    best, score = u, hid
+        TUCK[(tag, e)] = best
+print('tuck', {k: (round(v) if v is not None else None) for k, v in TUCK.items()})
+for (tag, e), u in TUCK.items():
+    if u is not None and (tag, e) in TUCK_USE:
+        ENDS[tag][e] = u
+CUTS = {tag: cut_planes(S, ENDS[tag]) for tag, S in strands.items()}
+
+depth = Depth()
+quads = {'a': [], 'b': []}
+for tag in strands:
+    for i, poly, z in ribbon_quads(tag):
         depth.add(poly, z, (tag, i))
         xs = [c[0] for c in poly]
         ys = [c[1] for c in poly]
@@ -260,6 +321,7 @@ for tag, S in strands.items():
 RISE = PITCH / BP_PER_TURN
 RT = 7.0  # half thickness of a rung, along the axis (as the pegs of 03)
 lo, hi = U_LO + RT + 4, U_HI - RT - 4
+BOTH = (max(ENDS['a'][0], ENDS['b'][0]) + RT + 4, min(ENDS['a'][1], ENDS['b'][1]) - RT - 4)
 nbp = int(round((hi - lo) / RISE)) + 1
 u_first = lo
 RISE = (hi - lo) / (nbp - 1)
@@ -269,7 +331,8 @@ for k in range(nbp):
     tha = THETA0 + K * u
     pa, pb = pos(u, tha), pos(u, tha + DELTA)
     f = 0.56 if (k * 7 + 3) % 5 < 2 else 0.44   # purine with pyrimidine, either way round
-    rungs.append((u, pa, pb, f))
+    if BOTH[0] <= u <= BOTH[1]:                 # only where both strands still run
+        rungs.append((u, pa, pb, f))
 
 def rung_quads(pa, pb, f):
     """The two pegs of a rung as 3D quads (corner points), meeting with a small gap."""
@@ -432,6 +495,6 @@ xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
 pen.strokes = [([(x - cx + 500, y - cy + 500) for x, y in p], w) for p, w in pen.strokes]
-print('pairs', nbp)
+print('pairs', len(rungs))
 pen.save('../04-dna.svg', mirror=False)
 pen.report()

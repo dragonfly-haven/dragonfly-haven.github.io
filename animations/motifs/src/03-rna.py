@@ -88,28 +88,27 @@ def scr(dx, dy):
     return (B0[0] + dx, B0[1] + dy)
 
 
-RC = 28.0                               # radius of the turns at the foot of the stem
-
-
-def corner(start, side):
-    """The quarter turn at the foot of the stem, as points: side -1 runs in along +P and turns up
-    into strand 1 at `start`; side +1 leaves strand 2 at `start` and turns out along +P."""
+def corner(start, side, a, b):
+    """The turn at the foot of the stem, as points on a quarter ellipse reaching `a` below the
+    strand's end (along -D) and `b` out to its side (along P): side -1 runs in along +P and
+    turns up into strand 1 at `start`; side +1 leaves strand 2 at `start` and turns out along +P.
+    Unequal reaches give a loose, uneven bend rather than an elbow."""
     out = []
-    for k in range(7):
-        f = math.radians(90 * k / 6)
+    for k in range(9):
+        f = math.radians(90 * k / 8)
         if side < 0:
-            c = (start[0] - P[0] * RC, start[1] - P[1] * RC)
-            out.append((c[0] + RC * (-D[0] * math.cos(f) + P[0] * math.sin(f)), c[1] + RC * (-D[1] * math.cos(f) + P[1] * math.sin(f))))
+            c = (start[0] - P[0] * b, start[1] - P[1] * b)
+            out.append((c[0] - D[0] * a * math.cos(f) + P[0] * b * math.sin(f), c[1] - D[1] * a * math.cos(f) + P[1] * b * math.sin(f)))
         else:
-            c = (start[0] + P[0] * RC, start[1] + P[1] * RC)
-            out.append((c[0] + RC * (-P[0] * math.cos(f) - D[0] * math.sin(f)), c[1] + RC * (-P[1] * math.cos(f) - D[1] * math.sin(f))))
+            c = (start[0] + P[0] * b, start[1] + P[1] * b)
+            out.append((c[0] - P[0] * b * math.cos(f) - D[0] * a * math.sin(f), c[1] - P[1] * b * math.cos(f) - D[1] * a * math.sin(f)))
     return out
 
 
-foot1 = corner(pt(-1, -E0), -1)
-foot2 = corner(pt(+1, -E0), +1)
+foot1 = corner(pt(-1, -E0), -1, 50.0, 44.0)
+foot2 = corner(pt(+1, -E0), +1, 54.0, 46.0)
 arm5 = [scr(-392, -425), scr(-362, -295), scr(-312, -168), scr(-240, -78), (foot1[0][0] - P[0] * 45, foot1[0][1] - P[1] * 45)] + foot1[:-1]
-tail3 = foot2[1:] + [(foot2[-1][0] + P[0] * 45, foot2[-1][1] + P[1] * 45), scr(190, 160), scr(262, 222), scr(302, 315), scr(308, 418)]
+tail3 = foot2[1:] + [(foot2[-1][0] + P[0] * 34, foot2[-1][1] + P[1] * 34), scr(192, 176), scr(262, 226), scr(302, 315), scr(308, 418)]
 
 ctrl = arm5 + stem_line(-1, -E0, LS + E1) + loop_pts() + stem_line(+1, LS + E1, -E0) + tail3
 line = resample(catmull(ctrl, step=2.0), 2.0)
@@ -206,27 +205,47 @@ def shade_stroke(i):
     return a, b, min(0.92, f), away, c
 
 
+def wander(s):
+    """A slow, uneven swell along the strand, 0..1, so the hatching is not a rail track."""
+    return 0.5 + 0.3 * math.sin(s / 41.0 + 1.3) + 0.2 * math.sin(s / 14.0 + 0.4)
+
+
 last = None
 acc = 0.0
 for i in range(1, len(samples) - 1):
     acc += dist(samples[i - 1]['p'], samples[i]['p'])
     a, b, f, away, c = shade_stroke(i)
-    sp = 6.2 if c > 0.5 else 6.0
+    s = samples[i]['s']
+    arm = s < s_bot1 - 40                         # the 5' arm, above its turn into the stem
+    if c > 0.5:
+        # on the ribbon's face: opener where it is lit, and opener still along the 5' arm
+        sp = 6.0 + (4.5 if arm else 1.2) * (1 - away) ** 2 + (0.8 if arm else 0.0)
+    else:
+        sp = 6.0
     if acc < sp:
         continue
     if dist(a, b) < 5:
         continue
     if c >= 0 and away < 0.12:
         continue                                  # where the ribbon runs along the light, it is lit on both edges
-    if last is not None and min(dist(a, last[0]), dist(lerp(a, b, f), last[1])) < 5.0:
-        continue
+    if arm and c >= 0.5 and pen.rng.random() < 0.5 * max(0.0, (0.45 - away) / 0.45):
+        acc = 0.0
+        continue                                  # and on the lit stretches of the arm it is left open here and there
     acc = 0.0
     t0 = pen.r(0.02, 0.1)
-    t1 = f * pen.r(0.8, 1.0)
+    if c >= 0.5:
+        t1 = f * (0.75 + 0.42 * wander(s)) * pen.r(0.84, 1.04)
+        if arm:
+            t1 *= 0.6 + 0.4 * min(1.0, away / 0.6)
+    else:
+        t1 = f * pen.r(0.85, 1.0)
+    t1 = min(0.95, t1)
     q0, q1 = lerp(a, b, t0), lerp(a, b, t1)
-    last = (a, q1)
+    if last is not None and min(dist(q0, last[0]), dist(q1, last[1])) < 5.4:
+        continue
+    last = (q0, q1)
     if dist(q0, q1) > 3:
-        pen.line([q0, q1], w=pen.r(0.9, 1.1), hand=0.3, lift=0.04, piece=(40, 120), occlude=False)
+        pen.line([q0, q1], w=pen.r(0.88, 1.1), hand=0.35, lift=0.04, piece=(40, 120), occlude=False)
 
 # the pegs go under the ribbon
 for i in range(0, len(samples) - 4, 4):
@@ -300,7 +319,7 @@ def peg(root, d, L, hwr):
         c0 = lerp(_along(sides[0], u0), _along(sides[1], u0), 0.14)
         c1 = lerp(_along(sides[0], u1), _along(sides[1], u1), 0.86)
         pen.line([c0, c1], w=pen.r(1.15, 1.35), hand=0.2, lift=0)
-        t += 5.6 + pen.r(-0.15, 0.25)
+        t += 5.85 + pen.r(-0.15, 0.25)
 
 
 def _along(pts, u):
@@ -323,6 +342,8 @@ xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
 print('extent', round(max(xs) - min(xs)), round(max(ys) - min(ys)))
-pen.strokes = [([(x - cx + 500, y - cy + 500) for x, y in p], w) for p, w in pen.strokes]
+# a touch smaller, and nudged down and left so the weight of the loop sits nearer the centre
+SCALE, NUDGE = 0.965, (-18.0, 16.0)
+pen.strokes = [([((x - cx) * SCALE + 500 + NUDGE[0], (y - cy) * SCALE + 500 + NUDGE[1]) for x, y in p], w) for p, w in pen.strokes]
 pen.save('../03-rna.svg', mirror=False)
 pen.report()
