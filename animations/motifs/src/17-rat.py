@@ -19,6 +19,7 @@ outline along the back. Drawn facing right; saved mirrored.
 """
 
 import math
+import os
 import random
 
 import numpy as np
@@ -270,11 +271,15 @@ def lookup(M, p):
     return 0.0
 
 
-def hair_stroke(seg, turn=6.0, bow=1.0):
+def hair_stroke(seg, turn=7.5, bow=1.3, shift=1.0):
     """A fur stroke: turned a few degrees about its root and bowed a little, so rows
     of strokes read as hair, not as grain."""
     if len(seg) < 3:
         return seg
+    sx, sy = seg[0][0] - seg[-1][0], seg[0][1] - seg[-1][1]
+    sl = math.hypot(sx, sy) or 1.0
+    o = rng.uniform(-shift, shift)
+    seg = [(x - sy / sl * o, y + sx / sl * o) for x, y in seg]
     m = seg[0]
     a = rng.gauss(0, math.radians(turn))
     ca, sa = math.cos(a), math.sin(a)
@@ -287,7 +292,7 @@ def hair_stroke(seg, turn=6.0, bow=1.0):
     return [(x + nx * b * math.sin(math.pi * i / n), y + ny * b * math.sin(math.pi * i / n)) for i, (x, y) in enumerate(rot)]
 
 
-def fur(region, field, D, box, wbase=0.66, wvar=0.8, maxlen=220.0, seedstep=7, lenscale=1.0):
+def fur(region, field, D, box, wbase=0.62, wvar=0.95, maxlen=220.0, seedstep=7, lenscale=1.0):
     """Fur for a region: streamlines spaced by darkness (close where dark), each broken
     into hair strokes, long and close where dark, short and gappy toward the light."""
     def ok(p):
@@ -296,7 +301,7 @@ def fur(region, field, D, box, wbase=0.66, wvar=0.8, maxlen=220.0, seedstep=7, l
 
     def sep(p):
         d = min(1.0, max(0.0, lookup(D, p)))
-        return 5.0 + 5.5 * (1 - d) ** 1.5
+        return 5.0 + 6.0 * (1 - d) ** 1.5
 
     x0, y0, x1, y1 = box
     seeds = [(x + rng.uniform(-2, 2), y + rng.uniform(-2, 2)) for x in range(x0, x1, seedstep) for y in range(y0, y1, seedstep)]
@@ -313,12 +318,12 @@ def fur(region, field, D, box, wbase=0.66, wvar=0.8, maxlen=220.0, seedstep=7, l
             raw = lookup(D, p)
             d = min(1.0, max(0.0, raw))
             deep = max(0.0, min(0.35, raw - 1.0))
-            dl = (7 + 12 * d + 10 * d ** 3 + rng.uniform(-2.5, 3.0)) * lenscale
-            gap = 1.6 + 6.0 * (1 - d) ** 1.4 + rng.uniform(-0.5, 1.6)
-            if rng.random() < 0.2 + 1.0 * d:
+            dl = (7 + 14 * d + 10 * d ** 3 + rng.uniform(-2.5, 3.0)) * lenscale
+            gap = 1.5 + 5.0 * (1 - d) ** 1.4 + rng.uniform(-0.5, 1.6)
+            if rng.random() < 0.25 + 1.0 * d:
                 seg = Cl.part(s / Cl.L, min(1.0, (s + dl) / Cl.L), 1.0)
                 seg = hair_stroke(seg)
-                draw(seg, w=wbase + wvar * d ** 1.5 + 1.3 * deep, hand=0.15, lift=0, piece=(40, 90), taper=0.45)
+                draw(seg, w=wbase + wvar * d ** 1.6 + 1.3 * deep, hand=0.15, lift=0, piece=(40, 90), taper=0.45)
                 n += 1
             s += dl + gap
     return n
@@ -330,9 +335,9 @@ GROUND = 646
 
 # head and back, from the top of the nose pad to the root of the tail
 TOPLINE = Curve(C([(877, 410), (862, 403), (843, 396), (822, 388), (800, 380), (780, 374), (760, 371),
-                   (740, 373), (722, 379), (705, 389), (688, 398), (668, 404), (648, 407), (625, 411),
-                   (600, 416), (572, 416), (540, 411), (505, 404), (470, 399), (440, 398), (412, 403),
-                   (388, 415), (368, 433), (354, 455), (347, 478), (346, 498)]))
+                   (740, 373), (722, 379), (705, 389), (688, 398), (668, 403), (648, 405), (626, 410),
+                   (602, 417), (578, 419), (548, 414), (512, 405), (478, 400), (450, 401), (422, 407),
+                   (397, 419), (375, 435), (356, 456), (341, 479), (332, 500)]))
 # snout tip: nose pad, cleft upper lip, chin
 NOSE = C([(877, 410), (884, 414), (888, 421), (887, 429), (882, 435), (875, 437)], step=1.0)
 LIP = C([(875, 437), (874, 444), (870, 451), (862, 455), (850, 456)], step=1.0)
@@ -346,7 +351,7 @@ FL_BACK = Curve(C([(700, 566), (689, 571), (684, 580), (688, 594), (696, 612), (
 # belly from the knee forward to the elbow
 BELLY = Curve(C([(520, 570), (545, 576), (580, 580), (620, 580), (655, 576), (680, 570), (700, 566)]))
 # hind leg: buttock down to the heel; shank front from the knee to the ankle
-REAR = Curve(C([(349, 516), (353, 536), (363, 558), (378, 581), (396, 603), (412, 620), (422, 630)]))
+REAR = Curve(C([(334, 522), (338, 544), (349, 566), (366, 591), (388, 611), (408, 623), (422, 630)]))
 SHANK = Curve(C([(520, 570), (506, 583), (491, 598), (478, 612), (469, 622)]))
 THIGH = Curve(C([(533, 436), (540, 476), (539, 515), (532, 547), (520, 570)]))   # front of the thigh mass
 EYE = (806, 400)
@@ -361,9 +366,9 @@ def body_poly():
 
 # ---------------------------------------------------------------- digits, hands and feet
 
-def digit(base, tip, thick=5.0, claw=5.0, w=1.3, joints=(0.5,)):
-    """A finger or toe lying forward from its base to its tip: plump, a little swollen
-    at the joints and at the tip pad, with a short hooked claw. Returns its outline."""
+def digit(base, tip, thick=5.0, claw=5.0, w=1.3, knuckle=0.45, bottom=True):
+    """A finger or toe lying forward along the ground from its base to its tip: an arch
+    with a knuckle and a plump tip pad, and a short hooked claw. Returns its outline."""
     bx, by = base
     tx, ty = tip
     L = dist(base, tip)
@@ -371,40 +376,41 @@ def digit(base, tip, thick=5.0, claw=5.0, w=1.3, joints=(0.5,)):
     nx, ny = uy, -ux
     if ny > 0:
         nx, ny = -nx, -ny                   # the digit's upper side
-    half = thick / 2
 
-    def wd(t):
-        bump = sum(0.1 * math.exp(-((t - j) / 0.09) ** 2) for j in joints)
-        return half * (1 - 0.22 * t) * (1 + bump) * (1 + 0.12 * math.exp(-((t - 0.9) / 0.08) ** 2))
+    def h(t):
+        return thick * (1 - 0.3 * t + 0.1 * math.exp(-((t - knuckle) / 0.12) ** 2)
+                        + 0.08 * math.exp(-((t - 0.86) / 0.08) ** 2))
 
-    ts = np.linspace(0, 1, 18)
-    top = [(bx + ux * L * t + nx * wd(t), by + uy * L * t + ny * wd(t)) for t in ts]
-    bot = [(bx + ux * L * t - nx * wd(t) * 0.9, by + uy * L * t - ny * wd(t) * 0.9) for t in ts]
-    r = wd(1)
-    cap = [(tx + ux * r * 0.8 * math.sin(a) + nx * r * (math.cos(a) if math.cos(a) > 0 else 0.9 * math.cos(a)),
-            ty + uy * r * 0.8 * math.sin(a) + ny * r * (math.cos(a) if math.cos(a) > 0 else 0.9 * math.cos(a)))
-           for a in np.linspace(0, math.pi, 9)]
-    # claw from the top of the tip, hooking forward and down
-    c0 = lerp(top[-3], cap[1], 0.5)
-    ctip = (tx + ux * (r * 0.8 + claw) - nx * r * 0.9, ty + uy * (r * 0.8 + claw) - ny * r * 0.9)
-    c_out = C([c0, (tx + ux * (r * 0.8 + claw * 0.55) + nx * r * 0.55, ty + uy * (r * 0.8 + claw * 0.55) + ny * r * 0.55), ctip], step=0.5)
-    c_in = C([cap[4], (tx + ux * (r * 0.8 + claw * 0.45) - nx * r * 0.2, ty + uy * (r * 0.8 + claw * 0.45) - ny * r * 0.2), ctip], step=0.5)
-    draw(c_out, w=1.3, hand=0, lift=0)
-    draw(c_in, w=0.85, hand=0, lift=0)
-    draw(top + cap, w=w, hand=0.1, lift=0)
-    draw(bot, w=w * 1.12, hand=0.1, lift=0)
-    for j in joints:
-        i = int(round(j * 17))
-        draw([lerp(bot[i], top[i], 0.15), lerp(bot[i], top[i], 0.8)], w=0.7, hand=0, lift=0)
-    return top + cap + [ctip] + list(reversed(bot))
+    ts = np.linspace(0, 0.9, 16)
+    top = [(bx + ux * L * t + nx * h(t), by + uy * L * t + ny * h(t)) for t in ts]
+    # the rounded tip, from the top of the tip pad over the front and down to the ground
+    e = top[-1]
+    hh = h(0.9)
+    cap = []
+    for a in np.linspace(0, math.pi * 0.5, 7):
+        cap.append((tx - ux * hh * 0.45 * (1 - math.sin(a)) + ux * hh * 0.25 * math.sin(a) + nx * hh * math.cos(a) * 0.95,
+                    ty - uy * hh * 0.45 * (1 - math.sin(a)) + uy * hh * 0.25 * math.sin(a) + ny * hh * math.cos(a) * 0.95))
+    cap = [e] + cap
+    bot = [(bx + ux * L * t, by + uy * L * t) for t in np.linspace(0, 1, 12)]
+    # claw from the top of the tip pad, hooking forward and down to the ground
+    c0 = cap[2]
+    ctip = (tx + ux * (claw + hh * 0.3) - nx * 0.3, ty + uy * (claw + hh * 0.3) - ny * 0.3)
+    c_out = C([c0, (tx + ux * (claw * 0.55 + hh * 0.2) + nx * hh * 0.7, ty + uy * (claw * 0.55 + hh * 0.2) + ny * hh * 0.7), ctip], step=0.5)
+    c_in = C([cap[5], (tx + ux * (claw * 0.5 + hh * 0.3) + nx * hh * 0.15, ty + uy * (claw * 0.5 + hh * 0.3) + ny * hh * 0.15), ctip], step=0.5)
+    draw(c_out, w=1.35, hand=0, lift=0)
+    draw(c_in, w=0.8, hand=0, lift=0)
+    draw(top + cap[1:], w=w, hand=0.1, lift=0)
+    if bottom:
+        draw(bot, w=w, hand=0.1, lift=0)
+    return top + cap[1:] + [ctip] + list(reversed(bot))
 
 
 def near_hand():
     """Near forefoot: the palm on the ground, four slender clawed fingers fanned
     forward, a thumb nub behind them."""
-    for base, tip, th, j in (((729, 641.5), (744, 647), 4.6, (0.5,)), ((733, 639), (751, 645.5), 4.8, (0.45,)),
-                             ((735, 636.5), (755, 641.5), 4.8, (0.45,)), ((733, 633.5), (751, 636), 4.4, (0.45,))):
-        occlude(digit(base, tip, thick=th, claw=4.2, w=1.25, joints=j))
+    for base, tip, th in (((728, 646.5), (743, 646.8), 5.0), ((732, 642.5), (750, 644.5), 5.2),
+                          ((734, 638.5), (754, 640.5), 5.2), ((732, 634.5), (750, 635.5), 4.8)):
+        occlude(digit(base, tip, thick=th, claw=4.0, w=1.25))
     dors = C([(722, 630), (729, 632.5), (736, 635)], step=1)
     palm = C([(705, 633), (707, 640), (713, 645.2), (729, 646.5)], step=1)
     draw(dors, w=1.6, hand=0.1, lift=0)
@@ -420,13 +426,13 @@ def near_hand():
 def near_foot():
     """Near hind foot: plantigrade, the long sole flat from the heel to the toes, five
     clawed toes (the short first toe on the far side)."""
-    toes = [((516, 642.5), (533, 647.5), 5.6, (0.45,)),        # fifth, the outer, nearest
-            ((520, 640), (545, 646.5), 6.0, (0.38, 0.7)),
-            ((522, 637.5), (551, 643), 6.0, (0.38, 0.7)),
-            ((520, 634.5), (547, 637.5), 5.6, (0.38, 0.7)),
-            ((511, 631.5), (527, 631), 4.8, (0.5,))]           # first, short, on the far side
-    for base, tip, th, j in toes:
-        occlude(digit(base, tip, thick=th, claw=5.0, w=1.3, joints=j))
+    toes = [((513, 647), (532, 647.5), 5.8, 0.45),          # fifth, the outer, nearest
+            ((517, 642.5), (545, 644.5), 6.2, 0.4),
+            ((520, 638), (552, 639.5), 6.2, 0.4),
+            ((518, 633.5), (548, 633.5), 5.8, 0.4),
+            ((509, 629.5), (526, 628.5), 5.0, 0.5)]            # first, short, on the far side
+    for base, tip, th, kn in toes:
+        occlude(digit(base, tip, thick=th, claw=5.0, w=1.3, knuckle=kn))
     top = C([(469, 622), (484, 628), (500, 632.5), (514, 635), (520, 637)], step=1.5)
     sole = C([(421, 641), (430, 646.5), (460, 647.5), (490, 647.5), (517, 647)], step=1.5)
     heel = C([(422, 630), (418.5, 636), (421, 641)], step=1)
@@ -613,7 +619,7 @@ def body_lines():
 
 # ---------------------------------------------------------------- tail
 
-TAIL_C = Curve(C([(356, 506), (322, 517), (290, 535), (261, 561), (239, 593), (227, 628), (229, 659),
+TAIL_C = Curve(C([(342, 511), (310, 522), (280, 540), (254, 562), (235, 594), (225, 628), (228, 659),
                   (245, 679), (273, 690), (311, 695), (352, 695), (393, 690), (430, 683)]))
 
 
@@ -739,22 +745,41 @@ def main():
     dbel = dmap(BELLY.pts())
     drear = dmap(REAR.pts())
     dthigh = dmap(THIGH.pts())
-    D = 0.40 + 0.52 * np.exp(-dtop / 70.0)                           # dark along the back
-    D = D - 0.42 * np.exp(-((dtop - 5.0) / 3.5) ** 2)                 # a lit rim along the back
-    D = D - 0.35 * np.exp(-dbel / 22.0) * (GXX < 700)                # pale belly
-    D = D - 0.38 * blob(470, 465, 34)                                # haunch lit on its upper front
-    D = D + 0.30 * np.exp(-drear / 22.0) * (GYY > 470)               # dark behind and below
-    D = D + 0.22 * np.exp(-dthigh / 12.0) * (GXX > THIGH.at(0.5)[0] - 4) * (GYY > 460)   # flank fold
-    D = D - 0.30 * blob(705, 455, 26)                                # point of the shoulder lit
-    D = D + 0.22 * blob(645, 505, 30)                                # dark behind it
-    D = D + 0.20 * blob(692, 585, 12)                                # behind the elbow
-    head = GXX > 715
-    D = np.where(head, D - 0.22 * blob(797, 440, 26) - 0.35 * np.clip((GXX - 822) / 40.0, 0, 1), D)
+    dshank = dmap(SHANK.pts())
+
+    def step(v, v0, w):
+        return 1.0 / (1.0 + np.exp(-(v - v0) / w))
+
+    thx = THIGH.at(0.6)[0]
+    D = 0.32 + 0.8 * np.exp(-dtop / 50.0)                            # dark along the back
+    D = D - 0.45 * np.exp(-((dtop - 5.0) / 3.2) ** 2)                 # a lit rim along the back
+    # the barrel turns under: a shade above the pale belly fringe
+    D = D + 0.18 * np.exp(-((dbel - 34) / 15.0) ** 2) * step(GXX, 525, 8) * (1 - step(GXX, 690, 8))
+    D = D - 0.34 * np.exp(-dbel / 14.0) * (1 - step(GXX, 696, 5))
+    # the haunch: lit on its upper front, dark behind and below, dark in the flank fold
+    D = D - 0.42 * blob(468, 468, 36)
+    D = D + 0.35 * np.exp(-drear / 26.0) * step(GYY, 470, 15)
+    D = D + 0.25 * np.exp(-dthigh / 12.0) * step(GXX, thx - 4, 4) * step(GYY, 470, 10)
+    D = D + 0.2 * np.exp(-dshank / 18.0)
+    # the shoulder: lit on its point, dark behind it and behind the elbow
+    D = D - 0.32 * blob(705, 458, 26)
+    D = D + 0.25 * blob(648, 505, 30)
+    D = D + 0.25 * blob(692, 590, 14)
+    # shadow under the jaw and down the throat
+    D = D + 0.25 * np.exp(-dund / 20.0) * step(GYY, 485, 8) * (1 - step(GYY, 560, 10))
+    # the head: cheek and muzzle light, a dark ring about the eye
+    headm = step(GXX, 725, 8)
+    D = D - headm * (0.25 * blob(797, 440, 24) + 0.4 * np.clip((GXX - 825) / 40.0, 0, 1))
     deye = np.hypot(GXX - EYE[0], GYY - EYE[1])
-    D = D + 0.35 * np.exp(-((deye - 13) / 4.0) ** 2)
+    D = D + 0.4 * np.exp(-((deye - 12.5) / 3.5) ** 2)
     D[np.minimum(np.minimum(dtop, dund), np.minimum(dbel, drear)) < 3.2] = -1
 
     region = poly_mask(body_poly()) & ~OCC & ~halo(lines, 2.6) & ~halo(wl, 1.2)
+    if os.environ.get('RAT_DEBUG'):
+        m = poly_mask(body_poly())[::2, ::2][280:760, 60:960]
+        img = np.clip(D, 0, 1.2)[:, :] / 1.2
+        img = np.where(m[:img.shape[0] * 2:2, :img.shape[1] * 2:2][:img.shape[0], :img.shape[1]] if False else True, img, 0)
+        Image.fromarray((255 - img * 255).astype(np.uint8)).resize((900, 480)).save(os.environ['RAT_DEBUG'])
     field = Field([
         (TOPLINE.part(0.25, 1.0), 1.0),
         (TOPLINE.part(0.0, 0.3), 0.6),
@@ -770,8 +795,8 @@ def main():
         (C([(640, 432), (600, 444), (560, 458), (530, 472)]), 0.6),
         (C([(660, 520), (620, 538), (580, 550), (545, 558)]), 0.5),
         # the haunch: arcs about the hip
-        (C([(545, 425), (500, 418), (455, 420), (418, 435), (392, 462), (382, 495), (386, 530),
-            (400, 565), (420, 595), (445, 615)]), 1.0),
+        (C([(545, 425), (500, 416), (455, 418), (418, 430), (390, 452), (372, 485), (372, 520),
+            (382, 556), (402, 590), (428, 614)]), 1.0),
         (C([(515, 465), (485, 460), (458, 470), (440, 495), (436, 525), (446, 558), (465, 588),
             (480, 605)]), 0.9),
         (THIGH.pts(), 0.8),

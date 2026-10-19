@@ -66,6 +66,8 @@ U_TOP = (NBP - 1) * SP + E1
 H0 = 48.0                                   # the strand leaves the straight stem this far below its top
 NK = 40.0                                   # handle length of the neck curves
 LIGHT = (-0.6, -0.8)                        # light from the upper left
+BASE = 'bar'                                # a base as a rod (one heavy line) or an outlined bar
+BW = 5.0                                    # half width of an outlined bar
 
 
 def fp(p, d):
@@ -129,12 +131,10 @@ def turn(start, h0, dh, r, n=30):
 
 
 H_DOWN = math.degrees(math.atan2(-D[1], -D[0]))   # heading down the stem
-foot2 = turn(fp(S / 2, -E0), H_DOWN, 75 - H_DOWN, 84)                 # eases out of strand 2
-q0 = foot2[-1]
-h1, h2 = math.radians(75), math.radians(88)
-TL3 = 290.0
-q3 = (q0[0] + TL3 * math.cos(math.radians(82)), q0[1] + TL3 * math.sin(math.radians(82)))
-tail3 = bezier(q0, (q0[0] + 90 * math.cos(h1), q0[1] + 90 * math.sin(h1)), (q3[0] - 90 * math.cos(h2), q3[1] - 90 * math.sin(h2)), q3, step=2)
+# 3' tail: one long, even turn the same way as the 5' arm's, so its bases fan out below
+TR3, TT3 = 190.0, 95.0
+foot2 = []
+tail3 = turn(fp(S / 2, -E0), H_DOWN, -TT3, TR3)
 
 path = []
 for part in (arm5, foot1, stem1, loop, stem2, foot2, tail3):
@@ -228,8 +228,20 @@ def rod(s, length_, side=1, inward=None):
         d = ((inward[0] - p[0]) / L, (inward[1] - p[1]) / L)
     a = (p[0] + d[0] * HW, p[1] + d[1] * HW)
     b = (p[0] + d[0] * (HW + length_), p[1] + d[1] * (HW + length_))
-    pts = [warp(lerp(a, b, k / 8)) for k in range(9)]
-    ink(pts, lambda x: depth_w(x, 2.6, 1.9), hand=0.1)
+    if BASE == 'rod':
+        pts = [warp(lerp(a, b, k / 8)) for k in range(9)]
+        ink(pts, lambda x: depth_w(x, 2.6, 1.9), hand=0.1)
+        return
+    n = (-d[1], d[0])
+    sides = []
+    for sg in (1, -1):
+        a2 = (a[0] + n[0] * BW * sg, a[1] + n[1] * BW * sg)
+        b2 = (b[0] + n[0] * BW * sg, b[1] + n[1] * BW * sg)
+        sides.append([warp(lerp(a2, b2, k / 8)) for k in range(9)])
+    w = lambda x: depth_w(x, 1.9, 1.4)
+    ink(sides[0], w, hand=0.1)
+    ink(sides[1], w, hand=0.1)
+    ink([sides[0][-1], sides[1][-1]], w, hand=0.0)
 
 
 # the stem's pairs
@@ -247,7 +259,7 @@ for k in range(n_loop):
 # the 5' arm and the 3' tail
 # (none on the turns at the foot of the stem, where they would cross under it)
 s_turn1 = nearest_s(fp(-S / 2 - RC, -E0 - RC))
-s_turn2 = nearest_s(foot2[-1])
+s_turn2 = nearest_s(tail3[len(tail3) // 4])
 for k in range(1, 12):
     s = s_pair1[0] - SP * k
     if 30 < s < s_turn1 - 6:

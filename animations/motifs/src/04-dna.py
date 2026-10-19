@@ -161,8 +161,8 @@ DELTA = math.radians(132)                   # strand b leads strand a round the 
 K = -2 * math.pi / PITCH                    # right-handed: theta falls as u rises (z toward us)
 PHI = math.radians(114)                     # strand a's angle at the lower end: each end has one
                                             # strand in front and the other straight behind it
-BAR = 'rod'                                 # a base pair as a rod (one heavy line) or an outlined bar
-RT = 1.8 if BAR == 'rod' else 4.5          # half thickness of a base pair, along the axis
+BAR = 'bar'                                 # a base pair as a rod (one heavy line) or an outlined bar
+RT = 1.8 if BAR == 'rod' else 5.0          # half thickness of a base pair, along the axis
 U_LO, U_HI = -TURNS * PITCH / 2, TURNS * PITCH / 2
 
 
@@ -188,7 +188,7 @@ def frame(u, th):
     return c, W, N
 
 
-EXT = 30.0                                  # sampled a little past each end, then cut square
+EXT = 60.0                                  # sampled a little past each end, then cut square
 
 
 def strand(tag):
@@ -199,23 +199,6 @@ def strand(tag):
         th = theta(tag, u)
         c, W, N = frame(u, th)
         S.append(dict(u=u, th=th, c=c, W=W, N=N, e1=add(c, mul(W, HW)), e2=add(c, mul(W, -HW)), i=i))
-    # each end is cut square across the ribbon as it lies in the picture: points past the
-    # cut are pulled back onto it, so the ribbon ends on one straight line
-    for uend, sgn in ((U_LO, -1), (U_HI, 1)):
-        j = min(range(len(S)), key=lambda k: abs(S[k]['u'] - uend))
-        p, q = S[j - 3]['c'], S[j + 3]['c']
-        t = norm((q[0] - p[0], q[1] - p[1]))
-        t = (t[0] * sgn, t[1] * sgn)
-        ce = S[j]['c']
-        for smp in S:
-            if abs(smp['u'] - uend) > EXT + 20:
-                continue
-            for key in ('e1', 'e2', 'c'):
-                e = smp[key]
-                s = (e[0] - ce[0]) * t[0] + (e[1] - ce[1]) * t[1]
-                if s > 0:
-                    smp[key] = (e[0] - t[0] * s, e[1] - t[1] * s, e[2])
-                    smp['cut_' + key] = True
     return S
 
 
@@ -226,6 +209,32 @@ def span(S, key):
 
 
 strands = {'a': strand('a'), 'b': strand('b')}
+
+# Each end is cut square across the front strand's ribbon as it lies in the picture, and the
+# strand behind it is cut on the same line, so the duplex ends flush. Points past the cut are
+# pulled back onto it.
+for uend, sgn in ((U_LO, -1), (U_HI, 1)):
+    ends = {}
+    for tag, S in strands.items():
+        j = min(range(len(S)), key=lambda k: abs(S[k]['u'] - uend))
+        ends[tag] = (S[j]['c'][2], j)
+    front = max(ends, key=lambda tg: ends[tg][0])
+    S = strands[front]
+    j = ends[front][1]
+    p, q = S[j - 3]['c'], S[j + 3]['c']
+    t = norm((q[0] - p[0], q[1] - p[1]))
+    t = (t[0] * sgn, t[1] * sgn)
+    ce = S[j]['c']
+    for S in strands.values():
+        for smp in S:
+            if abs(smp['u'] - uend) > EXT + 20:
+                continue
+            for key in ('e1', 'e2', 'c'):
+                e = smp[key]
+                s = (e[0] - ce[0]) * t[0] + (e[1] - ce[1]) * t[1]
+                if s > 0:
+                    smp[key] = (e[0] - t[0] * s, e[1] - t[1] * s, e[2])
+                    smp['cut_' + key] = True
 
 depth = Depth()
 QSTEP = 3
@@ -328,7 +337,7 @@ for k, (u, halves) in enumerate(pairs):
             kw['eps'] = 3.0
             draw3([lerp3(q[0], q[3], 0.5), lerp3(q[1], q[2], 0.5)], zw(2.2, 2.9), **kw)
         else:
-            w = zw(1.15, 1.75)
+            w = zw(1.4, 2.0)
             draw3([q[0], q[1]], w, **kw)
             draw3([q[3], q[2]], w, **kw)
             draw3([q[1], q[2]], w, **kw)
