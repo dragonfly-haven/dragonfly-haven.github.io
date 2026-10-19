@@ -85,7 +85,9 @@ const page = `<title>Evolution Sketches Preview</title>
 <div class="wrap">
   <header>
     <h1>Evolution sketches</h1>
-    <p class="note">A draft of the drawings as the page will play them, ${passed} of 21 passed review. Built ${stamp}.</p>
+    <p class="note">${passed === motifs.length
+      ? `All ${motifs.length} drawings as the page will play them; each has passed review.`
+      : `A draft of the drawings as the page will play them, ${passed} of ${motifs.length} passed review.`} Built ${stamp}.</p>
   </header>
   <div class="stage" id="evolution"></div>
   <div class="controls">
