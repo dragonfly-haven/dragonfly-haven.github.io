@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """08 Choanoflagellate colony: a rosette of Salpingoeca rosetta.
 
-A ball of small cells joined at their bases in the middle, each an ovoid body
-with a funnel collar of fine straight microvilli at its outer end and one long
-waving flagellum rising from inside the collar, all pointing outward.
+A ball of small cells packed together, their narrow bases meeting in the
+middle. Each cell is an egg-shaped body whose broad outer end carries a collar
+of straight microvilli, slightly flared, with one long waving flagellum rising
+from the middle of the collar; all point outward.
 
-Built in 3D: cells sit on a sphere, are seen in mild perspective, and hide one
-another with a small depth test (each body is a chain of spheres along its
-axis), so cells on the far side show only where they peek out round the rim.
+Built in 3D (orthographic): every body is a pear made of two half-ellipsoids,
+every collar a truncated cone. A depth buffer over the square says which
+surface is seen where, so the outer ends of the cells pack into a ball of
+domes, cells foreshorten from end-on in the middle to profile at the rim, and
+the far side shows only as collars and flagella peeking round the edge.
+Outlines are traced from that buffer; bodies are shaded with rings that follow
+each dome, set where its surface turns from the light or toward the limb.
 """
 
 import math
@@ -21,14 +26,13 @@ pen = Pen(seed=SEED)
 rng = np.random.default_rng(SEED)
 
 CX, CY = 500.0, 500.0
-FOC = 2600.0                     # viewer distance (mild perspective)
-N_CELLS = 54
-R0 = 25.0                        # where the cell bases meet, from the centre
-SHADE = np.array([0.55, 0.83])   # light from upper left: shadows fall lower right
-SHADE /= np.linalg.norm(SHADE)
+N_CELLS = 50
+R_APEX = 275.0                    # centre to the tip of each cell
+LIGHT = np.array([-0.45, -0.6, 0.66])
+LIGHT /= np.linalg.norm(LIGHT)
+EZ = np.array([0.0, 0.0, 1.0])
+H = 1000                          # depth buffer: one cell per drawing unit
 
-
-# ---------------------------------------------------------------- 3D helpers
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -42,42 +46,10 @@ def rot(ax, ay, az):
     return Rz @ Ry @ Rx
 
 
-def proj(P):
-    """3D point (x right, y down, z toward the viewer) -> (sx, sy, z, scale)."""
-    k = FOC / (FOC - P[2])
-    return (CX + P[0] * k, CY + P[1] * k, P[2], k)
+def scr(P):
+    """3D (x right, y down, z toward the eye, origin at the ball's centre) -> drawing x, y."""
+    return CX + P[..., 0], CY + P[..., 1]
 
-
-def resample3(arr, step):
-    """Resamples a polyline of (x, y, z) rows by its 2D length, carrying z."""
-    d = np.hypot(np.diff(arr[:, 0]), np.diff(arr[:, 1]))
-    s = np.concatenate([[0], np.cumsum(d)])
-    if s[-1] < 1e-6:
-        return arr[:1]
-    n = max(2, int(s[-1] / step) + 1)
-    t = np.linspace(0, s[-1], n)
-    return np.stack([np.interp(t, s, arr[:, j]) for j in range(3)], axis=1)
-
-
-def hull(points):
-    """2D convex hull (monotone chain) of rows (x, y, z); keeps z."""
-    pts = sorted(points, key=lambda p: (p[0], p[1]))
-
-    def cross(o, a, b):
-        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-    lower, upper = [], []
-    for p in pts:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
-            lower.pop()
-        lower.append(p)
-    for p in reversed(pts):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
-            upper.pop()
-        upper.append(p)
-    return lower[:-1] + upper[:-1]
-
-
-# ---------------------------------------------------------------- the cells
 
 def fib_sphere(n):
     ga = math.pi * (3 - math.sqrt(5))
@@ -89,348 +61,515 @@ def fib_sphere(n):
     return out
 
 
-def _prof(s):
-    t = math.acos(1 - 2 * s)
-    return math.sin(t) * (0.28 + 0.72 * s) ** 1.2
+# ---------------------------------------------------------------- the cells
 
-
-_PMAX = max(_prof(s) for s in np.linspace(0, 1, 400))
-
-
-def profile(s):
-    """Body radius (as a share of half its width) at axial share s (0 base, 1 apex):
-    a pear, narrow at the base where the cells meet, broad under the collar."""
-    return _prof(s) / _PMAX
-
-
-R = rot(0.35, -0.5, 0.2)
 cells = []
+R = rot(0.42, -0.31, 0.15)
 for i, d0 in enumerate(fib_sphere(N_CELLS)):
-    d = unit(R @ unit(d0 + rng.normal(0, 0.06, 3)))
-    a = np.array([0.0, 0.0, 1.0]) if abs(d[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
-    u = unit(np.cross(d, a))
-    v = np.cross(d, u)
-    L = 200 * rng.uniform(0.95, 1.04)
-    W = 72 * rng.uniform(0.92, 1.06)
-    c = dict(id=i, d=d, u=u, v=v, L=L, W=W, r0=R0 * rng.uniform(0.8, 1.2))
-    # the body as a chain of spheres along the axis
-    sph = []
-    for s in np.linspace(0.03, 0.97, 16):
-        C = (c['r0'] + s * L) * d
-        rho = 0.5 * W * profile(s)
-        sx, sy, sz, k = proj(C)
-        sph.append((sx, sy, sz, rho * k, rho))
-    c['sph'] = np.array(sph)
-    # the collar, for hiding other cells' collars and flagella behind it
-    c['cbase'] = (c['r0'] + 0.93 * L) * d
-    c['Lc'] = 0.44 * L
-    c['rb'], c['rt'] = 0.13 * W, 0.46 * W
-    csph = []
-    for s in np.linspace(0.08, 0.9, 10):
-        C = c['cbase'] + s * c['Lc'] * d
-        rho = 0.88 * (c['rb'] + s * (c['rt'] - c['rb']))
-        sx, sy, sz, k = proj(C)
-        csph.append((sx, sy, sz, rho * k, rho))
-    c['csph'] = np.array(csph)
-    cx_ = c['csph'][:, 0]; cy_ = c['csph'][:, 1]; cr_ = c['csph'][:, 3]
-    c['cbbox'] = ((cx_ - cr_).min(), (cy_ - cr_).min(), (cx_ + cr_).max(), (cy_ + cr_).max())
-    ring = []
-    for sx, sy, sz, sr, _ in sph:
-        for a_ in np.linspace(0, 2 * math.pi, 40, endpoint=False):
-            ring.append((sx + sr * math.cos(a_), sy + sr * math.sin(a_), sz))
-    c['outline'] = np.array(hull(ring))
-    c['bbox'] = (c['outline'][:, 0].min(), c['outline'][:, 1].min(), c['outline'][:, 0].max(), c['outline'][:, 1].max())
-    c['zc'] = proj((c['r0'] + 0.75 * L) * d)[2]
-    c['c2'] = np.array(proj((c['r0'] + 0.55 * L) * d)[:2])
+    d = unit(R @ unit(d0 + rng.normal(0, 0.035, 3)))
+    a = EZ if abs(d[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+    e1 = unit(np.cross(d, a))
+    e2 = np.cross(d, e1)
+    W = 112 * rng.uniform(0.95, 1.05)
+    b = W / 2
+    apex = R_APEX * rng.uniform(0.98, 1.02)
+    a_up = 0.6 * W
+    sh = apex - a_up                         # shoulder: where the egg is widest
+    a_low = sh - 12.0
+    c = dict(id=i, d=d, e1=e1, e2=e2, W=W, b=b, a_up=a_up, a_low=a_low, C=sh * d, apex=apex)
+    Pd = np.outer(d, d)
+    c['M_up'] = Pd / a_up ** 2 + (np.eye(3) - Pd) / b ** 2
+    c['M_low'] = Pd / a_low ** 2 + (np.eye(3) - Pd) / b ** 2
+    # collar: base ring where the dome is rb wide, flaring 1.3x, about a body long
+    rb = 0.25 * W
+    ub = a_up * math.sqrt(1 - (rb / b) ** 2)
+    c['rb'], c['rt'] = rb, 1.3 * rb
+    c['cbase'] = c['C'] + ub * d
+    c['Lc'] = 0.62 * W
+    c['ctip'] = c['cbase'] + c['Lc'] * d
     cells.append(c)
 
 
-def front_depth(c, P, key='sph'):
-    """Depth of the front surface of cell c's body (or collar) at 2D points P (n, 2); -inf where it does not cover them."""
-    S = c[key]
-    d2 = (P[:, 0:1] - S[None, :, 0]) ** 2 + (P[:, 1:2] - S[None, :, 1]) ** 2
-    r2 = S[None, :, 3] ** 2
-    cover = d2 < r2
-    dz = np.sqrt(np.clip(r2 - d2, 0, None)) / (S[None, :, 3] / S[None, :, 4])
-    depth = np.where(cover, S[None, :, 2] + dz, -1e9)
-    return depth.max(axis=1)
+def pear_depth(c, X, Y):
+    """Front surface depth (and which half) of cell c's body at drawing points X, Y; -inf off it."""
+    C, d = c['C'], c['d']
+    q0 = np.stack([X - CX - C[0], Y - CY - C[1], np.full_like(X, -C[2])], axis=-1)
+    best = np.full(X.shape, -np.inf)
+    for M, sgn in ((c['M_up'], 1), (c['M_low'], -1)):
+        A = M[2, 2]
+        B = q0 @ M[2]
+        C0 = np.einsum('...i,ij,...j->...', q0, M, q0) - 1
+        disc = B * B - A * C0
+        ok = disc >= 0
+        sq = np.sqrt(np.where(ok, disc, 0))
+        for Z in ((-B + sq) / A, (-B - sq) / A):
+            ax = q0 @ d + Z * d[2]
+            valid = ok & (sgn * ax >= -1e-6)
+            best = np.where(valid & (Z > best), Z, best)
+    return best
 
 
-def hidden(P, Z, skip=None, owner=None, collars=False):
-    """Which points are hidden. Strokes on a body (skip = that cell) are hidden
-    by whole bodies nearer the eye (painter's order, so cells stay whole);
-    collars and flagella by the body surfaces in front of them; with
-    collars=True also by the collar cone of any cell but owner."""
-    x0, y0, x1, y1 = P[:, 0].min(), P[:, 1].min(), P[:, 0].max(), P[:, 1].max()
-    mask = np.zeros(len(P), bool)
-    zown = cells[skip]['zc'] if skip is not None else None
-    for c in cells:
-        if c['id'] != skip:
-            bx0, by0, bx1, by1 = c['bbox']
-            if not (bx1 < x0 or bx0 > x1 or by1 < y0 or by0 > y1):
-                if zown is not None:
-                    if c['zc'] > zown:
-                        mask |= front_depth(c, P) > -1e8
-                else:
-                    mask |= Z < front_depth(c, P) - 0.5
-        if (collars or zown is not None) and c['id'] != owner:
-            bx0, by0, bx1, by1 = c['cbbox']
-            if not (bx1 < x0 or bx0 > x1 or by1 < y0 or by0 > y1):
-                mask |= Z < front_depth(c, P, 'csph') - 0.5
-    return mask
+def pear_normal(c, P):
+    """Outward normal of cell c's body at surface points P (n, 3)."""
+    q = P - c['C']
+    ax = q @ c['d']
+    n = np.where((ax >= 0)[:, None], q @ c['M_up'], q @ c['M_low'])
+    return n / np.linalg.norm(n, axis=1)[:, None]
 
 
-def ink(pts3, w, skip=None, owner=None, collars=False, min_run=2.0, **kw):
-    """Inks a stroke given as (x, y, z) rows, leaving out what bodies (and collars) in front hide."""
-    arr = np.asarray(pts3, float)
-    if len(arr) < 2:
-        return
-    fine = resample3(arr, 1.2)
-    hid = hidden(fine[:, :2], fine[:, 2], skip, owner, collars)
-    run = []
-    for p, h in zip(fine, hid):
-        if not h:
-            run.append((p[0], p[1]))
-        else:
-            if len(run) > 1 and _len(run) >= min_run:
-                pen.line(run, w=w, occlude=False, **kw)
-            run = []
-    if len(run) > 1 and _len(run) >= min_run:
-        pen.line(run, w=w, occlude=False, **kw)
+# ---------------------------------------------------------------- depth buffers
+
+body_z = np.full((H, H), -np.inf, np.float32)
+body_id = np.full((H, H), -1, np.int16)
+col_z = np.full((H, H), -np.inf, np.float32)
+col_id = np.full((H, H), -1, np.int16)
 
 
-def _len(run):
-    return sum(math.hypot(run[i + 1][0] - run[i][0], run[i + 1][1] - run[i][1]) for i in range(len(run) - 1))
+def box(pts, pad=3):
+    x0 = int(max(0, math.floor(min(p[0] for p in pts) - pad)))
+    x1 = int(min(H - 1, math.ceil(max(p[0] for p in pts) + pad)))
+    y0 = int(max(0, math.floor(min(p[1] for p in pts) - pad)))
+    y1 = int(min(H - 1, math.ceil(max(p[1] for p in pts) + pad)))
+    return x0, x1, y0, y1
 
 
-def surf(c, pts2):
-    """2D points on cell c's body, with the depth of its front surface."""
-    P = np.asarray(pts2, float)
-    z = front_depth(c, P)
-    return np.column_stack([P, z])
+def hull2(points):
+    pts = sorted(set(points))
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    lo, up = [], []
+    for p in pts:
+        while len(lo) >= 2 and cross(lo[-2], lo[-1], p) <= 0:
+            lo.pop()
+        lo.append(p)
+    for p in reversed(pts):
+        while len(up) >= 2 and cross(up[-2], up[-1], p) <= 0:
+            up.pop()
+        up.append(p)
+    return lo[:-1] + up[:-1]
 
 
-def inside_poly(P, poly):
-    x, y = P[:, 0], P[:, 1]
-    hit = np.zeros(len(P), bool)
+def inside_poly(X, Y, poly):
+    hit = np.zeros(X.shape, bool)
     n = len(poly)
     for i in range(n):
         x0, y0 = poly[i]
         x1, y1 = poly[(i + 1) % n]
-        cond = (y0 > y) != (y1 > y)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            xi = x0 + (y - y0) * (x1 - x0) / (y1 - y0 + 1e-12)
-        hit ^= cond & (x < xi)
+        cond = (y0 > Y) != (y1 > Y)
+        xi = x0 + (Y - y0) * (x1 - x0) / ((y1 - y0) if y1 != y0 else 1e-12)
+        hit ^= cond & (X < xi)
     return hit
 
 
-# ---------------------------------------------------------------- drawing
+def ring3(center, r, c, n=48, a0=0.0):
+    t = np.linspace(a0, a0 + 2 * math.pi, n, endpoint=False)
+    return center + r * (np.cos(t)[:, None] * c['e1'] + np.sin(t)[:, None] * c['e2'])
 
-def draw_body(c):
+
+for c in cells:
     d = c['d']
-    facing = d[2]                        # +1 apex toward viewer, -1 away
-    depth = c['zc']
-    o = c['outline']
-    # contour, started at a random point and closed with a small overlap
-    k0 = int(rng.integers(len(o)))
-    loop = np.concatenate([o[k0:], o[:k0], o[k0:k0 + 3]])
-    loop = resample3(loop, 3.0)
-    w = 1.9 if depth > 40 else (1.65 if depth > -60 else 1.4)
-    ink(loop, w, skip=c['id'], hand=0.6, lift=0.08)
+    ends = [c['C'] + c['a_up'] * d, c['C'] - c['a_low'] * d]
+    ext = [scr(e) for e in ends]
+    pts = [(x + sx * c['b'], y + sy * c['b']) for x, y in ext for sx in (-1, 1) for sy in (-1, 1)]
+    x0, x1, y0, y1 = box(pts)
+    X, Y = np.meshgrid(np.arange(x0, x1 + 1, dtype=float), np.arange(y0, y1 + 1, dtype=float))
+    z = pear_depth(c, X, Y)
+    sub = body_z[y0:y1 + 1, x0:x1 + 1]
+    win = z > sub
+    sub[win] = z[win]
+    body_id[y0:y1 + 1, x0:x1 + 1][win] = c['id']
+    # the collar as an opaque cone for what lies behind it
+    rp = np.concatenate([ring3(c['cbase'], c['rb'], c), ring3(c['ctip'], c['rt'], c)])
+    xs, ys = scr(rp)
+    poly = hull2([(float(x), float(y)) for x, y in zip(xs, ys)])
+    x0, x1, y0, y1 = box(poly)
+    X, Y = np.meshgrid(np.arange(x0, x1 + 1, dtype=float), np.arange(y0, y1 + 1, dtype=float))
+    inn = inside_poly(X, Y, poly)
+    b2 = np.array(scr(c['cbase']))
+    t2 = np.array(scr(c['ctip']))
+    seg = t2 - b2
+    L2 = float(seg @ seg)
+    if L2 > 1:
+        t = np.clip(((X - b2[0]) * seg[0] + (Y - b2[1]) * seg[1]) / L2, 0, 1)
+    else:
+        t = np.ones_like(X)
+    zax = c['cbase'][2] + t * (c['ctip'][2] - c['cbase'][2])
+    rr = c['rb'] + t * (c['rt'] - c['rb'])
+    zc = np.where(inn, zax + 0.6 * rr * math.sqrt(max(0.0, 1 - d[2] ** 2)), -np.inf)
+    sub = col_z[y0:y1 + 1, x0:x1 + 1]
+    win = zc > sub
+    sub[win] = zc[win]
+    col_id[y0:y1 + 1, x0:x1 + 1][win] = c['id']
 
-    # shading: arcs following the outline on the shadow side, more on deeper cells
-    P = resample3(np.concatenate([o, o[:1]]), 2.0)[:-1, :2]
-    cen = P.mean(axis=0)
-    t = np.roll(P, -1, axis=0) - np.roll(P, 1, axis=0)
-    nrm = np.column_stack([t[:, 1], -t[:, 0]])
-    nrm /= np.linalg.norm(nrm, axis=1)[:, None] + 1e-9
-    flip = ((P - cen) * nrm).sum(axis=1) < 0
-    nrm[flip] *= -1
-    off2 = c['c2'] - np.array([CX, CY])
-    rad = np.linalg.norm(off2)
-    sd = SHADE.copy()
-    if rad > 1:
-        sd = unit(0.55 * SHADE + 0.45 * (-off2 / rad) * min(1.0, rad / 160))
-    nk = 1 if depth > 60 else (2 if depth > -20 else 3)
-    for k in range(1, nk + 1):
-        inset = 3.0 + 5.6 * k
-        Q = P - nrm * inset
-        thr = -0.05 + 0.22 * (k - 1)
-        keep = (nrm @ sd) > thr
-        # stay clear of narrow parts where the inset would cross itself
-        dmin = np.sqrt(((Q[:, None, :] - P[None, :, :]) ** 2).sum(axis=2)).min(axis=1)
-        keep &= dmin > inset * 0.8
-        keep &= inside_poly(Q, P)
-        # runs of kept points (cyclic)
-        idx = np.where(keep)[0]
-        if len(idx) < 3:
+
+def look(X, Y):
+    """Buffer indices for drawing points."""
+    i = np.clip(np.rint(Y).astype(int), 0, H - 1)
+    j = np.clip(np.rint(X).astype(int), 0, H - 1)
+    return i, j
+
+
+# ---------------------------------------------------------------- strokes
+
+def runs_of(mask):
+    out, cur = [], []
+    for k, m in enumerate(mask):
+        if m:
+            cur.append(k)
+        elif cur:
+            out.append(cur)
+            cur = []
+    if cur:
+        out.append(cur)
+    return out
+
+
+def plen(P):
+    return float(np.hypot(*np.diff(P, axis=0).T).sum()) if len(P) > 1 else 0.0
+
+
+def dense(P3, step=1.0):
+    """Resamples (n, 3) 3D points so their drawing-plane spacing is about step."""
+    P3 = np.asarray(P3, float)
+    d2 = np.hypot(np.diff(P3[:, 0]), np.diff(P3[:, 1]))
+    s = np.concatenate([[0], np.cumsum(d2)])
+    if s[-1] < 1e-6:
+        return P3[:1]
+    t = np.linspace(0, s[-1], max(2, int(s[-1] / step) + 1))
+    return np.stack([np.interp(t, s, P3[:, j]) for j in range(3)], axis=1)
+
+
+def draw_runs(P2, keep, w, min_len=4.0, **kw):
+    for r in runs_of(keep):
+        if len(r) < 2:
             continue
-        runs, cur = [], [idx[0]]
-        for a, b in zip(idx[:-1], idx[1:]):
-            if b == a + 1:
-                cur.append(b)
-            else:
-                runs.append(cur)
-                cur = [b]
-        runs.append(cur)
-        if len(runs) > 1 and runs[0][0] == 0 and runs[-1][-1] == len(P) - 1:
-            runs[0] = runs[-1] + runs[0]
-            runs.pop()
-        for r in runs:
-            if len(r) < 4:
-                continue
-            seg = Q[r]
-            # the hand stops a little short of each end
-            n = len(seg)
-            a0 = int(n * rng.uniform(0.0, 0.12))
-            a1 = n - int(n * rng.uniform(0.0, 0.12))
-            seg = seg[a0:a1]
-            if len(seg) < 3:
-                continue
-            ink(surf(c, seg), 0.72 * rng.uniform(0.9, 1.1), skip=c['id'], hand=0.35, lift=0.05, piece=(40, 120))
+        seg = P2[r]
+        if plen(seg) >= min_len:
+            pen.line([tuple(p) for p in seg], w=w, occlude=False, **kw)
 
+
+# ---------------------------------------------------------------- outlines from the buffer
+
+_SEG = {1: [(3, 2)], 2: [(2, 1)], 3: [(3, 1)], 4: [(0, 1)], 5: [(3, 0), (2, 1)], 6: [(0, 2)],
+        7: [(3, 0)], 8: [(0, 3)], 9: [(0, 2)], 10: [(0, 1), (3, 2)], 11: [(0, 1)], 12: [(3, 1)],
+        13: [(2, 1)], 14: [(3, 2)]}
+
+
+def trace(mask):
+    """Marching squares: the boundary loops of a boolean mask, as (row, col) polylines."""
+    m = np.pad(mask, 1).astype(np.int8)
+    idx = m[:-1, :-1] * 8 + m[:-1, 1:] * 4 + m[1:, 1:] * 2 + m[1:, :-1]
+    segs = []
+    for i, j in zip(*np.nonzero((idx > 0) & (idx < 15))):
+        mid = {0: (i, j + 0.5), 1: (i + 0.5, j + 1), 2: (i + 1, j + 0.5), 3: (i + 0.5, j)}
+        for a, b in _SEG[int(idx[i, j])]:
+            segs.append((mid[a], mid[b]))
+    adj = {}
+    for a, b in segs:
+        adj.setdefault(a, []).append(b)
+        adj.setdefault(b, []).append(a)
+    loops = []
+    seen = set()
+    for start in adj:
+        if start in seen:
+            continue
+        loop = [start]
+        seen.add(start)
+        prev, cur = None, start
+        while True:
+            nb = [n for n in adj[cur] if n != prev and n not in seen]
+            if not nb:
+                break
+            prev, cur = cur, nb[0]
+            seen.add(cur)
+            loop.append(cur)
+        loops.append(np.array(loop, float) - 1.0)
+    return loops
+
+
+def smooth(P, k=3, closed=True):
+    if len(P) < 2 * k + 2:
+        return P
+    out = np.zeros_like(P)
+    for s in range(-k, k + 1):
+        out += np.roll(P, s, axis=0) if closed else P
+    return out / (2 * k + 1)
+
+
+def draw_outlines():
+    for c in cells:
+        cid = c['id']
+        ys, xs = np.nonzero(body_id == cid)
+        if len(xs) < 20:
+            continue
+        y0, y1, x0, x1 = ys.min() - 2, ys.max() + 3, xs.min() - 2, xs.max() + 3
+        y0, x0 = max(0, y0), max(0, x0)
+        mask = body_id[y0:y1, x0:x1] == cid
+        for loop in trace(mask):
+            if len(loop) < 12:
+                continue
+            P = smooth(np.column_stack([loop[:, 1] + x0, loop[:, 0] + y0]), 3)
+            t = np.roll(P, -2, axis=0) - np.roll(P, 2, axis=0)
+            n = np.column_stack([t[:, 1], -t[:, 0]])
+            n /= np.linalg.norm(n, axis=1)[:, None] + 1e-9
+            # make n point out of the region
+            io, jo = look(P[:, 0] + 2.5 * n[:, 0], P[:, 1] + 2.5 * n[:, 1])
+            flip = body_id[io, jo] == cid
+            if flip.mean() > 0.5:
+                n = -n
+            io, jo = look(P[:, 0] + 2.5 * n[:, 0], P[:, 1] + 2.5 * n[:, 1])
+            ii, ji = look(P[:, 0] - 2.0 * n[:, 0], P[:, 1] - 2.0 * n[:, 1])
+            oid = body_id[io, jo]
+            zo = body_z[io, jo]
+            zi = body_z[ii, ji]
+            sil = oid == -1
+            occ = (oid != -1) & (zi > zo + 12)
+            cre = (oid != -1) & (np.abs(zi - zo) <= 12) & (oid > cid)
+            under = col_z[ii, ji] > zi + 0.5
+            ip, jp = look(P[:, 0], P[:, 1])
+            under |= col_z[ip, jp] > body_z[ip, jp] + 0.5
+            kind = np.where(sil, 3, np.where(occ, 2, np.where(cre, 1, 0)))
+            kind[under] = 0
+            # start somewhere the line is drawn, so a loop does not split at index 0
+            if (kind == 0).any():
+                s0 = int(np.argmax(kind == 0))
+                P, kind = np.roll(P, -s0, axis=0), np.roll(kind, -s0)
+            else:
+                P, kind = np.vstack([P, P[:4]]), np.concatenate([kind, kind[:4]])
+            # merge into runs of drawn line; weight by the heaviest kind in the run
+            for r in runs_of(kind > 0):
+                seg = P[r]
+                if plen(seg) < 4:
+                    continue
+                k = np.bincount(kind[r], minlength=4)
+                kk = int(np.argmax(k[1:]) + 1)
+                w = {3: 2.1, 2: 1.75, 1: 1.25}[kk]
+                pen.line([tuple(p) for p in seg[::2]] + [tuple(seg[-1])], w=w, occlude=False, hand=0.5, lift=0.08)
+
+
+# ---------------------------------------------------------------- shading
+
+def shade_of(n, c):
+    """0 lit ... 1 dark: the cell's own surface against the light, plus the
+    ball's (darker on its shadow side and toward its limb)."""
+    lam = np.clip(n @ LIGHT, 0, None)
+    own = 1 - np.clip(0.62 * lam + 0.38 * np.clip(n[:, 2], 0, None), 0, 1)
+    d = c['d']
+    ball = 1 - min(1.0, 0.6 * max(0.0, float(d @ LIGHT)) + 0.4 * max(0.0, float(d[2])))
+    return 0.72 * own + 0.28 * ball
+
+
+def seen_on_body(c, P3):
+    X, Y = scr(P3)
+    i, j = look(X, Y)
+    ok = (body_id[i, j] == c['id']) & (P3[:, 2] >= body_z[i, j] - 6.0) & ~(col_z[i, j] > P3[:, 2] + 0.5)
+    if 'nuc' in c:
+        nx, ny, nr = c['nuc']
+        ok &= np.hypot(X - nx, Y - ny) > nr
+    return ok
+
+
+def draw_shading(c):
+    """Rings round the cell's axis, drawn where its surface turns from the light,
+    spaced evenly as seen; a few strokes along the axis cross the darkest."""
+    d, b = c['d'], c['b']
+    n_phi = 160
+    phis = np.linspace(0, 2 * math.pi, n_phi, endpoint=False)
+    cosr, sinr = np.cos(phis)[:, None], np.sin(phis)[:, None]
+
+    def ring_at(u):
+        a = c['a_up'] if u >= 0 else c['a_low']
+        rho = b * math.sqrt(max(0.0, 1 - (u / a) ** 2))
+        return c['C'] + u * d + rho * (cosr * c['e1'] + sinr * c['e2'])
+
+    u_top = (c['cbase'] - c['C']) @ d
+    us = []
+    last = None
+    for u in np.arange(u_top, -0.75 * c['a_low'], -0.5):
+        P = ring_at(u)
+        if last is None:
+            us.append(u)
+            last = P
+            continue
+        dd = np.hypot(P[:, 0] - last[:, 0], P[:, 1] - last[:, 1])
+        if dd.min() >= 5.6:
+            us.append(u)
+            last = P
+    jit = rng.uniform(-0.04, 0.04, len(us))
+    for k, u in enumerate(us[1:], 1):
+        P = ring_at(u)
+        n = pear_normal(c, P)
+        sh = shade_of(n, c)
+        thr = 0.3 + jit[k]
+        vis = seen_on_body(c, P)
+        keep = vis & (sh > thr)
+        P2 = np.column_stack(scr(P))
+        # roll so a run does not split at index 0
+        s0 = int(np.argmax(~keep)) if (~keep).any() else 0
+        P2, keep, sh = np.roll(P2, -s0, axis=0), np.roll(keep, -s0), np.roll(sh, -s0)
+        for r in runs_of(keep):
+            if len(r) < 3:
+                continue
+            seg = P2[r]
+            if plen(seg) < 5:
+                continue
+            w = 0.62 + 0.3 * float(np.clip((sh[r].mean() - 0.45) / 0.5, 0, 1))
+            pen.line([tuple(p) for p in seg], w=w, occlude=False, hand=0.3, lift=0.04, piece=(40, 120))
+    # cross strokes along the axis on the darkest side
+    n_m = int(2 * math.pi * b / 6.5)
+    for m in range(n_m):
+        phi = 2 * math.pi * (m + rng.uniform(0.3, 0.7)) / n_m
+        uu = np.linspace(u_top, -0.6 * c['a_low'], 80)
+        P = np.array([c['C'] + u * d + b * math.sqrt(max(0.0, 1 - (u / (c['a_up'] if u >= 0 else c['a_low'])) ** 2))
+                      * (math.cos(phi) * c['e1'] + math.sin(phi) * c['e2']) for u in uu])
+        sh = shade_of(pear_normal(c, P), c)
+        keep = seen_on_body(c, P) & (sh > 0.64 + rng.uniform(-0.03, 0.03))
+        draw_runs(np.column_stack(scr(P)), keep, 0.62 * rng.uniform(0.95, 1.05), min_len=6, hand=0.3, lift=0.04)
+
+
+def draw_inside(c):
+    """A small nucleus (with its nucleolus) and a food vacuole or two, seen
+    through the lit flank of cells that are turned partly sideways."""
+    d = c['d']
+    if not 0.1 < abs(d[2]) < 0.62:
+        return
+    lp = LIGHT - (LIGHT @ d) * d
+    if np.linalg.norm(lp) < 0.2:
+        return
+    lp = unit(lp)
+    rn = 0.105 * c['W']
+    t = np.linspace(0, 2 * math.pi, 40, endpoint=False)
+
+    def clear(x, y, r):
+        ring = np.column_stack([x + r * np.cos(t), y + r * np.sin(t)])
+        i, j = look(ring[:, 0], ring[:, 1])
+        return bool(((body_id[i, j] == c['id']) & ~(col_z[i, j] > body_z[i, j])).all())
+
+    for u, off, turn in ((-0.12, 0.22, 0.0), (-0.18, 0.18, 0.6), (-0.18, 0.18, -0.6), (-0.06, 0.3, 0.0), (-0.06, 0.3, 0.7), (-0.06, 0.3, -0.7)):
+        sd = math.cos(turn) * lp + math.sin(turn) * np.cross(d, lp)
+        Nc = c['C'] + u * c['a_low'] * d + off * c['b'] * sd
+        x, y = scr(Nc)
+        if clear(x, y, rn + 3):
+            break
+    else:
+        return
+    c['nuc'] = (x, y, rn + 2.5)
+    a0 = rng.uniform(0, 2 * math.pi)
+    tt = np.linspace(a0, a0 + 2 * math.pi + 0.25, 44)
+    pen.line([(x + rn * math.cos(q), y + rn * 0.92 * math.sin(q)) for q in tt], w=0.8, occlude=False, hand=0.25, lift=0.15)
+    # shaded on its far side with a few short strokes (a central dot would read as an eye)
+    for off in (0.25, 0.6):
+        h = rn * math.sqrt(1 - off ** 2) * 0.85
+        cx_, cy_ = x + off * rn * 0.707, y + off * rn * 0.707
+        pen.line([(cx_ - h * 0.707, cy_ + h * 0.707), (cx_ + h * 0.707, cy_ - h * 0.707)], w=0.65, occlude=False, hand=0.1, lift=0)
+    # food vacuoles toward the base
+    for k in range(2):
+        V = Nc - rng.uniform(0.18, 0.28) * c['a_low'] * d + rng.uniform(-0.25, 0.25) * c['b'] * np.cross(d, sd)
+        vx, vy = scr(V)
+        rv = rng.uniform(3.0, 4.2)
+        if not clear(vx, vy, rv + 3):
+            continue
+        tt = np.linspace(0, 2 * math.pi + 0.3, 22)
+        pen.line([(vx + rv * math.cos(q), vy + rv * math.sin(q)) for q in tt], w=0.85, occlude=False, hand=0, lift=0)
+
+
+# ---------------------------------------------------------------- collars and flagella
+
+def collar_seen(c, P3):
+    X, Y = scr(P3)
+    i, j = look(X, Y)
+    behind_body = P3[:, 2] < body_z[i, j] - 1.0
+    other = (col_id[i, j] != -1) & (col_id[i, j] != c['id'])
+    behind_collar = other & (P3[:, 2] < col_z[i, j] - 0.5)
+    return ~(behind_body | behind_collar)
 
 
 def draw_collar(c):
-    """The collar: a funnel of straight microvilli round the flagellum's base.
-    Seen from the side only its near half is drawn, so the lines fan evenly
-    from edge to edge; seen from above, the whole ring and its mouth."""
-    d, u, v, W = c['d'], c['u'], c['v'], c['W']
-    base = c['cbase']
-    tip = base + c['Lc'] * d
-    rb, rt = c['rb'], c['rt']
-    M = 16
+    d = c['d']
+    open_mouth = d[2] > 0.5
+    M = 14
     ph = rng.uniform(0, 2 * math.pi)
-    open_mouth = d[2] > 0.45
-    # the screen direction across the collar, to weight its two edges
-    ax2 = np.array(proj(tip)[:2]) - np.array(proj(base)[:2])
+    b2 = np.array(scr(c['cbase']))
+    t2 = np.array(scr(c['ctip']))
+    ax2 = t2 - b2
     across = np.array([-ax2[1], ax2[0]])
     across = across / (np.linalg.norm(across) + 1e-9)
-    for i in range(M):
-        phi = ph + 2 * math.pi * i / M + rng.normal(0, 0.03)
-        e = math.cos(phi) * u + math.sin(phi) * v
-        if not open_mouth and abs(d[2]) < 0.6 and e[2] < -0.12:
-            continue
-        a = base + rb * e
-        b = tip + rt * e * rng.uniform(0.97, 1.03)
-        pts = [proj(a + (b - a) * t)[:3] for t in np.linspace(0, 1, 10)]
-        side = abs(float(e[0] * across[0] + e[1] * across[1]))
-        w = 0.74 + 0.36 * side ** 8
-        ink(pts, w * rng.uniform(0.95, 1.05), owner=c['id'], collars=True, min_run=4.0, hand=0.12, lift=0.0, piece=(60, 140))
-    # the mouth: a whole ring when we look into it, else its near half
-    a0 = rng.uniform(0, 2 * math.pi)
-    ring = []
-    for t in np.linspace(a0, a0 + 2 * math.pi + 0.15, 72):
-        e = math.cos(t) * u + math.sin(t) * v
-        if open_mouth or e[2] > -0.05:
-            ring.append(proj(tip + rt * e)[:3])
-        elif len(ring) > 2:
-            ink(ring, 0.72, owner=c['id'], collars=True, min_run=5.0, hand=0.15, lift=0.1)
-            ring = []
-        else:
-            ring = []
-    if len(ring) > 2:
-        ink(ring, 0.72, owner=c['id'], collars=True, min_run=5.0, hand=0.15, lift=0.1)
+    for k in range(M):
+        phi = ph + 2 * math.pi * k / M + rng.normal(0, 0.03)
+        e = math.cos(phi) * c['e1'] + math.sin(phi) * c['e2']
+        if not open_mouth and e[2] < -0.12:
+            continue                       # the far half, behind the near one
+        A = c['cbase'] + c['rb'] * e
+        B = c['ctip'] + c['rt'] * e * rng.uniform(0.97, 1.03) + rng.uniform(-0.05, 0.03) * c['Lc'] * d
+        if open_mouth and d[2] > 0.8:
+            A = A + 0.55 * (B - A)         # seen end-on: short ticks round the rim
+        P = dense([A, B], 1.0)
+        edge = abs(float(e[0] * across[0] + e[1] * across[1])) ** 8
+        w = (0.72 + 0.4 * edge) * rng.uniform(0.95, 1.05)
+        draw_runs(P[:, :2] + np.array([CX, CY]), collar_seen(c, P), w, min_len=3, hand=0.12, lift=0.0, piece=(60, 140))
+    # the mouth: whole when we look into it, else its near half; the base ring when open
+    for center, r, w in ((c['ctip'], c['rt'], 0.8 if open_mouth else 0.7), (c['cbase'], c['rb'], 0.75)):
+        if r == c['rb'] and d[2] <= 0.8:
+            continue                       # the base ring only when seen end-on
+        a0 = rng.uniform(0, 2 * math.pi)
+        t = np.linspace(a0, a0 + 2 * math.pi + 0.12, 90)
+        P = center + r * (np.cos(t)[:, None] * c['e1'] + np.sin(t)[:, None] * c['e2'])
+        keep = collar_seen(c, P)
+        if not open_mouth:
+            keep &= (P - center)[:, 2] > -0.05 * r
+        draw_runs(P[:, :2] + np.array([CX, CY]), keep, w, min_len=4, hand=0.15, lift=0.05)
 
 
 def draw_flagellum(c):
-    d, u, v, L = c['d'], c['u'], c['v'], c['L']
-    apex = (c['r0'] + 0.98 * L) * d
-    FL = 1.06 * L * rng.uniform(0.94, 1.06)
-    ps = rng.uniform(0, 2 * math.pi)
-    # each beats in a plane turned mostly across the line of sight, so its waves show
-    side = np.cross(d, np.array([0.0, 0.0, 1.0]))
+    d = c['d']
+    start = c['C'] + c['a_up'] * d
+    FL = 185 * rng.uniform(0.92, 1.06)
+    toward = max(0.0, d[2])
+    side = np.cross(d, EZ)
     if np.linalg.norm(side) > 0.3:
         side = unit(side)
-        tilt = rng.normal(0, 0.4)
-        e1 = math.cos(tilt) * side + math.sin(tilt) * np.cross(d, side)
+        tl = rng.normal(0, 0.4)
+        w1 = math.cos(tl) * side + math.sin(tl) * np.cross(d, side)
     else:
-        e1 = math.cos(ps) * u + math.sin(ps) * v
-    e2 = np.cross(d, e1)
-    # flagella aimed at the eye would read as zigzags: they wave less and
-    # bend more, so they show as a curve swinging out to one side
-    toward = max(0.0, d[2])
-    amp = 0.065 * FL * float(np.clip(1.75 - 1.25 * toward, 0.5, 1.0))
-    waves = rng.uniform(1.4, 1.9)
+        w1 = c['e1']
+    w2 = np.cross(d, w1)
+    amp = 0.065 * FL * float(np.clip(1.6 - 1.2 * toward, 0.35, 1.0))
+    waves = rng.uniform(1.5, 2.0)
     ph = rng.uniform(0, 2 * math.pi)
-    bend = rng.normal(0, 0.08) * FL
-    if toward > 0.65:
-        # swing outward, away from the middle of the ball
-        out = np.array([d[0], d[1], 0.0])
-        if np.linalg.norm(out) < 0.15:
-            out = np.array([math.cos(ps), math.sin(ps), 0.0])
-        out = out - (out @ d) * d
-        e2 = unit(out)
-        bend = 0.4 * (toward - 0.65) / 0.35 * FL * rng.uniform(0.8, 1.1)
+    bend = rng.normal(0, 0.07) * FL
     pts = []
-    for t in np.linspace(0, 1, 90):
-        g = min(1.0, t / 0.35)
+    for t in np.linspace(0, 1, 140):
+        g = min(1.0, t / 0.3)
         lat = amp * g * g * (3 - 2 * g) * math.sin(2 * math.pi * waves * t + ph)
-        P = apex + t * FL * d + lat * e1 + bend * t * t * e2
-        pts.append(proj(P)[:3])
-    ink(pts, 1.35, owner=c['id'], collars=True, min_run=18.0, hand=0.3, lift=0.04, taper=0.5, piece=(30, 80))
+        pts.append(start + t * FL * d + lat * w1 + bend * t * t * w2)
+    P = dense(pts, 1.0)
+    X, Y = scr(P)
+    i, j = look(X, Y)
+    bid = body_id[i, j]
+    hide = P[:, 2] < body_z[i, j] - 1.0
+    hide |= (bid != -1) & (bid != c['id'])            # never over another cell
+    other = (col_id[i, j] != -1) & (col_id[i, j] != c['id'])
+    hide |= other & (P[:, 2] < col_z[i, j] - 0.5)
+    P2 = np.column_stack([X, Y])
+    for r in runs_of(~hide):
+        seg = P2[r]
+        L = plen(seg)
+        # the run leaving the collar, or a long stretch coming out from behind the ball
+        if (r[0] <= 2 and L >= 4) or L >= 30:
+            pen.line([tuple(p) for p in seg], w=1.35, occlude=False, hand=0.3, lift=0.04, taper=0.45, piece=(30, 80))
 
 
-def zbuf(P):
-    """Depth of the body surface seen at 2D points P (painter's order); -inf where there is none."""
-    z = np.full(len(P), -1e9)
-    top = np.full(len(P), -1e9)
-    for c in cells:
-        fd = front_depth(c, P)
-        m = (fd > -1e8) & (c['zc'] > top)
-        z[m] = fd[m]
-        top[m] = c['zc']
-    return z
+# ---------------------------------------------------------------- draw
 
-
-ENV = R0 + 200 * 0.98
-
-
-def crevices(angle, extra, w=0.7):
-    """Hatching where the eye looks deep into the ball, between the domes of the
-    outer cells (deeper and on the shadow side: more)."""
-    a = math.radians(angle)
-    dr = np.array([math.cos(a), math.sin(a)])
-    nr = np.array([-dr[1], dr[0]])
-    sp = 5.6
-    for off in np.arange(-260, 260, sp):
-        off = off + rng.normal(0, 0.5)
-        t = np.arange(-270, 270, 1.5)
-        P = np.array([CX, CY]) + off * nr + t[:, None] * dr
-        z = zbuf(P)
-        rel = P - np.array([CX, CY])
-        rho = np.linalg.norm(rel, axis=1)
-        env = np.sqrt(np.clip(ENV ** 2 - rho ** 2, 0, None))
-        delta = env - z
-        side = (rel @ SHADE) / (rho + 1e-9) * np.clip(rho / 120, 0, 1)
-        T = 40 + extra - 18 * side
-        keep = (z > -1e8) & (delta > T)
-        idx = np.where(keep)[0]
-        if not len(idx):
-            continue
-        runs, cur = [], [idx[0]]
-        for i0, i1 in zip(idx[:-1], idx[1:]):
-            if i1 == i0 + 1:
-                cur.append(i1)
-            else:
-                runs.append(cur)
-                cur = [i1]
-        runs.append(cur)
-        for r in runs:
-            if len(r) < 4:
-                continue
-            seg = np.column_stack([P[r], z[r]])
-            ink(seg, w * rng.uniform(0.9, 1.1), collars=True, min_run=5.0, hand=0.3, lift=0.04, piece=(40, 120))
-
-
-order = sorted(cells, key=lambda c: -c['zc'])
+order = sorted(cells, key=lambda c: -c['d'][2])
+draw_outlines()
 for c in order:
-    draw_flagellum(c)
     draw_collar(c)
-    draw_body(c)
-
-crevices(42, 0)
-crevices(-38, 40)
+    draw_flagellum(c)
+for c in order:
+    draw_inside(c)
+    draw_shading(c)
 
 pen.save('../08-choanoflagellate-colony.svg', mirror=False)
 pen.report()
