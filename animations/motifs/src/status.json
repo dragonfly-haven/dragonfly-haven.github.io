@@ -160,13 +160,13 @@
       ],
       "note": "second round; polished: spear clear of the nose, upper arm and kneecap, single knot, core hand, anchored overhang, livelier fire",
       "rework": {
-        "round": "w1",
+        "round": "w2",
         "scores": [
           8,
-          6,
-          7
+          7,
+          8
         ],
-        "maxim": "more detailed: yes; anatomically correct: no (modern faces and proportions, tailored clothes)",
+        "maxim": "more detailed: yes; anatomically correct: heads, hands and legs yes, but the man's trunk reads as a box or vest; not yet a clear yes",
         "passed": false
       }
     },
