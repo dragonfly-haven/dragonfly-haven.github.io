@@ -161,7 +161,17 @@
         8,
         8
       ],
-      "note": "second round; polished: spear clear of the nose, upper arm and kneecap, single knot, core hand, anchored overhang, livelier fire"
+      "note": "second round; polished: spear clear of the nose, upper arm and kneecap, single knot, core hand, anchored overhang, livelier fire",
+      "rework": {
+        "round": "w1",
+        "scores": [
+          8,
+          6,
+          7
+        ],
+        "maxim": "more detailed: yes; anatomically correct: no (modern faces and proportions, tailored clothes)",
+        "passed": false
+      }
     },
     "couple-1690s": {
       "passed": true,
