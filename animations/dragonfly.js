@@ -1,14 +1,16 @@
 // A deep black dragonfly drawn in tiny dashes, like the evolution animation.
-// It is modelled in 3D and seen from above and a little from the side: rings
-// of dashes wrap its body like the hatching of a pen drawing, and dashes trace
-// and shade its wings. It keeps still until the pointer is over it, or over
-// the link it sits in, or that link has keyboard focus; then it beats its
-// wings, and settles again afterwards. Its form can be varied (see FORM).
+// It is modelled in 3D and seen from straight above: rings of dashes wrap its
+// body like the hatching of a pen drawing, and dashes trace its wings, with
+// more of their veins and cells the more pixels it is drawn with, so it stays
+// clean at any size and on any screen. It keeps still until the pointer is
+// over it, or over the link it sits in, or that link has keyboard focus; then
+// it beats its wings as a hovering dragonfly does, and settles again afterwards.
+// Its form can be varied (see FORM).
 //
 //   import { mountDragonfly } from './animations/dragonfly.js';
 //   mountDragonfly(document.getElementById('dragonfly'));
 
-import { triangleSize, INK, TAU, random, clamp, smooth, reducedMotion, mountCanvas, animate } from './core.js';
+import { triangleSize, INK, TAU, random, clamp, smooth, reducedMotion, animate } from './core.js';
 
 // A dash for a screen's pixel ratio, in CSS pixels: the same as the evolution's (sketch.js).
 function dashSize(ratio) {
@@ -21,11 +23,25 @@ const DISTANCE = 400; // camera distance in model units, for a gentle perspectiv
 const LIGHT = unit([-0.45, 0.6, 0.66]);
 const HALF = unit([LIGHT[0], LIGHT[1], LIGHT[2] + 1]);
 
-// Wing beats: beats a second; swing either side of the middle (radians) for
-// the hind and fore wings; how far above flat the middle is; how far the
-// forewings lag the hindwings, as a share of a beat; and how far each wing
-// twists about its span, leading edge down on the way down and up on the way up.
-const BEAT = 1.5, SWING = [0.5, 0.44], RAISE = 0.1, LAG = 0.25, TWIST = 0.3;
+// The wing beat of a hovering dragonfly (after Norberg 1975, Rüppell 1989 and
+// Wang & Russell 2007). The hind and fore wings beat in counterstroke, half a
+// beat apart. Each sweeps down and forward, then up and back, in a stroke
+// plane tipped forward from the vertical; it is held nearly flat on the
+// downstroke and turns its leading edge up to slice back on the upstroke,
+// turning just before each reversal and more towards its tip. Dragonflies beat
+// 30 to 40 times a second; this is slowed so that the eye can follow it.
+const BEAT = 4; // beats a second
+const AMPLITUDE = [0.56, 0.6]; // radians either side of the middle of the stroke, hind and fore
+const MIDDLE = 0.08; // the middle of the stroke, and the wings at rest, above flat
+const LEAD = 0.5; // how far the hindwings lead the forewings, as a share of a beat
+const STROKE = 0.5; // how far the stroke plane tips forward from the vertical, radians
+const PITCH = [-0.12, 0.7]; // the pitch on the downstroke and on the upstroke, radians, leading edge up
+const ADVANCE = 0.35; // how early the wing turns before each reversal, radians of phase
+const TWIST = (f) => 0.3 + 0.7 * f; // the share of the pitch at a fraction f of the way to the tip
+
+// Wing dashes come in three weights: the leading edge and pterostigma, the
+// veins and trailing edge, and the cells between them.
+const WEIGHTS = [1.45, 1, 0.75];
 
 // ---------------------------------------------------------------------------
 // The model. Units: about 100 from head to tail. +y points to the head, +x to
@@ -155,7 +171,7 @@ function limbs(end) {
 }
 
 // Wings, in fractions of their length (s, root to tip) and chord (c, from the
-// leading edge back). Veins of rank 0 always show; higher ranks only once the
+// leading edge back). Veins of rank 0 show first; higher ranks only once the
 // wing is wide enough in dashes to hold them.
 const RADIUS = [[0, 0.2], [0.08, 0.1], [0.25, 0.075], [0.47, 0.085], [0.7, 0.08], [0.8, 0.085], [0.9, 0.11], [0.96, 0.16], [0.99, 0.22]];
 const SECTOR = [[0.02, 0.27], [0.12, 0.2], [0.3, 0.19], [0.5, 0.2], [0.7, 0.23], [0.85, 0.27], [0.95, 0.31], [0.995, 0.34]];
@@ -197,38 +213,43 @@ const HINDWING = {
   stigma: [0.79, 0.88],
 };
 
-// A wing's root and its axes: S along the span, C back along the chord, N up
-// out of it, and the hinge it swings about.
+// A wing's root and its axes: S along the span, C back along the chord and K,
+// which C turns towards when the wing pitches about S; and the axis of its
+// stroke, the hinge across its root tipped forward so that the wing sweeps
+// down and forward, then up and back.
 function wingFrame({ spec, side }) {
   const { sweep, dihedral } = spec;
   const S = [side * Math.cos(sweep) * Math.cos(dihedral), Math.sin(sweep) * Math.cos(dihedral), Math.sin(dihedral)];
   const C = [side * Math.sin(sweep), -Math.cos(sweep), 0];
-  let N = cross(S, C);
-  if (N[2] < 0) N = scaled(N, -1);
+  const K = cross(S, C);
+  const N = K[2] < 0 ? scaled(K, -1) : K; // up out of the wing
+  const hinge = unit(cross(S, N));
+  const stroke = unit(sub(scaled(hinge, Math.cos(STROKE)), [0, 0, side * Math.sin(STROKE)]));
   const root = [side * spec.root[0], spec.root[1], spec.root[2]];
-  return { root, side, S, C, N, hinge: unit(cross(S, N)) };
+  return { root, side, S, C, K, stroke };
 }
 
 // ---------------------------------------------------------------------------
 
 export function mountDragonfly(el, options = {}) {
   // `beat: true` keeps it beating its wings, for previews; any key of FORM varies its form.
-  const o = { rotate: -0.7, tilt: 0.15, roll: 0.4, fit: 0.97, seed: 3, beat: false, ...FORM, ...options };
+  const o = { rotate: -0.7, tilt: 0, roll: 0, fit: 0.97, seed: 3, beat: false, ...FORM, ...options };
   const calm = reducedMotion();
   const { parts, limbs, wings, frames } = model(o);
-  // Model to camera: rolled a little to show the left flank, turned in the picture plane, tipped back.
+  // Model to camera: turned in the picture plane; it can also be rolled to show a flank and tipped back.
   const G = mul(rotX(-o.tilt), mul(rotZ(-o.rotate), rotY(o.roll)));
+  const towards = [G[6], G[7], G[8]]; // towards the viewer, in model space
 
   let scale = 1, ox = 0, oy = 0, dash = dashSize(1), half = 1;
   let body = null; // the still body, as one path in canvas pixels
-  let strokes = []; // per wing: dash centres and half dashes in model units
+  let strokes = []; // per wing and weight: its dashes as (s, c, ds, dc, half length) in the wing's plane
   let job = null; // a layout under way
   // The beat: its clock, how strongly the wings beat now (0 still, 1 full), and
   // what keeps them beating; the frame loop runs only while they move.
   let clock = 0, swing = 0, hovered = false, focused = false, loop = null;
   const beating = () => !calm && (o.beat || hovered || focused);
 
-  const surface = mountCanvas(el, build);
+  const surface = mountSurface(el, build);
   // It fades in once its first layout is ready, rather than popping in.
   if (!calm) surface.view.canvas.style.cssText += ';opacity:0;transition:opacity 0.3s';
   surface.measure();
@@ -274,6 +295,26 @@ export function mountDragonfly(el, options = {}) {
     surface.view.canvas.style.opacity = 1;
   }
 
+  // A wing's flap (up from flat) and pitch (leading edge up), in radians, now.
+  function pose(pair, at = clock, amount = swing) {
+    const phase = TAU * (BEAT * at - (pair ? LEAD : 0));
+    const turn = Math.tanh(3 * Math.cos(phase + ADVANCE)) / Math.tanh(3);
+    return [MIDDLE + amount * AMPLITUDE[pair] * Math.sin(phase), amount * ((PITCH[0] + PITCH[1]) / 2 + ((PITCH[1] - PITCH[0]) / 2) * turn)];
+  }
+
+  // A wing flapped by `flap`, in camera space: its root, and where its axes S,
+  // C and K point.
+  function rig(i, flap) {
+    const f = frames[i], M = mul(G, axisAngle(f.stroke, flap));
+    return { T: apply(G, f.root), S: apply(M, f.S), C: apply(M, f.C), K: apply(M, f.K), M };
+  }
+
+  // A point (s, c) of wing i in camera space, pitched by `pitch`.
+  function wingAt(r, i, s, c, pitch, length) {
+    const a = pitch * frames[i].side * TWIST(s / length), ca = Math.cos(a), sa = Math.sin(a);
+    return [0, 1, 2].map((k) => r.T[k] + r.S[k] * s + (r.C[k] * ca + r.K[k] * sa) * c);
+  }
+
   function* layout(view) {
     // Fit the dragonfly, with its wings anywhere in their beat, into the element.
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -285,9 +326,12 @@ export function mountDragonfly(el, options = {}) {
     for (const part of parts) for (let u = 0; u <= 1; u += 1 / 12) for (let v = 0; v < 1; v += 1 / 12) extend(apply(G, part.surface.at(u, v)));
     for (const limb of limbs) for (const p of limb.pts) extend(apply(G, p));
     wings.forEach((w, i) => {
-      for (const angle of [RAISE - SWING[w.pair], RAISE, RAISE + SWING[w.pair]]) {
-        const [M, T] = rig(i, angle);
-        for (const [s, c] of w.spec.lead.concat(w.spec.trail)) extend(add(apply(M, wingPoint(frames[i], s * w.spec.length, c * w.spec.chord)), T));
+      const { length, chord } = w.spec;
+      const outline = w.spec.lead.concat(w.spec.trail).map(([s, c]) => [s * length, c * chord]);
+      for (let k = 0; k < 16; k++) {
+        const [flap, pitch] = pose(w.pair, k / 16 / BEAT, 1);
+        const r = rig(i, flap);
+        for (const [s, c] of outline) extend(wingAt(r, i, s, c, pitch, length));
       }
     });
     scale = Math.min(view.width / (x1 - x0), view.height / (y1 - y0)) * o.fit;
@@ -308,15 +352,8 @@ export function mountDragonfly(el, options = {}) {
     return [ox + x * k, oy - y * k];
   }
 
-  // A wing's rotation and shift, model to camera: twisted `twist` about its
-  // span, then swung `angle` about its hinge.
-  function rig(i, angle, twist = 0) {
-    const f = frames[i], R = mul(axisAngle(f.hinge, angle), axisAngle(f.S, twist * -f.side));
-    return [mul(G, R), apply(G, sub(f.root, apply(R, f.root)))];
-  }
-
-  // Lays the dashes: the still body once, as a path; the wings as dashes to
-  // turn with them every frame.
+  // Lays the dashes: the still body once, as a path; the wings as dashes in
+  // their own planes, to be flapped and pitched every frame.
   function* sample() {
     const rand = random(o.seed);
     const L = half / 0.45; // a dash's length in model units
@@ -348,53 +385,64 @@ export function mountDragonfly(el, options = {}) {
         stroke(p, dir);
       });
     }
+    // Legs, antennae and claspers, leaving out what the body hides: from above,
+    // most of the legs are tucked out of sight under it.
+    const hidden = (p) => {
+      for (let t = 1; t < 16; t += 1.5) {
+        const q = add(p, scaled(towards, t));
+        if (parts.some((part) => part.surface.inside(q))) return true;
+      }
+      return false;
+    };
     for (const limb of limbs) {
       const line = smoothPath(limb.pts, 4);
       for (let r = 0; r < limb.rows; r++) {
         const lift = (r - (limb.rows - 1) / 2) * B * 0.4;
         walk(line, B * 1.1, B * 0.55 + r * B * 0.5, (p, t) => {
           const side = unit(cross(t, [0, 0, 1]));
-          stroke(add(p, scaled(side, lift)), t);
+          const q = add(p, scaled(side, lift));
+          if (!hidden(q)) stroke(q, t);
         });
       }
       // Short spines along the shins.
       if (limb.spines) {
         walk(line, B * 2.2, B * 1.1, (p, t) => {
           const out = unit(add(cross(t, [Math.sign(p[0]), 0, 0]), [0, 0, -0.3]));
-          stroke(add(p, scaled(out, B * 0.36)), out);
+          const q = add(p, scaled(out, B * 0.36));
+          if (!hidden(q)) stroke(q, out);
         });
       }
     }
 
     yield;
 
-    // The wings, worked out flat and then placed on each wing.
+    // The wings, worked out flat in their own planes, all four to the same
+    // detail: as much as the forewing's breadth in dashes allows.
     const thorax = parts.filter((part) => part.layer === 2);
+    const detail = (FOREWING.chord * o.chord) / L;
     const laid = [];
     for (const [i, w] of wings.entries()) {
-      const f = frames[i], centres = [], dirs = [];
-      yield* wingDashes(w.spec, L, rand, o.texture, o.cell, (s, c, ds, dc) => {
-        const p = wingPoint(f, s, c);
-        if (thorax.some((part) => part.surface.inside(p))) return;
-        centres.push(...p);
-        // A half dash: its direction, a little uneven in length.
-        dirs.push(...scaled(unit(add(scaled(f.S, ds), scaled(f.C, dc))), half * (0.85 + 0.3 * rand())));
+      const f = frames[i], weights = WEIGHTS.map(() => []);
+      yield* wingDashes(w.spec, L, detail, rand, o.texture, o.cell, (s, c, ds, dc, weight) => {
+        if (thorax.some((part) => part.surface.inside(add(f.root, add(scaled(f.S, s), scaled(f.C, c)))))) return;
+        weights[weight].push(s, c, ds, dc, half * (0.85 + 0.3 * rand()));
       });
-      laid.push({ p: Float32Array.from(centres), d: Float32Array.from(dirs) });
+      laid.push(weights.map((d) => Float32Array.from(d)));
       yield;
     }
     body = path;
     strokes = laid;
   }
 
-  // The wings ease into their beat and out of it, and once they rest the loop stops.
+  // The wings swing into their beat quickly and settle more slowly, and once
+  // they rest the loop stops.
   function tick(dt) {
     if (!body) return;
     // A late frame (the page busy elsewhere) moves the wings on by no more than a
     // short step, so they slow for a moment rather than jump.
     dt = Math.min(dt, 1 / 30);
     const on = beating();
-    swing = on ? Math.min(1, swing + dt / 0.35) : Math.max(0, swing - dt / 0.6);
+    swing = on ? Math.min(1, swing + dt / 0.15) : Math.max(0, swing - dt / 0.4);
     clock += dt;
     draw();
     if (!on && swing === 0 && loop) {
@@ -411,33 +459,45 @@ export function mountDragonfly(el, options = {}) {
     const { ctx, width, height } = surface.view;
     ctx.clearRect(0, 0, width, height);
     ctx.strokeStyle = INK;
-    ctx.lineWidth = dash.width * o.weight;
     ctx.lineCap = 'butt';
-    // Wings on the far side go behind the body, the near ones in front. A wing
-    // seen edge on would clot into a black blade, so it fades as it turns away.
+    // Wings rising towards the viewer go over the body, the others under it.
+    // Seen edge on, a wing would clot into a black blade, so it fades as it
+    // turns away.
     const near = [], far = [];
     wings.forEach((w, i) => {
-      const phase = TAU * (BEAT * clock - (w.pair ? LAG : 0));
-      const [M, T] = rig(i, RAISE + swing * SWING[w.pair] * Math.sin(phase), swing * TWIST * Math.cos(phase));
-      const N = frames[i].N, facing = Math.abs(M[6] * N[0] + M[7] * N[1] + M[8] * N[2]);
-      const path = new Path2D();
-      const { p, d } = strokes[i];
-      for (let j = 0; j < p.length; j += 3) {
-        const a = project(M, T, [p[j] - d[j], p[j + 1] - d[j + 1], p[j + 2] - d[j + 2]]);
-        const b = project(M, T, [p[j] + d[j], p[j + 1] + d[j + 1], p[j + 2] + d[j + 2]]);
-        path.moveTo(a[0], a[1]);
-        path.lineTo(b[0], b[1]);
-      }
-      (M[6] * w.side > 0 ? near : far).push([path, 0.3 + 0.7 * smooth(clamp(facing / 0.45, 0, 1))]);
+      const [flap, pitch] = pose(w.pair);
+      const r = rig(i, flap), side = frames[i].side, length = w.spec.length;
+      const am = pitch * side * TWIST(0.6);
+      const facing = Math.abs(r.K[2] * Math.cos(am) - r.C[2] * Math.sin(am));
+      const paths = strokes[i].map((d) => {
+        const p = new Path2D();
+        for (let j = 0; j < d.length; j += 5) {
+          const s = d[j], c = d[j + 1], h = d[j + 4];
+          const a = pitch * side * TWIST(s / length), ca = Math.cos(a), sa = Math.sin(a);
+          // The chord, turned by the pitch; the dash's centre; and half the dash.
+          const vx = r.C[0] * ca + r.K[0] * sa, vy = r.C[1] * ca + r.K[1] * sa, vz = r.C[2] * ca + r.K[2] * sa;
+          const px = r.T[0] + r.S[0] * s + vx * c, py = r.T[1] + r.S[1] * s + vy * c, pz = r.T[2] + r.S[2] * s + vz * c;
+          const hx = (r.S[0] * d[j + 2] + vx * d[j + 3]) * h, hy = (r.S[1] * d[j + 2] + vy * d[j + 3]) * h, hz = (r.S[2] * d[j + 2] + vz * d[j + 3]) * h;
+          const k0 = (DISTANCE / (DISTANCE - pz + hz)) * scale, k1 = (DISTANCE / (DISTANCE - pz - hz)) * scale;
+          p.moveTo(ox + (px - hx) * k0, oy - (py - hy) * k0);
+          p.lineTo(ox + (px + hx) * k1, oy - (py + hy) * k1);
+        }
+        return p;
+      });
+      (r.M[6] * side > 0 ? near : far).push([paths, 0.3 + 0.7 * smooth(clamp(facing / 0.45, 0, 1))]);
     });
     const wingsOf = (list) => {
-      for (const [path, alpha] of list) {
+      for (const [paths, alpha] of list) {
         ctx.globalAlpha = alpha;
-        ctx.stroke(path);
+        paths.forEach((p, weight) => {
+          ctx.lineWidth = dash.width * o.weight * WEIGHTS[weight];
+          ctx.stroke(p);
+        });
       }
       ctx.globalAlpha = 1;
     };
     wingsOf(far);
+    ctx.lineWidth = dash.width * o.weight;
     ctx.stroke(body);
     wingsOf(near);
   }
@@ -454,6 +514,64 @@ export function mountDragonfly(el, options = {}) {
       if (loop) loop.destroy();
       for (const [type, handler] of Object.entries(events)) host.removeEventListener(type, handler);
       surface.destroy();
+    },
+  };
+}
+
+// Fills `el` with a canvas drawn at the screen's full pixel ratio (up to 3),
+// in whole device pixels so that nothing is resampled. `measure()` sizes it
+// and calls `onResize(view)`, which happens again by itself whenever the
+// element's size or the screen's pixel ratio changes.
+function mountSurface(el, onResize) {
+  if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+  if (el.clientHeight < 2) el.style.aspectRatio = '1';
+  const canvas = document.createElement('canvas');
+  canvas.setAttribute('aria-hidden', 'true');
+  canvas.style.cssText = 'position:absolute;left:0;top:0;display:block;pointer-events:none';
+  el.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  const view = { canvas, ctx, width: 0, height: 0, ratio: 1 };
+  let timer = 0, media = null;
+
+  const measure = () => {
+    const ratio = clamp(devicePixelRatio || 1, 1, 3);
+    const w = Math.round(el.clientWidth * ratio), h = Math.round(el.clientHeight * ratio);
+    if (!w || !h) return;
+    if (w === canvas.width && h === canvas.height && ratio === view.ratio) return;
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = `${w / ratio}px`;
+    canvas.style.height = `${h / ratio}px`;
+    Object.assign(view, { width: w / ratio, height: h / ratio, ratio });
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    onResize(view);
+  };
+  const later = () => {
+    clearTimeout(timer);
+    timer = setTimeout(measure, 200);
+  };
+  const observer = new ResizeObserver(later);
+  observer.observe(el);
+  // Moving the window to another screen, or zooming, changes the pixel ratio.
+  const watch = () => {
+    media?.removeEventListener('change', onRatio);
+    media = matchMedia(`(resolution: ${devicePixelRatio || 1}dppx)`);
+    media.addEventListener('change', onRatio);
+  };
+  const onRatio = () => {
+    watch();
+    later();
+  };
+  watch();
+
+  return {
+    view,
+    measure,
+    destroy() {
+      observer.disconnect();
+      media?.removeEventListener('change', onRatio);
+      clearTimeout(timer);
+      canvas.remove();
     },
   };
 }
@@ -587,10 +705,6 @@ function smoothPath(pts, per = 6) {
 // Wings, worked out in the wing's own plane: s along the span and c back along
 // the chord, both in model units.
 
-function wingPoint(f, s, c) {
-  return add(f.root, add(scaled(f.S, s), scaled(f.C, c)));
-}
-
 function wingOutline(spec) {
   const L = spec.length, W = spec.chord;
   const toUnits = (pts) => pts.map(([s, c]) => [s * L, c * W]);
@@ -617,19 +731,22 @@ function insidePolygon(poly, x, y) {
   return hit;
 }
 
-// Emits a wing's dashes as (s, c, ds, dc): a dash centre and the direction it
-// lies along, for dashes `L` long. Bolder parts come first and win where two
-// would crowd each other: the stigma, the leading edge, the veins, the
-// trailing edge, then the texture between the veins, one of
+// Emits a wing's dashes as (s, c, ds, dc, weight): a dash centre, the
+// direction it lies along and its weight (see WEIGHTS), for dashes `L` long.
+// How much of the wing it draws depends on `detail`, how many dashes fit
+// across a forewing, so that a small or low-resolution wing stays a clean
+// drawing rather than a clutter: first the outline and the pterostigma, then
+// the main veins, then the texture between them and the smaller veins. Bolder
+// parts come first and win where two would crowd each other. The texture is one of
 //   'cells': a lace of small cells, `cell` dash lengths across, as most of a real wing is;
 //   'cross': cross veins running across the wing like the rungs of a ladder;
 //   'hatch': short dashes scattered across the wing, the way cross veins run.
 // Yields between parts so the work can be spread out.
-function* wingDashes(spec, L, rand, texture, cell, emit) {
+function* wingDashes(spec, L, detail, rand, texture, cell, emit) {
   const W = spec.chord, length = spec.length;
   const { lead, trail, outline } = wingOutline(spec);
   const widest = Math.max(...outline.map(([s]) => (chordAt(trail, s) ?? 0) - (chordAt(lead, s) ?? 0)));
-  const rank = widest / L < 7 ? 0 : widest / L < 11 ? 1 : 2;
+  const rank = detail < 2.5 ? -1 : detail < 5 ? 0 : detail < 8 ? 1 : 2;
 
   const cells = new Map();
   const crowded = (s, c, gap) => {
@@ -641,33 +758,37 @@ function* wingDashes(spec, L, rand, texture, cell, emit) {
     }
     return false;
   };
-  const put = (s, c, ds, dc, gap) => {
+  const put = (s, c, ds, dc, weight, gap) => {
     if (!insidePolygon(outline, s, c) || crowded(s, c, gap)) return;
     const k = `${Math.floor(s / L)},${Math.floor(c / L)}`;
     (cells.get(k) || cells.set(k, []).get(k)).push([s, c]);
-    emit(s, c, ds, dc);
+    emit(s, c, ds, dc, weight);
   };
-  // Rows of dashes along a line, `offsets` across it (positive towards the
-  // trailing edge for lines that run root to tip), `step` apart along it.
-  const along = (poly, offsets, gap = L * 0.36, step = L * 1.12) => {
+  // Rows of dashes along a line, at `offsets` across it (positive towards the
+  // trailing edge for lines that run root to tip), of the given weights.
+  const along = (poly, offsets, weights, gap = L * 0.36, step = L * 1.12) => {
     offsets.forEach((off, r) => {
-      walk(poly, step, step / 2 + L * 0.5 * r, (p, t) => put(p[0] - t[1] * off, p[1] + t[0] * off, t[0], t[1], gap));
+      walk(poly, step, step / 2 + L * 0.5 * r, (p, t) => put(p[0] - t[1] * off, p[1] + t[0] * off, t[0], t[1], weights[r], gap));
     });
   };
 
-  // The pterostigma near the tip: a block of rows packed tight under the
-  // leading edge, so it reads as a dark mark.
-  const [a, b] = spec.stigma.map((f) => f * length);
-  along(lead.filter(([s]) => s >= a && s <= b), [0.24, 0.46, 0.68, 0.9].map((k) => L * (1.06 + k)), L * 0.16, L * 0.92);
+  // The leading edge, bold, with the pterostigma near the tip: rows packed
+  // tight under the edge, so that it reads as a dark mark.
+  const edge = detail < 4 ? [L * 0.3] : detail < 7 ? [L * 0.3, L * 0.68] : [L * 0.3, L * 0.68, L * 1.06];
+  const [a, b] = spec.stigma.map((f) => f * length), under = edge[edge.length - 1];
+  const block = detail < 4 ? [0.38] : detail < 7 ? [0.3, 0.6] : [0.24, 0.46, 0.68, 0.9];
+  along(lead.filter(([s]) => s >= a && s <= b), block.map((k) => under + L * k), block.map(() => 0), L * 0.16, L * 0.92);
   yield;
-  along(lead, [L * 0.3, L * 0.68, L * 1.06]); // the leading edge, bold
+  along(lead, edge, [0, 1, 1]);
   yield;
   for (const v of spec.veins.filter((vein) => vein.rank <= rank)) {
-    along(smoothPath(v.pts.map(([s, c]) => [s * length, c * W]), 6), v.rank ? [-L * 0.15, L * 0.15] : [-L * 0.3, 0, L * 0.3]);
+    const rows = v.rank || detail < 6 ? [0] : detail < 9 ? [-L * 0.17, L * 0.17] : [-L * 0.3, 0, L * 0.3];
+    along(smoothPath(v.pts.map(([s, c]) => [s * length, c * W]), 6), rows, [1, 1, 1]);
     yield;
   }
-  along(trail.slice().reverse(), [-L * 0.25, -L * 0.6]); // the trailing edge
+  along(trail.slice().reverse(), detail < 7 ? [-L * 0.25] : [-L * 0.25, -L * 0.6], [1, 1]); // the trailing edge
   yield;
+  if (detail < 4) return; // too small for anything between the veins to read
 
   // The texture thins out towards the root, so the wing's base doesn't clot
   // when seen edge on.
@@ -677,18 +798,20 @@ function* wingDashes(spec, L, rand, texture, cell, emit) {
       const c0 = chordAt(lead, s), c1 = chordAt(trail, s);
       if (c0 == null || c1 == null) continue;
       const shift = rand() * L * 1.35, k = keep(s);
-      for (let c = c0 + shift; c < c1; c += L * 1.35) if (rand() < k) put(s + (rand() - 0.5) * L * 0.2, c, 0, 1, L * 0.45);
+      for (let c = c0 + shift; c < c1; c += L * 1.35) if (rand() < k) put(s + (rand() - 0.5) * L * 0.2, c, 0, 1, 2, L * 0.45);
     }
   } else if (texture === 'cross') {
     for (let s = L * 0.8; s < length; s += L * 1.6) {
       const c0 = chordAt(lead, s), c1 = chordAt(trail, s);
       if (c0 == null || c1 == null || rand() > keep(s)) continue;
       const lean = (rand() - 0.5) * 0.25;
-      for (let c = c0 + L * (0.6 + 0.4 * rand()); c < c1 - L * 0.3; c += L * 1.08) put(s + lean * (c - c0), c, lean, 1, L * 0.4);
+      for (let c = c0 + L * (0.6 + 0.4 * rand()); c < c1 - L * 0.3; c += L * 1.08) put(s + lean * (c - c0), c, lean, 1, 2, L * 0.4);
     }
   } else {
-    for (const [p, q] of yield* cellEdges(lead, trail, length, widest, L * cell, rand)) {
-      if (keep((p[0] + q[0]) / 2) > 0.5) walk([p, q], L * 1.08, L * 0.54, (pt, t) => put(pt[0], pt[1], t[0], t[1], L * 0.4));
+    // While the wing is only a few dashes across, fewer, larger cells.
+    const size = L * cell * (detail < 6 ? 1.3 : 1);
+    for (const [p, q] of yield* cellEdges(lead, trail, length, widest, size, rand)) {
+      if (keep((p[0] + q[0]) / 2) > 0.5) walk([p, q], L * 1.08, L * 0.54, (pt, t) => put(pt[0], pt[1], t[0], t[1], 2, L * 0.4));
     }
   }
 }

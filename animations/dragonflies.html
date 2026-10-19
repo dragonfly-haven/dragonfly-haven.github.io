@@ -90,23 +90,25 @@
 </head>
 <body>
   <h1>Dragonfly options</h1>
-  <p class="note">Eight slight variations on the dragonfly, each in the header beside the wordmark, at its new size, over a line of the page's text. Hover over one to see its wings beat. The current dragonfly comes first for comparison.</p>
+  <p class="note">Eight slight variations on the dragonfly, each in the header beside the wordmark, over a line of the page's text. Hover over one to see its wings beat. Maxim chose 4, seen from straight above, which the dragonfly now is; the one before comes first for comparison.</p>
 
   <div class="options" id="options"></div>
 
   <script type="module">
     import { mountDragonfly } from './dragonfly.js';
 
+    // The others are seen as the dragonfly was before 4 was chosen: a little from the side.
+    const side = { tilt: 0.15, roll: 0.4 };
     const OPTIONS = [
-      ['Now', 'The dragonfly on the page today.', {}],
-      ['Slender', 'Like a hawker: a longer, slimmer tail, narrower wings and bigger eyes.', { tail: 1.12, girth: 0.82, wing: 1.05, chord: 0.86, eyes: 1.1, eyeGap: -0.3 }],
-      ['Stout', 'Like a skimmer: a shorter, broad, flat tail and broader wings that flare at the base.', { tail: 0.74, girth: 1.2, flat: 1.7, chord: 1.14, flare: 1.5, wing: 0.96 }],
-      ['Clubtail', 'Eyes set apart, and a tail that swells towards its end.', { eyes: 0.78, eyeGap: 1.7, club: 0.9 }],
-      ['From above', 'Seen straight from above, so both sides match.', { roll: 0, tilt: 0 }],
-      ['Open wings', 'The fore and hind wings spread further apart, like an X.', { sweep: [-0.36, 0.34] }],
-      ['Fine line', 'Finer dashes and smaller cells, like a fine engraving.', { weight: 0.72, cell: 2.6 }],
-      ['Bold line', 'Heavier dashes and larger cells, so it reads darker when small.', { weight: 1.5, cell: 3.8 }],
-      ['Cross veins', 'Cross veins like the rungs of a ladder instead of the lace of cells.', { texture: 'cross' }],
+      ['Before', 'The dragonfly before 4 was chosen.', side],
+      ['Slender', 'Like a hawker: a longer, slimmer tail, narrower wings and bigger eyes.', { ...side, tail: 1.12, girth: 0.82, wing: 1.05, chord: 0.86, eyes: 1.1, eyeGap: -0.3 }],
+      ['Stout', 'Like a skimmer: a shorter, broad, flat tail and broader wings that flare at the base.', { ...side, tail: 0.74, girth: 1.2, flat: 1.7, chord: 1.14, flare: 1.5, wing: 0.96 }],
+      ['Clubtail', 'Eyes set apart, and a tail that swells towards its end.', { ...side, eyes: 0.78, eyeGap: 1.7, club: 0.9 }],
+      ['From above', 'Seen straight from above, so both sides match. Chosen, and now the dragonfly on the page.', {}],
+      ['Open wings', 'The fore and hind wings spread further apart, like an X.', { ...side, sweep: [-0.36, 0.34] }],
+      ['Fine line', 'Finer dashes and smaller cells, like a fine engraving.', { ...side, weight: 0.72, cell: 2.6 }],
+      ['Bold line', 'Heavier dashes and larger cells, so it reads darker when small.', { ...side, weight: 1.5, cell: 3.8 }],
+      ['Cross veins', 'Cross veins like the rungs of a ladder instead of the lace of cells.', { ...side, texture: 'cross' }],
     ];
 
     const text = 'We all hope to one day become ‘living fossils’. Until then we’re interested in making sure the next years go well.';
