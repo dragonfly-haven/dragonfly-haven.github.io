@@ -130,7 +130,14 @@
     },
     "rat": {
       "passed": true,
-      "when": "2026-10-17"
+      "when": "2026-10-19",
+      "scores": [
+        8,
+        8,
+        8
+      ],
+      "maxim": "a bit better: clear yes",
+      "note": "rework after Maxim's notes: redrawn with jointed legs, modelled body, ringed tail; polish asked: haunch, darker back, orderly flank fur, standing hind leg, far foreleg, cheek line"
     },
     "early-primate": {
       "passed": true,
