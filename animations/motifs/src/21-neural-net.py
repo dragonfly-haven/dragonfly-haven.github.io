@@ -1,143 +1,155 @@
-"""21 - neural net: final polish of the passed drawing (reviewed 9 / 9 / 8).
+"""21 - neural net: a feed-forward network as a fine engraved figure.
 
-The generator of this drawing was lost, so the passed SVG, kept in
-base/21-neural-net.svg, is the source. This script reads it and changes only
-what the review notes (src/reviews.md) point at; every other path is written
-out exactly as it was.
+The last drawing of the sequence, so the cleanest: a textbook diagram of a
+fully connected feed-forward net, drawn from scratch with ruled lines.
 
-- The small vertical ticks above the top node and below the bottom node of
-  each column are removed (they read as stray marks at 1x).
-- The thinnest connections (a three-piece stroke, every piece under 0.8 wide)
-  get a slight low-frequency hand wobble, the same kind pen.py gives its lines,
-  with the ends held fixed where they meet the nodes. Their pieces keep their
-  weights; only their course moves, by about a unit.
+- Five layers left to right, 4 - 6 - 6 - 6 - 3 nodes, on one vertical pitch,
+  each column centred on the square's middle line, so the net is symmetric.
+- Nodes are exact circles, one radius per layer, each a firm outline with a
+  thin inner ring. Nodes that fire are filled inside the ring with neat
+  parallel hatching; a few are half lit, with sparser hatching.
+- Every connection is a straight fine line that stops exactly at the two node
+  outlines (114 of them). Three strong weights trace paths from the inputs to
+  the winning output, drawn heavier; that output wears a second outer ring.
+- Input arrows come in on the left, output arrows leave on the right, each
+  with a small solid arrowhead; the winning output's arrow is heavier.
 
-Not mirrored (slot 21 faces as drawn). Run from this folder:
+Everything is ruled (no hand wobble), so the strokes go in with pen.raw at
+exact weights. Not mirrored (slot 21 faces as drawn). Run from this folder:
     python3 21-neural-net.py
+
+(base/21-neural-net.svg holds the older hand-drawn net; it is no longer read.)
 """
 
 import math
-import re
 
-from pen import Pen, resample, length, dist, _n
+from pen import Pen, ellipse_pts
 
-BASE = 'base/21-neural-net.svg'
 OUT = '../21-neural-net.svg'
-
-PATH_RE = re.compile(r'<path d="([^"]*)"[^>]*stroke-width="([\d.]+)"')
-
-
-def parse(path):
-    """The file's lines, and for each path line its index, points and width."""
-    lines = open(path).read().rstrip('\n').split('\n')
-    paths = []
-    for i, ln in enumerate(lines):
-        m = PATH_RE.search(ln)
-        if not m:
-            continue
-        nums = [float(v) for v in re.findall(r'-?\d+(?:\.\d+)?', m.group(1))]
-        paths.append(dict(i=i, pts=list(zip(nums[0::2], nums[1::2])), w=float(m.group(2))))
-    return lines, paths
-
-
-def path_line(pts, w):
-    """A path element written the way pen.py writes it."""
-    d = 'M' + ' '.join(f'{_n(x)} {_n(y)}' if k else f'{_n(x)} {_n(y)}L' for k, (x, y) in enumerate(pts))
-    d = d.replace('L ', 'L')
-    return f'<path d="{d}" fill="none" stroke="#000" stroke-width="{_n(w, 2)}" stroke-linecap="round"/>'
-
-
-lines, paths = parse(BASE)
 pen = Pen(seed=2121)
 
-# ------------------------------------------------ chains (a stroke's pieces meet end to start)
-chains = []
-for p in paths:
-    if chains and chains[-1][-1]['pts'][-1] == p['pts'][0]:
-        chains[-1].append(p)
-    else:
-        chains.append([p])
+# ---------------------------------------------------------------- layout
+SIZES = [4, 6, 6, 6, 3]
+RADII = [24, 26, 26, 26, 28]
+GAP_X = 165          # between layer columns
+PITCH = 108          # between nodes in a column
+CX, CY = 500, 500
+
+W_OUTLINE = 2.1
+W_RING = 0.8
+W_LINK = 0.7
+W_STRONG = 1.7
+W_HATCH = 0.7
+W_ARROW = 1.3
+W_ARROW_WIN = 1.9
+
+xs = [CX + (i - (len(SIZES) - 1) / 2) * GAP_X for i in range(len(SIZES))]
+nodes = []  # nodes[layer][k] = (x, y, r)
+for li, n in enumerate(SIZES):
+    col = []
+    for k in range(n):
+        col.append((xs[li], CY + (k - (n - 1) / 2) * PITCH, RADII[li]))
+    nodes.append(col)
+
+# Three strong paths from inputs to the winning output (layer, index per step).
+WIN = 1
+PATHS = [
+    [0, 0, 1, 1, WIN],   # over the top
+    [1, 3, 2, 3, WIN],   # through the middle
+    [3, 4, 5, 4, WIN],   # along the bottom
+]
+strong = set()
+lit = set()
+for p in PATHS:
+    for li, k in enumerate(p):
+        lit.add((li, k))
+        if li:
+            strong.add((li - 1, p[li - 1], k))
+# Half-lit nodes: some activation that did not carry through.
+HALF = {(1, 1), (2, 3), (3, 0), (0, 2)} - lit
 
 
-def chain_pts(c):
-    out = list(c[0]['pts'])
-    for p in c[1:]:
-        out += p['pts'][1:]
-    return out
+# ---------------------------------------------------------------- helpers
+def circle(x, y, r, w, a0=0.0):
+    pen.raw(ellipse_pts(x, y, r, r, 0, a0, a0 + 2 * math.pi, step=1.2), w)
 
 
-# ------------------------------------------------ note 1: drop the ticks above / below the columns
-# Each tick is two hair strokes (0.6 wide, two points, upright) on a column's
-# axis, beyond its outermost node. Nodes are the closed heavy rings.
-COLUMNS = [152, 265, 421, 588, 723, 822]
-drop = set()
-for p in paths:
-    pts = p['pts']
-    if len(pts) != 2 or p['w'] > 0.65:
-        continue
-    (x0, y0), (x1, y1) = pts
-    if abs(x1 - x0) > 1.5 or abs(y1 - y0) < 1.5:
-        continue
-    cx = (x0 + x1) / 2
-    col = min(COLUMNS, key=lambda c: abs(c - cx))
-    if abs(col - cx) > 4:
-        continue
-    drop.add(p['i'])
-assert len(drop) == 24, len(drop)  # two pieces per tick, a tick above and below each of six columns
+def hatch_disc(x, y, r, spacing, angle_deg=-45, w=W_HATCH):
+    """Parallel chords across a disc, centred on it (an exact ruled fill)."""
+    a = math.radians(angle_deg)
+    ux, uy = math.cos(a), math.sin(a)    # along the lines
+    nx, ny = -uy, ux                     # across them
+    n = int((2 * r) // spacing)
+    if n % 2 == 0:
+        n -= 1
+    for j in range(n):
+        o = (j - (n - 1) / 2) * spacing
+        h = math.sqrt(max(0.0, r * r - o * o))
+        if h < 2.0:
+            continue
+        mx, my = x + nx * o, y + ny * o
+        pen.raw([(mx - ux * h, my - uy * h), (mx + ux * h, my + uy * h)], w)
 
-# ------------------------------------------------ note 2: a slight wobble on the thinnest connections
-replace = {}
-HAND = 0.6
-for c in chains:
-    if len(c) != 3 or max(p['w'] for p in c) >= 0.8:
-        continue
-    pts = chain_pts(c)
-    total = length(pts)
-    a, b = pts[0], pts[-1]
-    chord = dist(a, b)
-    if total < 60 or chord < 0.9 * total:
-        continue  # not a connection
-    nx, ny = (b[1] - a[1]) / chord, -(b[0] - a[0]) / chord
-    ph1, ph2 = pen.r(0, 6.3), pen.r(0, 6.3)
-    f1, f2 = pen.r(0.005, 0.01), pen.r(0.016, 0.028)
-    s_base = 0.0
-    for p in c:
-        piece = resample(p['pts'], 3.0)
-        new = []
-        s = s_base
-        for k, q in enumerate(piece):
-            if k:
-                s += dist(piece[k - 1], q)
-            ease = min(1.0, s / 18.0, (total - s) / 18.0)
-            off = HAND * ease * (0.75 * math.sin(s * f1 * 2 * math.pi + ph1) + 0.25 * math.sin(s * f2 * 2 * math.pi + ph2))
-            new.append((q[0] + nx * off, q[1] + ny * off))
-        s_base += length(p['pts'])
-        replace[p['i']] = [(new, p['w'])]
-# the pieces of one connection must still meet: make each piece start where the last ended
-for c in chains:
-    if c[0]['i'] in replace:
-        for k in range(1, len(c)):
-            prev = replace[c[k - 1]['i']][0][0]
-            cur = replace[c[k]['i']][0][0]
-            cur[0] = prev[-1]
 
-# ------------------------------------------------ write
-out = []
-for i, ln in enumerate(lines):
-    if i in drop:
-        continue
-    if i in replace:
-        out += [path_line(pts, w) for pts, w in replace[i]]
-        continue
-    out.append(ln)
-with open(OUT, 'w') as f:
-    f.write('\n'.join(out) + '\n')
+def arrow(tail, tip, w, head=15.0, half=4.6):
+    """A ruled shaft with a small solid arrowhead at the tip."""
+    dx, dy = tip[0] - tail[0], tip[1] - tail[1]
+    L = math.hypot(dx, dy)
+    ux, uy = dx / L, dy / L
+    nx, ny = -uy, ux
+    base = (tip[0] - ux * head, tip[1] - uy * head)
+    pen.raw([tail, (base[0] + ux * 1.0, base[1] + uy * 1.0)], w)
+    b1 = (base[0] + nx * half, base[1] + ny * half)
+    b2 = (base[0] - nx * half, base[1] - ny * half)
+    pen.raw([tip, b1, b2, tip], 1.0)
+    # filled solid: strokes from the tip fanning to the base
+    for t in (-0.55, 0.0, 0.55):
+        q = (base[0] + nx * half * t + ux * 1.2, base[1] + ny * half * t + uy * 1.2)
+        pen.raw([tip, q], 1.3)
 
-# report on the whole drawing as written
-for p in paths:
-    if p['i'] in drop:
-        continue
-    for pts, w in replace.get(p['i'], [(p['pts'], p['w'])]):
-        pen.raw(pts, w)
-print(f'removed {len(drop)} tick strokes, wobbled {len(replace) // 3} thin connections')
+
+def link(a, b, w):
+    ax, ay, ar = a
+    bx, by, br = b
+    dx, dy = bx - ax, by - ay
+    L = math.hypot(dx, dy)
+    ux, uy = dx / L, dy / L
+    pen.raw([(ax + ux * ar, ay + uy * ar), (bx - ux * br, by - uy * br)], w)
+
+
+# ---------------------------------------------------------------- connections
+for li in range(len(SIZES) - 1):
+    for i, a in enumerate(nodes[li]):
+        for j, b in enumerate(nodes[li + 1]):
+            if (li, i, j) not in strong:
+                link(a, b, W_LINK)
+for (li, i, j) in sorted(strong):
+    link(nodes[li][i], nodes[li + 1][j], W_STRONG)
+
+# ---------------------------------------------------------------- nodes
+for li, col in enumerate(nodes):
+    for k, (x, y, r) in enumerate(col):
+        circle(x, y, r, W_OUTLINE, a0=-math.pi / 2)
+        ri = r - 5.5
+        circle(x, y, ri, W_RING, a0=-math.pi / 2)
+        if (li, k) in lit:
+            hatch_disc(x, y, ri - 2.2, 5.2)
+        elif (li, k) in HALF:
+            hatch_disc(x, y, ri - 2.2, 8.4)
+
+# the winning output: a second, outer ring
+wx, wy, wr = nodes[-1][WIN]
+circle(wx, wy, wr + 6, 0.9, a0=-math.pi / 2)
+
+# ---------------------------------------------------------------- arrows
+ARROW_LEN = 62
+for (x, y, r) in nodes[0]:
+    tip = (x - r - 6, y)
+    arrow((tip[0] - ARROW_LEN, y), tip, W_ARROW)
+for k, (x, y, r) in enumerate(nodes[-1]):
+    gap = r + (12 if k == WIN else 6)
+    tail = (x + gap, y)
+    arrow(tail, (tail[0] + ARROW_LEN, y), W_ARROW_WIN if k == WIN else W_ARROW)
+
+pen.save(OUT)
 pen.report()
