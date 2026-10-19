@@ -50,17 +50,14 @@
     },
     "endosymbiosis": {
       "passed": true,
-      "when": "2026-10-17",
-      "rework": {
-        "round": "w2",
-        "scores": [
-          7,
-          8,
-          8
-        ],
-        "maxim": "cleaner and less messy: yes, but not yet a clear yes (specks and scratchy hatching on the cut face at 1x)",
-        "passed": false
-      }
+      "when": "2026-10-19",
+      "scores": [
+        8,
+        8,
+        8
+      ],
+      "maxim": "a bit cleaner, more technical, less messy: clear yes",
+      "note": "rework after Maxim's notes (round w3): sliced Asgard host with continuous section lines, plectonemic nucleoid, two membrane arms closing round a rod; polish asked: chromosome arms off-axis, crescent speck, arm bases"
     },
     "eukaryotic-cell": {
       "passed": true,
