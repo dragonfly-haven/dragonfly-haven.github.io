@@ -2,7 +2,14 @@
   "note": "Review record for each drawing: an independent reviewer's scores (clear at a glance / accurate / of a piece with the set), out of 10. A drawing passes with 8 or more on each.",
   "motifs": {
     "galaxy": {
-      "passed": false
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
+        9,
+        8,
+        8
+      ],
+      "note": "second round; polish asked: knots as lenses with curved hatching, two pen slips"
     },
     "organic-molecule": {
       "passed": true,
@@ -40,7 +47,13 @@
       "when": "2026-10-17"
     },
     "choanoflagellate-colony": {
-      "passed": false
+      "passed": false,
+      "last": [
+        6,
+        6,
+        6
+      ],
+      "note": "first round read as a flower; redrawn as a ball, in re-review"
     },
     "jellyfish": {
       "passed": true,
@@ -74,14 +87,26 @@
       "when": "2026-10-17"
     },
     "ginkgo-tree": {
-      "passed": false
+      "passed": false,
+      "last": [
+        7,
+        7,
+        7
+      ],
+      "note": "symmetry, arms, leaf sprigs, crown density to fix"
     },
     "triceratops": {
       "passed": true,
       "when": "2026-10-17"
     },
     "crow": {
-      "passed": false
+      "passed": false,
+      "last": [
+        7,
+        7,
+        6
+      ],
+      "note": "lighter now, but stripes; wing, legs, tail, bill to fix"
     },
     "rat": {
       "passed": true,
