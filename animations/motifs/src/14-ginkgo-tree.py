@@ -455,13 +455,15 @@ def blade(B, a, r, half, notch, squash=1.0, sq_ang=0.0, wav=None, wedge=0.3):
     return [place(p) for p in loc], place
 
 
-def add_leaf(petiole, a, r, big=False, force=False, gap=0.6):
+def add_leaf(petiole, a, r, big=False, force=False, gap=0.6, squash=None, sq_ang=None):
     """A leaf at the end of a stalk (a polyline from the spur); None if crowded."""
     B = petiole[-1]
     half = R(0.75, 1.0) if not big else R(0.92, 1.06)
     notch = R(0.22, 0.28) if big else (R(0.12, 0.22) if R() < 0.75 else R(0.0, 0.05))
-    squash = R(0.62, 1.0) if not big else R(0.72, 1.0)
-    outline, place = blade(B, a, r, half, notch, squash, R(0, math.pi), [G(1) for _ in range(5)], 0.42 if big else 0.55)
+    sq = R(0.62, 1.0) if not big else R(0.72, 1.0)
+    squash = sq if squash is None else squash
+    sa_ = R(0, math.pi) if sq_ang is None else sq_ang
+    outline, place = blade(B, a, r, half, notch, squash, sa_, [G(1) for _ in range(5)], 0.42 if big else 0.55)
     centre = place((r * 0.6, 0))
     gx, gy = int(centre[0] // 12), int(centre[1] // 12)
     if not force:
@@ -512,21 +514,35 @@ def sprig(b, t, stalk_a, stalk_len, specs):
         sprig_marks.append(([(c[0] - nx * 2.6, c[1] - ny * 2.6), (c[0] + nx * 2.6, c[1] + ny * 2.6)], 0.8))
     sprig_marks.append(([(K1[0] - nx * 2.4, K1[1] - ny * 2.4), (K1[0] + nx * 2.4, K1[1] + ny * 2.4)], 1.0))
     n = len(specs)
-    for k, (a, r, pf) in enumerate(specs):
+    for k, spec in enumerate(specs):
+        a, r, pf = spec[:3]
+        sqz = spec[3] if len(spec) > 3 else None
         f = k - (n - 1) / 2
         S = (K1[0] + nx * f * 1.2, K1[1] + ny * f * 1.2)
         pet = r * pf
         Bp = (S[0] + pet * math.cos(a), S[1] + pet * math.sin(a))
         m = lerp(S, Bp, 0.5)
         m = (m[0], m[1] + 2.0)  # stalks sag a little
-        add_leaf(catmull([S, m, Bp], step=2), a, r, big=True, force=True)
+        add_leaf(catmull([S, m, Bp], step=2), a, r, big=True, force=True,
+                 squash=sqz, sq_ang=None if sqz is None else 0.0)
 
 
 # one hanging under the crown left of the stem, one high on the right, a small one up on the left
-sprig(LA, 0.6, 1.95, 18, [(0.95, 21, 1.25), (1.6, 25, 1.7), (2.3, 22, 1.3), (2.95, 18, 1.15)])
-sprig(LD, 0.97, -0.6, 30, [(-1.3, 19, 1.3), (-0.5, 22, 1.65), (0.25, 18, 1.25)])
+sprig(LA, 0.6, 2.0, 16, [(0.7, 19, 0.9), (1.42, 25, 2.0), (1.85, 21, 1.15, 0.42), (2.6, 18, 1.6)])
+sprig(LD, 0.82, -1.2, 20, [(-1.95, 19, 1.25), (-1.15, 23, 1.6), (-0.4, 19, 1.15, 0.5)])
 sprig(LE, 0.97, 3.6, 20, [(2.95, 14, 1.2), (3.65, 16, 1.55), (4.35, 13, 1.2)])
 N_BIG = len(leaves)
+
+# ---- tufts in front of the stem at three heights: the leader passes behind its clumps
+for (cy, side, n) in ((58, -1, 4), (122, 1, 6), (226, -1, 5), (352, 1, 5)):
+    i = min(range(len(L0.pts)), key=lambda k: abs(L0.pts[k][1] - cy))
+    p = L0.pts[i]
+    for j in range(n):
+        S = (p[0] + side * R(-4, 10) + G(3), p[1] + G(6))
+        a = -math.pi / 2 + side * 0.2 + (j - (n - 1) / 2) * 0.62 + G(0.12)
+        r = R(7.4, 9.2)
+        Bp = (S[0] + r * 0.7 * math.cos(a), S[1] + r * 0.7 * math.sin(a))
+        add_leaf([S, Bp], a + G(0.1), r, force=True)
 
 # ---- the small leaves, in tufts on the spur shoots
 spurs = []
@@ -703,9 +719,9 @@ def draw_twig(b):
         return
     i0 = 0
     if b.first < 10 ** 6 and length(b.pts[:b.first + 1]) > 30:
-        i0 = max(0, b.first - 4)  # no long bare stalks across the sky
+        i0 = b.first  # no long bare stalks across the sky
     pts = b.pts[i0:b.need + 1]
-    if len(pts) < 2:
+    if len(pts) < 2 or (i0 > 0 and length(pts) < 16):
         return
     w = min(1.25, 0.85 + 0.18 * b.rads[i0])
     ink(pts, w, [leaf_occ], hand=0.3, taper=0.35)
@@ -824,7 +840,7 @@ ink(ground, 1.8, [trunk_occ], hand=0.7)
 roots = []
 
 
-def root(ctrl, r0, r1, parent=None, power=1.3):
+def root(ctrl, r0, r1, parent=None, power=1.3, tip=None):
     pts = resample(catmull(ctrl, step=2), 4)
     b = Branch(pts, taper(len(pts), r0, r1, power), 0)
     b.parent = parent
@@ -837,7 +853,7 @@ def root(ctrl, r0, r1, parent=None, power=1.3):
 # the left roots run out long and shallow, the right ones deeper and shorter
 R1 = root([(456, 768), (410, 788), (350, 806), (290, 820), (236, 836), (196, 852)], 15, 1.0)
 R2 = root([(474, 772), (450, 810), (424, 854), (404, 902)], 11, 1.0)
-R3 = root([(500, 774), (506, 828), (500, 880), (506, 934)], 13, 1.0)
+R3 = root([(500, 774), (506, 828), (500, 880), (506, 934)], 13, 0.3)
 R4 = root([(530, 772), (570, 808), (610, 850), (636, 900)], 12, 1.0)
 R5 = root([(550, 766), (602, 782), (660, 796), (712, 816), (748, 840)], 12, 1.0)
 MAIN_ROOTS = [R1, R2, R3, R4, R5]
@@ -845,12 +861,13 @@ SUB = [
     (R1, [(350, 806), (324, 832), (300, 864)], 4.5),
     (R1, [(258, 830), (236, 858), (226, 884)], 3.0),
     (R2, [(432, 842), (408, 850), (374, 850)], 3.5),
-    (R3, [(502, 866), (526, 894), (546, 920)], 3.5),
+    (R3, [(502, 866), (526, 894), (546, 920)], 3.5, 0.3),
     (R4, [(600, 838), (636, 846), (674, 862)], 4.0),
     (R5, [(662, 798), (684, 824), (700, 854)], 3.5),
 ]
-for par, ctrl, r0 in SUB:
-    root(ctrl, r0, 0.8, par)
+for spec in SUB:
+    par, ctrl, r0 = spec[:3]
+    root(ctrl, r0, spec[3] if len(spec) > 3 else 0.8, par)
 
 fine_roots = []
 for rb in list(roots):
@@ -926,6 +943,8 @@ for k in range(60):
     if spread < R(0, 0.45):
         continue
     ln = R(12, 32)
+    if y > 915:
+        continue
     ink([(x, y), (x + ln, y + G(1.0))], R(0.72, 0.8), [root_occ, trunk_occ], hand=0.3)
 
 # the odd stone: angular pebbles, shaded below
