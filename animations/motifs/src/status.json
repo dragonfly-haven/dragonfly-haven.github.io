@@ -9,10 +9,23 @@
       "when": "2026-10-17"
     },
     "rna": {
-      "passed": false
+      "passed": false,
+      "last": [
+        8,
+        8,
+        7
+      ],
+      "note": "too light and flat next to 02 and 04"
     },
     "dna": {
-      "passed": false
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
+        8,
+        8,
+        8
+      ],
+      "note": "polish asked: re-cut the arrow-like ends, thin lenses 2 and 4, remove two stray ticks"
     },
     "prokaryotic-cell": {
       "passed": true,
@@ -82,7 +95,14 @@
       "passed": false
     },
     "couple-1690s": {
-      "passed": false
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
+        9,
+        8,
+        8
+      ],
+      "note": "polish asked: hands, a strip of waistcoat, folds, legs and shoes, kerchief hem"
     },
     "neural-net": {
       "passed": true,
