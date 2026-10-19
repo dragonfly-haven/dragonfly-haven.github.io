@@ -11,7 +11,7 @@ Maxim's note "a bit cleaner, more technical, less messy", then twice after revie
   little short of it) and round what lies in the section; the cell envelope as
   a firm edge with a thin line just inside.
 - In the section: the circular chromosome as one strand folded into five
-  twisted-pair arms of uneven length, each ending in a loop, running out from a
+  twisted-pair arms of uneven length, no two in line, each ending in a loop, running out from a
   small open hub where the strand turns from arm to arm without crossing itself
   (broken where a strand passes under); ribosomes as a few small solid grains,
   single or paired, set between the section lines; and one alphaproteobacterium
@@ -24,7 +24,7 @@ Maxim's note "a bit cleaner, more technical, less messy", then twice after revie
 - The moment of uptake, well onto that shadow side: a rod goes in end-first
   through a small shaded dimple, rising toward the eye. Two membrane arms of
   the host close round it, each about half the rod's length with a round, soft
-  tip: the near one from below, in front, reaching over the rod's face (a
+  tip, their outlines growing smoothly out of the ball's: the near one from below, in front, reaching over the rod's face (a
   thickness line along its free edge, its underside shaded along its form);
   the far one rising from behind, clear above the rod, and coming over its top
   so its tip rests on the rod's face. No rod lines show where an arm covers it.
@@ -572,9 +572,43 @@ def far_front(p):
     return rod_to(p)[0] > T_SW and p in FAR
 
 
+# where the arms grow out of the host. The near arm's lower outline runs into the
+# ball's outline in a smooth fillet (A on the ball's outline to B on the arm's)
+_rC = lambda p: math.hypot(p[0] - C[0], p[1] - C[1])
+iJ = max(i for i in range(40) if _rC(nl_out[i]) < R + 0.5)     # where it leaves the ball's outline
+J = nl_out[iJ]
+iB = iJ + 22
+_tb = unit((nl_out[iB + 1][0] - nl_out[iB - 1][0], nl_out[iB + 1][1] - nl_out[iB - 1][1]))
+_ta = math.atan2(J[1] - C[1], J[0] - C[0]) + 22.0 / R             # back down the ball's outline
+FA = (C[0] + R * math.cos(_ta), C[1] + R * math.sin(_ta))
+_k = 0.42 * dist(FA, nl_out[iB])
+FILLET = bezier(FA, (FA[0] + math.sin(_ta) * _k, FA[1] - math.cos(_ta) * _k),
+                (nl_out[iB][0] - _tb[0] * _k, nl_out[iB][1] - _tb[1] * _k), nl_out[iB], step=1.0)
+FILLET_R = dist(FA, J) - 0.3                                       # the ball's outline gives way within this of J
+
+# the far arm's upper outline comes out of the surface: it starts fine, along the
+# shading's rings there, and bends up into the arm
+POLE = v_norm((0.40, 0.80, -0.34))                                # the pole of the shell's rings (below)
+iS = 10
+_ps = fl_out[iS]
+_d0 = unit((fl_out[iS - 1][0] - fl_out[iS + 1][0], fl_out[iS - 1][1] - fl_out[iS + 1][1]))   # backward
+_q = surf(_ps)
+_ds = unit(v_cross(POLE, (_q[0], _q[1], _q[2]))[:2])
+if _ds[0] * _d0[0] + _ds[1] * _d0[1] < 0:
+    _ds = (-_ds[0], -_ds[1])
+_lead = [_ps]
+for _i in range(1, 19):
+    _f = _i / 18
+    _dd = unit((_d0[0] * (1 - _f) + _ds[0] * _f, _d0[1] * (1 - _f) + _ds[1] * _f))
+    _lead.append((_lead[-1][0] + _dd[0], _lead[-1][1] + _dd[1]))
+LEAD = _lead[::-1]                                                 # from its fine end into the arm
+LEAD_GRID = Grid()
+LEAD_GRID.add(LEAD)
+
+
 def eng_hide(p):
     """Inside the engulfment (rod, arms, dimple): host lines stay out."""
-    return p in NEAR or (p in ROD_REG and not sunk(p)) or p in FAR or p in DIMPLE_REG
+    return p in NEAR or (p in ROD_REG and not sunk(p)) or p in FAR or p in DIMPLE_REG or LEAD_GRID.near(p, 4.0)
 
 
 # ---- protrusions: long, thin, smooth, two branching once
@@ -683,7 +717,7 @@ def form_lines(outline, keep, hide, n, step=5.6, w=W_HATCH, trim=6):
 # and its underside shaded with lines that follow it round the tip
 nl_line = nl_out + nl_tip[1:-1] + nl_in
 nl_sign = area_sign(nl_line)
-ink_outline(nl_line, lambda p: False, 1.3, 2.4, sign=nl_sign)
+ink_outline(FILLET[:-1] + nl_out[iB:] + nl_tip[1:-1] + nl_in, lambda p: False, 1.3, 2.4, sign=nl_sign)
 thick = [rod_pt(t, o + 4.0) for t, o in nl_in_rc]
 for run in runs(thick[8:-6], lambda p: p not in NEAR):
     ink(run, 0.9, hand=0.12)
@@ -705,8 +739,13 @@ for run in runs(cut, lambda p: p in NEAR or p in FAR):
     ink(run, 1.5)
 
 # the far arm's outline: its outer edge and tip, and its free edge where it lies over the rod
-ink_outline(fl_line + [q for q, rc in zip(fl_in, fl_in_rc) if rc[0] > T_SW], behind_rod, 1.2, 2.2,
-            sign=area_sign(fl_line + fl_in))
+fl_sign = area_sign(fl_line + fl_in)
+ink_outline(fl_out[iS:] + fl_tip[1:-1] + [q for q, rc in zip(fl_in, fl_in_rc) if rc[0] > T_SW], behind_rod, 1.2, 2.2,
+            sign=fl_sign)
+_ns = normals(fl_out[iS - 1:iS + 2])[1]
+_w = lit_weight((_ns[0] * fl_sign, _ns[1] * fl_sign), 1.2, 2.2)
+for _i in range(4):                                                # the lead-in, from fine to full weight
+    ink(LEAD[_i * 4:_i * 4 + 5 if _i < 3 else len(LEAD)], 0.6 + (_w - 0.6) * (_i + 0.5) / 4, hand=0.1)
 form_lines(fl_line, (-0.1, 0.35), lambda p: p not in FAR or behind_rod(p), 2)
 
 # the dimple: its rim, and its inner wall shaded where it turns from the light
@@ -765,14 +804,13 @@ for i in range(1441):
 i0 = limb.index(None)
 limb = limb[i0:] + limb[1:i0 + 1]
 for arc in split_none(limb):
-    ink_outline(arc, host_hide, 1.75, 2.55, sign=1)
+    ink_outline(arc, lambda p: host_hide(p) or dist(p, J) < FILLET_R, 1.75, 2.55, sign=1)
 # the cell envelope in section: a thin line just inside the rim
 for run in runs([face_pt(R_FACE - 6.0, 2 * math.pi * i / 1200) for i in range(1201)], host_hide):
     ink(run, 0.8, hand=0.12)
 
 # ---- shading on the shell: latitude rings about an axis whose pole lies just
 # behind the lower right limb (they shrink and close up toward it), graded by light
-POLE = v_norm((0.40, 0.80, -0.34))
 _b1 = v_norm(v_cross(POLE, (0.0, 0.0, 1.0)))
 _b2 = v_cross(POLE, _b1)
 SHELL_GRID = Grid()
@@ -870,7 +908,7 @@ NUC = (60.0, 92.0)
 N_ARMS = 5
 nuc_pts, nuc_depth = [], []
 _rng = random.Random(61)
-_angs = [math.radians(a + 20) for a in (0, 68, 140, 218, 290)]   # a little uneven
+_angs = [math.radians(a + 20) for a in (0, 52, 148, 194, 290)]   # uneven, but no two in line on screen
 _lens = [2.0, 2.5, 1.5, 2.0, 2.5]
 HUB = 14.0
 PERIOD = 40.0
@@ -992,6 +1030,8 @@ while tries < 4000 and len(grains) < 7:
 for X, Y in grains:
     for j in range(_rr.choice([1, 2, 2])):
         q = plane(X + j * 10.0, Y + _rr.uniform(-1.0, 1.0))
+        if in_lit(q, 0):
+            continue                                   # none alone on the lit crescent
         pen.blot(q[0], q[1], 2.7, w=2.1)               # a small solid grain, which stays a dot at 1x
 
 pen.save(OUT)
