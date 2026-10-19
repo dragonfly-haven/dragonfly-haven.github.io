@@ -1,26 +1,98 @@
 {
   "note": "Review record for each drawing: an independent reviewer's scores (clear at a glance / accurate / of a piece with the set), out of 10. A drawing passes with 8 or more on each.",
   "motifs": {
-    "galaxy": { "passed": false },
-    "organic-molecule": { "passed": true, "when": "2026-10-17" },
-    "rna": { "passed": false },
-    "dna": { "passed": false },
-    "prokaryotic-cell": { "passed": true, "when": "2026-10-17" },
-    "endosymbiosis": { "passed": true, "when": "2026-10-17" },
-    "eukaryotic-cell": { "passed": true, "when": "2026-10-17" },
-    "choanoflagellate-colony": { "passed": false },
-    "jellyfish": { "passed": true, "when": "2026-10-17" },
-    "trilobite": { "passed": true, "when": "2026-10-17", "scores": [9, 8.5, 8] },
-    "fish": { "passed": true, "when": "2026-10-17", "scores": [9, 9, 8] },
-    "quastenflosser": { "passed": false },
-    "cynodont": { "passed": true, "when": "2026-10-17" },
-    "ginkgo-tree": { "passed": false },
-    "triceratops": { "passed": true, "when": "2026-10-17" },
-    "crow": { "passed": false },
-    "rat": { "passed": true, "when": "2026-10-17" },
-    "early-primate": { "passed": true, "when": "2026-10-17" },
-    "neanderthals": { "passed": false },
-    "couple-1690s": { "passed": false },
-    "neural-net": { "passed": true, "when": "2026-10-17", "scores": [9, 9, 8] }
+    "galaxy": {
+      "passed": false
+    },
+    "organic-molecule": {
+      "passed": true,
+      "when": "2026-10-17"
+    },
+    "rna": {
+      "passed": false
+    },
+    "dna": {
+      "passed": false
+    },
+    "prokaryotic-cell": {
+      "passed": true,
+      "when": "2026-10-17"
+    },
+    "endosymbiosis": {
+      "passed": true,
+      "when": "2026-10-17"
+    },
+    "eukaryotic-cell": {
+      "passed": true,
+      "when": "2026-10-17"
+    },
+    "choanoflagellate-colony": {
+      "passed": false
+    },
+    "jellyfish": {
+      "passed": true,
+      "when": "2026-10-17"
+    },
+    "trilobite": {
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
+        8,
+        9,
+        8
+      ],
+      "note": "passed 2026-10-17 too; re-reviewed after the review records were lost"
+    },
+    "fish": {
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
+        9,
+        9,
+        8
+      ],
+      "note": "refined version; re-reviewed after the review records were lost"
+    },
+    "quastenflosser": {
+      "passed": false
+    },
+    "cynodont": {
+      "passed": true,
+      "when": "2026-10-17"
+    },
+    "ginkgo-tree": {
+      "passed": false
+    },
+    "triceratops": {
+      "passed": true,
+      "when": "2026-10-17"
+    },
+    "crow": {
+      "passed": false
+    },
+    "rat": {
+      "passed": true,
+      "when": "2026-10-17"
+    },
+    "early-primate": {
+      "passed": true,
+      "when": "2026-10-17"
+    },
+    "neanderthals": {
+      "passed": false
+    },
+    "couple-1690s": {
+      "passed": false
+    },
+    "neural-net": {
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
+        9,
+        9,
+        8
+      ],
+      "note": "re-reviewed after the review records were lost"
+    }
   }
 }
