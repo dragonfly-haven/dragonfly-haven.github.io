@@ -278,7 +278,7 @@ class Pen:
             if taper > 0 and total > 0:
                 u = mid / total
                 tap = 1 - taper * (1 - math.sin(math.pi * u)) ** 1.5
-            ww = max(0.5, min(3.2, w * tap * self.r(0.85, 1.15)))
+            ww = max(0.6, min(3.2, w * tap * self.r(0.85, 1.15)))
             if len(seg) >= 2:
                 self.strokes.append((seg, ww))
             if j < len(fine) - 1 and self.rng.random() < lift and w < 2.4:
