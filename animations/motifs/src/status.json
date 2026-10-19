@@ -16,13 +16,14 @@
       "when": "2026-10-17"
     },
     "rna": {
-      "passed": false,
-      "last": [
+      "passed": true,
+      "when": "2026-10-19",
+      "scores": [
         8,
-        8,
-        7
+        9,
+        8
       ],
-      "note": "too light and flat next to 02 and 04"
+      "note": "second round; polish asked: looser bends at the stem foot, freer hatch ticks, weight nearer the centre"
     },
     "dna": {
       "passed": true,
