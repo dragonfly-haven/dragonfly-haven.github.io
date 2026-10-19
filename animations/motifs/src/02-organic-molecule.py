@@ -11,15 +11,18 @@ would mean a methyl group, so the C-H bonds stay implied.
 Hand: sleek and technical (brief-rework.md): straight, sure lines, no lifts,
 an even weight. The ring is one closed line laid down in two close parallel
 passes, which makes a fuller line than a single stroke can be in the site's
-dash engine; the inner lines are a little lighter.
+dash engine; the inner lines are laid down the same way, so all bonds match,
+as the convention requires.
 
 Alone, the ring looked thin and empty beside the galaxy (01) and the RNA (03),
 so it gets one restrained enrichment: the figure stands just off the paper,
 lit from the upper left, and casts a tidy drawn shadow down and to the right:
-fine ticks, all parallel to the light, filling exactly the area each line
-sweeps as it is moved along the light. The ticks are each the same length
-where a line casts its full shadow, and shorter where the shadow is cut by
-the line's own angle, as a real cast shadow is.
+fine ticks, all parallel to the light and all the same length, filling the
+area each line sweeps as it is moved along the light from SH_FROM to SH_LEN.
+The sliver of paper left between a line and its shadow is widest where the
+light falls square across the line and narrower where it grazes it, as under
+a real lifted figure; it keeps the ticks from reading as the hatching of a
+fixed surface.
 
 Not mirrored (slot 02 faces as drawn). Run from this folder:
     python3 02-organic-molecule.py
@@ -35,16 +38,15 @@ R = 405.0                   # corner radius = bond length: the ring is 701 acros
 C = (494.0, 490.0)          # ring centre, a little up and left so ring and shadow sit centred
 
 W_RING, ROWS, ROW_GAP = 2.7, 2, 1.2       # the ring: weight, passes, their spacing
-W_IN = 2.4                  # the inner line of a double bond
 INNER_OFF = 0.16            # inner line: distance into the ring, as a share of R
 INNER_CUT = 0.13            # inner line: left off each end, as a share of R
 DOUBLE = (0, 2, 4)          # double bonds, corner k to k+1 (corner 0 at the top, clockwise)
 
 LIGHT = 60.0                # the shadow falls this way (degrees, y down): light from the upper left
-SH_LEN = 30.0               # how far the shadow is thrown
+SH_LEN = 29.0               # how far the shadow is thrown, along the light
 SH_GAP = 6.0                # shadow ticks: spacing across the light
 SH_W = 0.75                 # shadow ticks: weight
-SH_FROM = 5.0               # shadow ticks start this far from the line's centre: the figure floats just off the paper
+SH_FROM = 10.0              # ... and from how far: the sliver of paper between line and shadow
 
 
 def corner(k, r=R):
@@ -78,14 +80,24 @@ for j in range(ROWS):
 # ---- the three inner lines
 inners = [inner_line(k) for k in DOUBLE]
 for a, b in inners:
-    stroke([a, b], W_IN)
+    m = lerp(a, b, 0.5)
+    ul = math.dist(m, C)
+    ux, uy = (C[0] - m[0]) / ul, (C[1] - m[1]) / ul
+    for j in range(ROWS):
+        d = (j - (ROWS - 1) / 2) * ROW_GAP
+        stroke([(a[0] + ux * d, a[1] + uy * d), (b[0] + ux * d, b[1] + uy * d)], W_RING)
 
 # ---- the cast shadow
 ux, uy = math.cos(math.radians(LIGHT)), math.sin(math.radians(LIGHT))
-vx, vy = ux * SH_LEN, uy * SH_LEN
 nx, ny = -uy, ux                                   # across the light
 srcs = [(corner(k), corner(k + 1)) for k in range(6)] + inners
-swept = [[a, b, (b[0] + vx, b[1] + vy), (a[0] + vx, a[1] + vy)] for a, b in srcs]
+
+
+def moved(p, d):
+    return (p[0] + ux * d, p[1] + uy * d)
+
+
+swept = [[moved(a, SH_FROM), moved(b, SH_FROM), moved(b, SH_LEN), moved(a, SH_LEN)] for a, b in srcs]
 
 
 def near_line(p, d):
@@ -98,7 +110,7 @@ def near_line(p, d):
 
 
 def in_shadow(p):
-    return any(inside(p, q) for q in swept) and not near_line(p, SH_FROM)
+    return any(inside(p, q) for q in swept) and not near_line(p, 4.0)
 
 
 ts = [x * nx + y * ny for a, b in srcs for x, y in (a, b)]
