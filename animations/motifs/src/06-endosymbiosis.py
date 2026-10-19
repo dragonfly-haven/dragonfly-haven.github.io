@@ -283,6 +283,11 @@ def coil_ring(cx, cy, ra, rb, rot, r, k, side=0.85, n=2400, map_pt=None, gap=3.6
         depth.append(math.sin(ph))
     if map_pt:
         pts = [map_pt(*p) for p in pts]
+    return break_crossings(pts, depth, gap)
+
+
+def break_crossings(pts, depth, gap=3.6):
+    """A closed strand as runs, broken where it passes under itself (lower depth)."""
     sl = [0.0]
     for i in range(1, len(pts)):
         sl.append(sl[-1] + dist(pts[i - 1], pts[i]))
@@ -389,10 +394,10 @@ def branch(parent, frac, turn, p3, a3, l0=50, l3=50, w0=7.5, w1=5.0, wave=0.0):
 
 # ---- the rod being taken in, upper right: it sits end-first in a shallow cup
 # of the host's membrane, which rises round it as two thin arms
-ROD_HL, ROD_R = 70.0, 31.0
+ROD_HL, ROD_R = 74.0, 33.0
 PHI0 = math.radians(-34)          # where on the host it goes in
 RA = PHI0 + math.radians(9)       # the rod's axis, pointing out of the cup
-SINK = 46.0                       # how deep its inner end sits below the host's surface
+SINK = 50.0                       # how deep its inner end sits below the host's surface
 ra = (math.cos(RA), math.sin(RA))
 rn = (-ra[1], ra[0])              # across the rod (toward the lower right: arm B's side)
 _c0 = (C[0] + (R - SINK) * math.cos(PHI0), C[1] + (R - SINK) * math.sin(PHI0))
@@ -403,90 +408,71 @@ def rod_pt(t, o):
     return (RC[0] + ra[0] * t + rn[0] * o, RC[1] + ra[1] * t + rn[1] * o)
 
 
-CUP_GAP = 7.5                     # membrane to bacterium
+CUP_GAP = 10.0                    # membrane to bacterium
+T_BASE = -44.0                    # where the arms leave the cup's lip
 
 
-def arm_w(t, t_tip):
-    """Arm width along the rod: broad at the cup's lip, slim at the tip."""
-    u = max(0.0, min(1.0, (t + 40) / (t_tip + 40)))
-    return 15.0 - 7.0 * u
-
-
-def membrane_path(tA, tB, dA, dB, t_jA=-30.0, t_jB=-30.0):
-    """The host membrane from the limb on arm A's side, up arm A's outer edge,
-    round its tip, down its inner edge, round the cup under the rod, up arm B's
-    inner edge, round its tip and down to the limb on B's side."""
-    o_in = ROD_R + CUP_GAP
-
-    def gap_at(t, t_tip):
-        # the tips lean in a little
-        return o_in - 3.0 * max(0.0, (t - (t_tip - 30)) / 30)
-
+def arm(side, t_tip, w0=17.0, w1=10.0, reach=12.0, lean_len=40.0):
+    """An arm of the cup: a tube rising along the rod, its tip curling in over
+    the rod's edge (reach: how far the tip's centre comes inside the edge)."""
     pts = []
-    # A: fillet from the limb up to the arm's outer edge
-    LA_ang = PHI0 - dA
+    n = 120
+    for k in range(n + 1):
+        t = T_BASE + (t_tip - T_BASE) * k / n
+        lean = max(0.0, (t - (t_tip - lean_len)) / lean_len) ** 1.8
+        w = w0 + (w1 - w0) * k / n
+        o = ROD_R + CUP_GAP + w / 2 - lean * (CUP_GAP + w / 2 + reach)
+        pts.append(rod_pt(t, side * o))
+    return Tube(pts, w0, w1, flare=0.0, step=1.0)
+
+
+def cup_membrane(arm_a, arm_b, dA, dB):
+    """The host membrane: from the limb on A's side into arm A, round it, down
+    into the cup under the rod, up and round arm B, and back to the limb."""
+    LA_ang, LB_ang = PHI0 - dA, PHI0 + dB
     LA = (C[0] + R * math.cos(LA_ang), C[1] + R * math.sin(LA_ang))
-    tanA = (math.sin(LA_ang), -math.cos(LA_ang))     # along the limb, toward the cup
-    jA = rod_pt(t_jA, -(gap_at(t_jA, tA) + arm_w(t_jA, tA)))
-    pts += bezier(LA, (LA[0] + tanA[0] * 26, LA[1] + tanA[1] * 26),
-                  (jA[0] - ra[0] * 26, jA[1] - ra[1] * 26), jA, step=1.0)
-    ts = [t_jA + (tA - t_jA) * k / 60 for k in range(1, 61)]
-    pts += [rod_pt(t, -(gap_at(t, tA) + arm_w(t, tA))) for t in ts]
-    # tip A: half circle from the outer to the inner edge
-    wt = arm_w(tA, tA)
-    cA = rod_pt(tA, -(gap_at(tA, tA) + wt / 2))
-    a0 = math.atan2(-rn[1], -rn[0])
-    pts += ellipse_pts(cA[0], cA[1], wt / 2, wt / 2, 0, a0, a0 + math.pi, step=1.0)[1:-1] \
-        if math.cos(a0 + math.pi / 2 - RA) > 0 else \
-        ellipse_pts(cA[0], cA[1], wt / 2, wt / 2, 0, a0, a0 - math.pi, step=1.0)[1:-1]
-    # inner edge of A, down to the cup
-    ts = [tA + (-ROD_HL - tA) * k / 80 for k in range(0, 81)]
-    pts += [rod_pt(t, -gap_at(t, tA)) for t in ts]
-    # the cup under the rod's inner end
+    LB = (C[0] + R * math.cos(LB_ang), C[1] + R * math.sin(LB_ang))
+    tanA = (math.sin(LA_ang), -math.cos(LA_ang))     # along the limb toward the cup
+    tanB = (-math.sin(LB_ang), math.cos(LB_ang))     # along the limb away from the cup
+    a_out0 = arm_a.left[0]                           # arm A: left side = outer edge
+    pts = bezier(LA, (LA[0] + tanA[0] * 24, LA[1] + tanA[1] * 24),
+                 (a_out0[0] - ra[0] * 24, a_out0[1] - ra[1] * 24), a_out0, step=1.0)
+    pts += arm_a.outline[0][1:]
+    # the cup: from A's inner edge at its base, down round the rod's inner end, up to B's
+    o_in = ROD_R + CUP_GAP
     cc = rod_pt(-ROD_HL, 0)
+    lin = [rod_pt(T_BASE + (-ROD_HL - T_BASE) * k / 20, -o_in) for k in range(1, 21)]
     b0 = math.atan2(-rn[1], -rn[0])
     arc = ellipse_pts(cc[0], cc[1], o_in, o_in, 0, b0, b0 + math.pi, step=1.0)
     if dist(arc[len(arc) // 2], rod_pt(-ROD_HL - o_in, 0)) > 2:
         arc = ellipse_pts(cc[0], cc[1], o_in, o_in, 0, b0, b0 - math.pi, step=1.0)
-    pts += arc[1:-1]
-    # inner edge of B, up
-    ts = [-ROD_HL + (tB + ROD_HL) * k / 80 for k in range(0, 81)]
-    pts += [rod_pt(t, gap_at(t, tB)) for t in ts]
-    # tip B
-    wt = arm_w(tB, tB)
-    cB = rod_pt(tB, gap_at(tB, tB) + wt / 2)
-    a0 = math.atan2(-rn[1], -rn[0])
-    tip = ellipse_pts(cB[0], cB[1], wt / 2, wt / 2, 0, a0, a0 + math.pi, step=1.0)
-    if dist(tip[len(tip) // 2], rod_pt(tB + wt / 2, gap_at(tB, tB) + wt / 2)) > 2:
-        tip = ellipse_pts(cB[0], cB[1], wt / 2, wt / 2, 0, a0, a0 - math.pi, step=1.0)
-    pts += tip[1:-1]
-    # outer edge of B, down, and the fillet to the limb
-    jB = rod_pt(t_jB, gap_at(t_jB, tB) + arm_w(t_jB, tB))
-    ts = [tB + (t_jB - tB) * k / 60 for k in range(0, 60)]
-    pts += [rod_pt(t, gap_at(t, tB) + arm_w(t, tB)) for t in ts]
-    LB_ang = PHI0 + dB
-    LB = (C[0] + R * math.cos(LB_ang), C[1] + R * math.sin(LB_ang))
-    tanB = (-math.sin(LB_ang), math.cos(LB_ang))     # along the limb, away from the cup
-    pts += bezier(jB, (jB[0] - ra[0] * 26, jB[1] - ra[1] * 26),
-                  (LB[0] - tanB[0] * 26, LB[1] - tanB[1] * 26), LB, step=1.0)
+    lin += arc[1:-1]
+    lin += [rod_pt(-ROD_HL + (T_BASE + ROD_HL) * k / 20, o_in) for k in range(0, 20)]
+    pts += lin
+    pts += arm_b.outline[0]                          # arm B: left side = inner edge
+    b_out0 = arm_b.right[0]
+    pts += bezier(b_out0, (b_out0[0] - ra[0] * 30, b_out0[1] - ra[1] * 30),
+                  (LB[0] - tanB[0] * 34, LB[1] - tanB[1] * 34), LB, step=1.0)[1:]
     return resample(pts, 1.0), LA_ang, LB_ang
 
 
-CUP, CUP_A0, CUP_A1 = membrane_path(tA=18.0, tB=34.0, dA=math.radians(17), dB=math.radians(17))
-# the cup and arms as a region (closing along the limb), to keep host lines out of it
+ARM_A = arm(-1, 36.0, reach=10.0)
+ARM_B = arm(+1, 56.0, reach=12.0)
+CUP, CUP_A0, CUP_A1 = cup_membrane(ARM_A, ARM_B, math.radians(16), math.radians(21))
 _close = ellipse_pts(C[0], C[1], R, R, 0, CUP_A1, CUP_A0, step=2.0)
 CUP_REG = Region(CUP + _close[1:-1])
 ROD_REG = Region(capsule_pts(RC[0], RC[1], RA, ROD_HL, ROD_R, step=2.0))
 
 # ---- other protrusions: long, thin, gently waving, two branching once
-p_left = sprout(198, (46, 380), 250, l0=120, l3=90, wave=14, waves=1.6)
-p_left_b = branch(p_left, 0.46, -26, (70, 610), 120, l0=40, l3=50, wave=6)
-p_ll = sprout(140, (176, 962), 100, l0=110, l3=90, wave=-12, waves=1.6)
-p_bot = sprout(80, (640, 978), 20, l0=80, l3=90, wave=10, waves=1.4)
-p_right = sprout(10, (958, 640), 80, l0=120, l3=90, wave=-12, waves=1.6)
-p_right_b = branch(p_right, 0.45, -32, (950, 430), 280, l0=40, l3=50, wave=5)
+p_top = sprout(-98, (560, 64), -40, l0=90, l3=80, wave=5, waves=1.2)
+p_left = sprout(194, (58, 318), 262, l0=130, l3=110, wave=5, waves=1.2)
+p_left_b = branch(p_left, 0.5, -20, (60, 566), 105, l0=50, l3=60)
+p_ll = sprout(146, (70, 846), 170, l0=110, l3=120, wave=-5, waves=1.2)
+p_bot = sprout(96, (720, 962), 2, l0=90, l3=140, wave=5, waves=1.2)
+p_right = sprout(14, (962, 640), 75, l0=120, l3=90, wave=-5, waves=1.2)
+p_right_b = branch(p_right, 0.42, -20, (958, 476), 285, l0=50, l3=60)
 
-groups = [[p_left, p_left_b], [p_ll], [p_bot], [p_right, p_right_b]]
+groups = [[p_top], [p_left, p_left_b], [p_ll], [p_bot], [p_right, p_right_b]]
 all_tubes = [t for g in groups for t in g]
 front_tubes = all_tubes
 
@@ -505,7 +491,7 @@ for g in groups:
             return in_host(p) or any(p in o.region for o in others)
 
         for ol in t.outline:
-            ink_outline(ol, hide, 1.05, 1.75, sign=1)
+            ink_outline(ol, hide, 0.95, 1.95, sign=1)
 
 
 # ---- rods
@@ -515,9 +501,9 @@ def rod(cx, cy, ang, hl, r, hide=lambda p: False, flag=None):
     side, shading lines that follow the outline there, an optional flagellum."""
     out = capsule_pts(cx, cy, ang, hl, r, step=1.5)
     ink_outline(out, hide, 1.5, 2.5, sign=1)
-    for k in range(1, 4):
-        rk = r - HATCH_GAP * k - 0.5
-        thr = 0.05 + 0.2 * k
+    for k in range(1, 6):
+        rk = r - 5.4 * k - 0.6
+        thr = -0.12 + 0.16 * k
         line = capsule_pts(cx, cy, ang, hl, rk, step=1.0)
         keep = []
         for p in line:
@@ -568,9 +554,11 @@ def rod(cx, cy, ang, hl, r, hide=lambda p: False, flag=None):
         ink(pts, 1.3, hand=0.0, taper=0.4)
 
 
-rod(RC[0], RC[1], RA, ROD_HL, ROD_R)
-rod(262, 196, math.radians(32), ROD_HL, ROD_R, hide=tube_hide,
-    flag=(-1, 150, 54, 10.0, math.radians(-30)))
+rod(RC[0], RC[1], RA, ROD_HL, ROD_R, hide=lambda p: p in ARM_A.region or p in ARM_B.region)
+rod(250, 196, math.radians(30), ROD_HL, ROD_R, hide=tube_hide,
+    flag=(-1, 150, 54, 10.0, math.radians(-34)))
+rod(864, 752, math.radians(-100), ROD_HL, ROD_R, hide=tube_hide,
+    flag=(-1, 120, 52, 9.0, math.radians(-58)))
 
 # ---- the host's outline: the cut face's edge and the shell's limb
 
@@ -598,7 +586,7 @@ def crease(p):
     return 0.7 if face_z(phi) > 0 else 1.0
 
 
-ink_outline(face_edge, lambda p: tube_hide(p) or p in CUP_REG, 1.8, 2.7, wmul=crease)
+ink_outline(face_edge, lambda p: tube_hide(p) or p in CUP_REG, 1.75, 2.55, wmul=crease)
 
 
 def ang_in(a, a0, a1):
@@ -619,19 +607,16 @@ cur = []
 for q in limb + [None]:
     if q is None:
         if len(cur) > 1:
-            ink_outline(cur, tube_hide, 1.8, 2.8, sign=1)
+            ink_outline(cur, tube_hide, 1.75, 2.55, sign=1)
         cur = []
     else:
         cur.append(q)
 # the membrane round the cup and up the two arms
 ink_outline(CUP, tube_hide, 1.4, 2.4, sign=1)
-# the membrane's thickness at the cut
-for run in runs([face_pt(R_FACE - 7, 2 * math.pi * i / 1200) for i in range(1201)], lambda p: p in CUP_REG):
-    ink(run, 0.95, hand=0.15)
 
 # ---- shading on the shell: rings of the sphere parallel to the cut (as in 07),
 # on the shadow side, spaced evenly where they are widest apart
-GAP_RING = 6.6
+GAP_RING = 6.1
 
 
 def ring_ext(c):
@@ -680,7 +665,13 @@ for k, cc in enumerate(rings):
         z = cc * COS_T - rc * math.sin(ph) * SIN_T
         nx, ny, nz = (sx - C[0]) / R, (sy - C[1]) / R, z / R
         lam = nx * LIGHT3[0] + ny * LIGHT3[1] + nz * LIGHT3[2]
-        ok = z > 4.0 and lam < 0.22 - 0.01 * k
+        # graded: every ring in the shadow, every second and fourth into the half-tones
+        lim = 0.22 - 0.01 * k
+        if k % 2 == 1:
+            lim = max(lim, 0.40)
+        if k % 4 == 1:
+            lim = max(lim, 0.58)
+        ok = z > 4.0 and lam < lim
         pts.append((sx, sy) if ok else None)
     if pts[0] is not None and None in pts:
         i0 = pts.index(None)
@@ -707,16 +698,24 @@ for k, cc in enumerate(rings):
 # ---- inside, on the cut face
 
 # the enclosed alphaproteobacterium, cut through: outer and inner membrane
-EB = (-80.0, -100.0)
-EB_ANG = math.radians(-22)
-EB_HL, EB_R = 68.0, 31.0
+EB = (-70.0, -112.0)
+EB_ANG = math.radians(-34)
+EB_HL, EB_R = 72.0, 33.0
 ink([plane(x, y) for x, y in capsule_pts(EB[0], EB[1], EB_ANG, EB_HL, EB_R)], 1.7)
 ink([plane(x, y) for x, y in capsule_pts(EB[0], EB[1], EB_ANG, EB_HL, EB_R - 6.5)], 1.05)
-for run in coil_ring(EB[0] + 4, EB[1] - 1, 32, 10, EB_ANG, 4.6, 11, map_pt=plane, gap=2.4):
-    ink(run, 1.0, hand=0.1)
+# its own small circular genome: one loop twisted twice (a Lissajous 1:3), broken
+# where it passes under itself
+_g = []
+for i in range(901):
+    t = 2 * math.pi * i / 900
+    x, y = 38 * math.cos(t), 11 * math.sin(3 * t)
+    _g.append((EB[0] + 4 + x * math.cos(EB_ANG) - y * math.sin(EB_ANG),
+               EB[1] + x * math.sin(EB_ANG) + y * math.cos(EB_ANG), math.cos(3 * t) * math.sin(t)))
+for run in break_crossings([plane(x, y) for x, y, _ in _g], [d for _, _, d in _g], gap=3.2):
+    ink(run, 1.1, hand=0.1)
 _a = (math.cos(EB_ANG), math.sin(EB_ANG))
 _n = (-_a[1], _a[0])
-for t, o in [(-58, -4), (-46, 12), (50, -8), (60, 6), (-20, -16), (30, 15)]:
+for t, o in [(-60, -5), (-50, 14), (56, -13), (64, 8), (-12, -21), (14, 21)]:
     q = plane(EB[0] + _a[0] * t + _n[0] * o, EB[1] + _a[1] * t + _n[1] * o)
     pen.dot(q[0], q[1], r=2.6, w=1.0)
 
@@ -724,7 +723,7 @@ for t, o in [(-58, -4), (-46, 12), (50, -8), (60, 6), (-20, -16), (30, 15)]:
 NUC = (40.0, 85.0)
 NUC_RA, NUC_RB, NUC_ROT = 96.0, 68.0, math.radians(-18)
 for run in coil_ring(NUC[0], NUC[1], NUC_RA, NUC_RB, NUC_ROT, 13.0, 18, map_pt=plane):
-    ink(run, 1.3, hand=0.1)
+    ink(run, 1.45, hand=0.1)
 
 
 # ribosomes: small rings, evenly scattered (Poisson disk on the face)
@@ -750,7 +749,7 @@ while tries < 8000:
     X, Y = rng.uniform(-R, R), rng.uniform(-R, R)
     if not free_spot(X, Y):
         continue
-    if any((X - a) ** 2 + (Y - b) ** 2 < 52 ** 2 for a, b in ribo):
+    if any((X - a) ** 2 + (Y - b) ** 2 < 50 ** 2 for a, b in ribo):
         continue
     ribo.append((X, Y))
 for X, Y in ribo:
