@@ -15,7 +15,7 @@ on the page the couple faces the text.
 import bisect
 import math
 
-from pen import Pen, catmull, clip_segments, dist, ellipse_pts, inside, lerp, resample
+from pen import Pen, catmull, clip_segments, dist, ellipse_pts, inside, lerp, offset, resample
 
 
 class InkPen(Pen):
@@ -266,72 +266,143 @@ S([(556, 338), (552, 372), (548, 400)], w=0.9)
 across(sleeveN_out, sleeveN_in, spacing=6.5, frac=(0.22, 0.42), bow=2.5, w=0.7, from_b=True)
 pen.occlude(R(sleeveN_out + sleeveN_in[::-1]))
 
-# ---- his head: beard, face, hair (the brim passes behind the head)
-beard_L = [(647, 222), (645, 246), (650, 271), (661, 293), (675, 307), (690, 314)]
-beard_R = [(713, 239), (717, 257), (716, 277), (710, 296), (700, 309), (690, 315)]
-beard = [(647, 222), (657, 230), (668, 236), (680, 240), (690, 238), (702, 232), (713, 238),
-         (717, 257), (716, 277), (710, 296), (700, 309), (690, 316), (675, 308), (661, 293),
-         (650, 271), (645, 246)]
-S(beard_L, w=1.9, hand=1.2)
-S(beard_R[:4], w=1.9, hand=1.2)
-# the end of the beard in loose locks
-F([(675, 306), (680, 315), (686, 319)], w=1.5, hand=0.8)
-F([(686, 319), (692, 315), (697, 318), (701, 311)], w=1.5, hand=0.8)
-F([(701, 311), (706, 304), (710, 296)], w=1.6, hand=0.8)
-F([(665, 299), (668, 309)], w=1.0)
-F([(707, 303), (710, 311)], w=1.0)
-# moustache and mouth
-F([(701, 231), (693, 233), (685, 239), (679, 247)], w=1.6)
-F([(705, 231), (711, 236), (714, 243)], w=1.5)
-F([(689, 246), (697, 244), (706, 245)], w=1.4)
-F([(693, 252), (701, 251)], w=0.9)
-# the beard's edge on the cheek
-F([(647, 222), (657, 230), (668, 236), (678, 240)], w=1.0, hand=0.8)
-strands(beard_L, beard_R, [0.06 + 0.88 * k / 10 + pen.g(0.015) for k in range(11)], w=0.8,
-        t0=(0.03, 0.3), t1=(0.72, 0.98), wave=1.4)
-strands([(662, 234), (664, 258), (674, 288)], [(708, 246), (712, 266), (704, 292)],
-        [0.2, 0.55, 0.85], w=0.7, t0=(0.0, 0.1), t1=(0.35, 0.6), wave=1.0)
-pen.occlude(beard)
+# ---- his head: a natural full beard, a weathered face, hair under the hat
+# falling to the collar, the ear showing (the brim passes behind the head)
+beard = [(652, 201), (655, 214), (662, 225), (672, 232), (682, 236), (690, 236), (700, 230), (708, 231),
+         (713, 238), (715, 250), (714, 263), (711, 275), (706, 286), (698, 294), (689, 298), (679, 295),
+         (668, 287), (658, 275), (651, 260), (647, 244), (648, 228), (650, 212)]
+# moustache over the upper lip, and the lower lip below it
+must = [(679, 247), (681, 240), (687, 235), (694, 231), (701, 229), (708, 230), (713, 235), (716, 241),
+        (712, 244), (705, 240), (699, 240), (692, 242), (685, 246)]
+F([(701, 229), (694, 231), (687, 235), (681, 241), (679, 247), (682, 249)], w=1.5)
+F([(707, 230), (712, 234), (716, 240), (714, 244)], w=1.4)
+for x0 in (686, 691, 696, 701, 706, 710):
+    F([(x0, 241 + (x0 - 698) ** 2 / 90), (x0 + pen.g(0.6), 245.5 + (x0 - 698) ** 2 / 90)], w=0.75)
+for k in range(7):
+    t = (k + 0.5) / 7
+    a = lerp((684, 241), (712, 236), t)
+    b = (a[0] + (-6 if t < 0.55 else 4), a[1] + 6)
+    F([a, b], w=0.65)
+pen.occlude(R(must))
+F([(692, 248), (698, 249.5), (705, 248)], w=1.1)                   # lower lip
+F([(694, 253), (701, 253)], w=0.9)
+pen.occlude(R([(689, 246), (698, 248), (708, 246), (707, 255), (691, 255)]))
+# the beard's outline, broken into locks
+F([(648, 235), (647, 246), (650, 256)], w=1.4, hand=0.6)
+F([(649, 252), (653, 264), (658, 274)], w=1.5, hand=0.6)
+for y0 in (206, 212, 218, 224, 230):
+    F([(650.5, y0), (652.5 + pen.g(0.5), y0 + 6)], w=0.7)
+F([(658, 274), (663, 282), (669, 284), (668, 289), (675, 293)], w=1.6, hand=0.5)
+F([(675, 293), (681, 297), (688, 295), (690, 300), (697, 295)], w=1.6, hand=0.5)
+F([(697, 295), (704, 289), (707, 284), (712, 279), (711, 273)], w=1.6, hand=0.5)
+S([(711, 273), (714, 263), (715, 250), (713, 241)], w=1.7, hand=0.6)
+# its edge on the cheek: soft, in short hairs
+for k in range(9):
+    t = (k + 0.3) / 9
+    P = resample(C([(652, 202), (655, 214), (662, 225), (672, 232), (682, 236), (690, 237)]), 1.0)
+    p = P[int(t * (len(P) - 1))]
+    F([p, (p[0] + 1.5 + pen.g(0.8), p[1] + 6 + pen.r(0, 3))], w=0.7)
+
+
+def lock(start, mid, tip, width, n, w=0.75, sweep=0.0):
+    """One lock of the beard: n wavy hairs gathered from a broad root to a
+    point, the whole lock swinging a little sideways (sweep)."""
+    dx, dy = tip[0] - start[0], tip[1] - start[1]
+    L = math.hypot(dx, dy) or 1
+    nx, ny = -dy / L, dx / L
+    ph0 = pen.r(0, TAU)
+    for i in range(n):
+        o = (i / max(1, n - 1) - 0.5) * width + pen.g(0.4)
+        ph = ph0 + pen.g(0.25)
+        ctrl = [(start[0] + nx * o, start[1] + ny * o),
+                (lerp(start, mid, 0.5)[0] + nx * (o * 0.85 + sweep * 0.5), lerp(start, mid, 0.5)[1] + ny * o * 0.85),
+                (mid[0] + nx * (o * 0.6 + sweep), mid[1] + ny * o * 0.6),
+                (lerp(mid, tip, 0.5)[0] + nx * (o * 0.35 + sweep * 0.6), lerp(mid, tip, 0.5)[1] + ny * o * 0.35),
+                (tip[0] + nx * o * 0.08, tip[1] + ny * o * 0.08)]
+        P = resample(catmull(ctrl, step=1.0), 1.0)
+        P = [(x + 0.9 * math.sin(k * 0.21 + ph) * nx, y + 0.9 * math.sin(k * 0.21 + ph) * ny)
+             for k, (x, y) in enumerate(P)]
+        a = int(len(P) * pen.r(0.0, 0.2))
+        b = int(len(P) * pen.r(0.82, 1.0))
+        if b - a > 6:
+            pen.line(P[a:b], w=w * pen.r(0.85, 1.1), hand=0.2, lift=0.0)
+
+
+# the beard in locks: down along the jaw by the ear, over the cheek, under the
+# lip and off the chin, gathering into points at its edge
+lock((653, 208), (651, 238), (656, 268), 6, 3, sweep=1.0)
+lock((660, 222), (660, 252), (665, 281), 8, 4, sweep=1.5)
+lock((670, 232), (670, 262), (675, 291), 9, 5, sweep=1.5)
+lock((682, 241), (682, 268), (688, 297), 9, 5, sweep=1.5)
+lock((696, 256), (695, 278), (692, 299), 9, 4, sweep=1.0)
+lock((706, 256), (707, 272), (704, 289), 7, 3, sweep=0.5)
+lock((712, 252), (713, 264), (710, 277), 4, 2)
+pen.occlude(R(beard))
 
 # face
-face = [(650, 165), (672, 164), (692, 166), (695, 182), (698, 193), (694, 201), (703, 211),
-        (714, 223), (708, 229), (702, 232), (690, 238), (668, 236), (647, 222), (648, 190)]
+face = [(652, 165), (672, 164), (692, 166), (695, 182), (698, 193), (694, 201), (703, 211),
+        (716, 224), (708, 230), (700, 230), (690, 237), (672, 232), (652, 214), (652, 190)]
 S([(692, 167), (695, 181), (698, 192)], w=1.8)
-F([(698, 192), (695, 200), (697, 205), (705, 213), (713, 222), (714, 226), (709, 229)], w=1.6)
-F([(709, 229), (704, 229), (700, 227)], w=1.2)
-F([(703, 222), (698, 224), (698, 228), (702, 229)], w=1.1)      # nostril wing
-F([(686, 206), (690, 213), (696, 219)], w=0.7)                  # side of the nose
-# eyes, looking ahead
+F([(698, 192), (695, 200), (697, 205), (705, 213), (712, 220), (715, 224), (714, 228), (709, 230)], w=1.6)
+F([(709, 230), (704, 230), (700, 228)], w=1.2)
+F([(703, 222), (698, 224), (698, 228), (702, 230)], w=1.1)       # nostril wing
+F([(685, 206), (689, 213), (695, 219)], w=0.7)                   # side of the nose
+F([(706, 214), (709, 219)], w=0.6)                               # its ridge
+# eyes, deep set under the brow
 F([(658, 205), (663, 200), (670, 199), (678, 203)], w=1.6)
 F([(661, 207), (668, 209), (676, 206)], w=0.8)
-F([(660, 199), (668, 196), (676, 199)], w=0.7)
+F([(660, 199), (668, 196), (677, 199)], w=0.7)
+F([(663, 212), (670, 213), (676, 211)], w=0.6)                   # below the eye
 pen.blot(671, 203.5, 2.3, w=1.4)
 F([(688, 204), (692, 201), (698, 203)], w=1.4)
 F([(690, 206), (696, 206)], w=0.7)
 pen.blot(694.5, 203.8, 1.6, w=1.2)
-F([(653, 196), (660, 192), (669, 191), (680, 194)], w=1.9)       # brows
-F([(687, 195), (693, 193), (699, 194)], w=1.6)
-# cheekbone, a crease under the eye, the shade of the brim on the forehead
-F([(658, 214), (666, 218), (675, 219)], w=0.7)
-F([(679, 210), (683, 216)], w=0.6)
-tone(R([(650, 166), (692, 167), (694, 175), (676, 179), (650, 181)]), 45, 5.2, w=0.65)
+F([(656, 203), (652, 201)], w=0.6)                               # lines at the eye's corner
+F([(656, 207), (652, 208)], w=0.6)
+# brows: a line and a few hairs
+F([(653, 196), (660, 192), (669, 191), (680, 194)], w=1.6)
+for x0 in (656, 661, 666, 671, 676):
+    F([(x0, 194), (x0 + 4, 191)], w=0.8)
+F([(687, 195), (693, 193), (699, 194)], w=1.4)
+# the forehead's furrow, the cheekbone, the temple, the shade of the brim
+F([(664, 185), (674, 184), (684, 186)], w=0.6)
+F([(658, 215), (665, 219), (672, 221)], w=0.7)
+tone(R([(652, 166), (692, 167), (694, 176), (676, 180), (652, 182)]), 45, 5.2, w=0.65)
+ticks([(679, 197), (682, 201), (684, 205)], ang=0, spacing=4, maxlen=4, w=0.6, minlen=1.5)   # eye socket
 pen.occlude(R(face))
 
-# hair falling to the collar
-hair_back = [(611, 172), (604, 196), (602, 226), (606, 256), (614, 282), (624, 300)]
-hair_front = [(650, 166), (647, 186), (646, 204), (647, 222), (651, 250), (659, 280), (666, 297)]
-hair = [(611, 170), (630, 166), (650, 166), (647, 186), (646, 204), (647, 222), (651, 250),
-        (659, 280), (667, 298), (655, 302), (645, 307), (634, 304), (624, 301), (614, 282),
-        (606, 256), (602, 226), (604, 196)]
-S([(611, 172), (605, 192), (604, 214), (601, 236)], w=2.0, hand=0.8)
-S([(604, 228), (602, 246), (606, 262), (604, 276), (611, 290), (620, 300)], w=1.9, hand=0.8)
-F([(620, 300), (626, 307), (634, 303), (641, 310), (648, 304), (656, 306), (662, 300)], w=1.4, hand=0.6)
-F([(611, 284), (614, 296)], w=1.0)
-F([(633, 296), (634, 304)], w=0.9)
-strands(hair_back, hair_front, [0.08 + 0.84 * k / 7 + pen.g(0.02) for k in range(8)], w=0.85,
-        t0=(0.0, 0.1), t1=(0.75, 1.0), wave=2.4)
-strands(hair_back, hair_front, [0.04, 0.12, 0.22], w=0.75, t0=(0.25, 0.5), t1=(0.85, 1.0), wave=2.0)
+# ear
+ear = [(651, 199), (645, 196), (639, 201), (636, 212), (637, 223), (641, 231), (647, 233), (651, 228),
+       (652, 214)]
+F([(651, 199), (645, 196), (639, 201), (636, 212), (637, 223), (641, 231), (647, 233), (650, 229)], w=1.4)
+F([(646, 202), (641, 207), (641, 217), (644, 223)], w=0.8)       # inner rim
+F([(649, 212), (647, 217), (649, 221)], w=0.8)                   # the bowl
+ticks([(640, 203), (638, 213), (640, 224)], ang=0, spacing=4, maxlen=4, w=0.6, minlen=1.5)
+pen.occlude(R(ear))
+
+# hair under the hat, combed back over the ear and falling to the collar
+hair_back = [(608, 176), (601, 200), (600, 226), (603, 252), (610, 274), (620, 292), (632, 302)]
+hair_front = [(656, 170), (654, 186), (650, 196), (638, 210), (638, 232), (645, 252), (652, 270), (660, 290)]
+hair = [(608, 170), (630, 166), (656, 166), (654, 186), (650, 196), (638, 210), (638, 232), (645, 252),
+        (652, 270), (661, 292), (650, 300), (640, 304), (632, 303), (620, 292), (610, 274), (603, 252),
+        (600, 226), (601, 200)]
+S([(608, 176), (602, 196), (601, 216)], w=1.9, hand=0.8)
+S([(603, 210), (600, 230), (603, 250), (608, 266)], w=1.9, hand=0.8)
+S([(605, 260), (611, 278), (620, 292), (630, 301)], w=1.8, hand=0.8)
+F([(630, 301), (636, 306), (642, 301), (648, 305), (654, 298), (661, 296)], w=1.3, hand=0.5)
+F([(612, 280), (615, 292)], w=0.9)
+F([(622, 291), (626, 300)], w=0.9)
+strands(hair_back, hair_front, [0.08 + 0.84 * k / 8 + pen.g(0.02) for k in range(9)], w=0.8,
+        t0=(0.0, 0.1), t1=(0.75, 1.0), wave=2.6)
+strands(hair_back, hair_front, [0.04, 0.12, 0.2], w=0.75, t0=(0.3, 0.5), t1=(0.85, 1.0), wave=2.2)
+# hair over the temple, swept back above the ear
+for k in range(4):
+    y0 = 176 + k * 5
+    F([(654 - k, y0), (646 - k, y0 + 6), (636 - k * 2, y0 + 14)], w=0.75)
 pen.occlude(hair)
+# the shirt's plain collar showing between hair and beard
+F([(632, 303), (645, 306), (660, 303), (670, 300)], w=1.1)
+pen.occlude(R([(630, 300), (670, 296), (672, 306), (632, 308)]))
 
 # ---- hat: broad flat brim seen a little from below, low round crown
 bcx, bcy, brx, bry, brot = 656, 167, 118, 13, -0.025
@@ -395,22 +466,32 @@ S([(701, 306), (712, 301), (727, 305), (744, 321)], w=2.0)
 F([(632, 304), (646, 310), (660, 312), (672, 313)], w=1.2, hand=0.6)   # neckline
 coat_front_top = [(676, 314), (673, 360), (674, 410), (677, 470)]
 S(coat_front_top, w=1.6)
-S([(602, 314), (606, 350), (607, 385)], w=0.9)                     # drape from the shoulder
+for y in range(326, 468, 18):                                      # hooks and eyes down the front
+    x = 673 + (y - 314) * 0.024
+    F([(x - 4, y), (x + 3, y), (x + 4.5, y + 1.8)], w=0.9)
+    F([(x + 3.5, y + 4), (x + 6, y + 3)], w=0.7)
+S([(560, 323), (569, 331), (579, 341), (586, 352)], w=0.9)         # armhole seam
+S([(588, 360), (591, 410), (594, 484)], w=0.85)                    # side-front seam
+S([(729, 307), (735, 324), (737, 344)], w=0.85)
 S([(722, 312), (724, 350), (726, 390)], w=0.9)
+S([(592, 372), (612, 396), (636, 418), (658, 432)], w=0.9)         # pulled by the reaching arm
+S([(594, 398), (614, 420), (634, 440)], w=0.8)
+ticks([(592, 372), (612, 396), (636, 418), (658, 432)], ang=100, spacing=6, maxlen=8, w=0.6, t0=0.1, t1=0.9)
+S([(642, 458), (656, 462), (668, 461)], w=0.8)                     # creasing at the waist
 S([(741, 340), (738, 380), (740, 425), (742, 470)], w=2.0)
 # shading: the far front in shadow, the hollow below the beard, under the arm
 tone(R([(678, 318), (700, 308), (726, 306), (740, 322), (738, 380), (741, 470), (680, 470), (676, 410)]),
-     58, 7.0, w=0.7)
+     58, 8.0, w=0.7, skip=0.05)
 ticks(coat_front_top, ang=150, spacing=6, maxlen=14, w=0.65, t0=0.05, t1=0.95)
 tone(R([(612, 314), (640, 312), (660, 316), (672, 318), (670, 334), (640, 334), (614, 328)]), 62, 6.5, w=0.65,
      skip=0.15)
-ticks([(602, 314), (606, 350), (607, 385)], ang=20, spacing=7, maxlen=10, w=0.6)
 ticks([(588, 360), (589, 410), (590, 465)], ang=-15, spacing=6.5, maxlen=14, w=0.65)
 pen.occlude(R(coat_upper))
 S(sleeveF_out, w=2.1)
 S(sleeveF_in, w=1.8)
 across(sleeveF_in, sleeveF_out, spacing=6.5, frac=(0.45, 0.75), bow=2, w=0.65, from_b=True)
 S([(766, 410), (770, 440)], w=0.8)
+S([(752, 340), (761, 380), (767, 420)], w=0.8)                      # sleeve seam
 S([(751, 462), (759, 467), (765, 476)], w=0.9)                      # elbow creases
 S([(753, 480), (761, 486)], w=0.8)
 S([(772, 444), (777, 452)], w=0.8)
@@ -439,7 +520,13 @@ for pl in pleats_n:
 ticks(pleats_n[0], ang=10, spacing=6, maxlen=12, w=0.65, t0=0.15, t1=0.98)
 ticks(pleats_n[1], ang=10, spacing=6, maxlen=10, w=0.65, t0=0.1, t1=0.98)
 S([(733, 488), (738, 560), (746, 640), (751, 708)], w=1.0)
-tone(R(far_skirt), 68, 7.0, w=0.7)
+F([(550, 704), (590, 711), (620, 713), (651, 709)], w=0.7, hand=0.5)        # hem stitching
+F([(718, 703), (745, 702), (776, 696)], w=0.7, hand=0.5)
+S([(636, 580), (641, 640), (640, 700)], w=0.9)                             # over the thigh
+ticks([(636, 580), (641, 640), (640, 700)], ang=0, spacing=6, maxlen=7, w=0.6, t0=0.1, t1=0.9)
+F([(591, 549), (612, 551), (637, 549)], w=0.6)                             # flap stitching
+F([(716, 545), (730, 545), (743, 543)], w=0.6)
+tone(R(far_skirt), 68, 8.0, w=0.7)
 ticks([(677, 474), (667, 556), (659, 640), (655, 713)], ang=180, spacing=6.5, maxlen=16, w=0.65, t0=0.0, t1=1.0,
       prof=lambda u: 6 + 12 * u)
 tone(R([(560, 670), (600, 682), (652, 682), (654, 714), (620, 718), (582, 716), (546, 710)]), 62, 7.5, w=0.65,
@@ -449,6 +536,9 @@ pen.occlude(R(far_skirt))
 
 # the waistcoat in the opening, ending a little above the coat's hem; breeches below
 S([(679, 476), (682, 560), (684, 640), (685, 692)], w=1.1)                  # its closing
+for y in range(496, 684, 20):
+    x = 679 + (y - 476) * 0.028
+    pen.ellipse(x + 4, y, 2.2, 2.0, w=0.9, hand=0.0, lift=0.0)
 S([(658, 684), (670, 689), (685, 693), (699, 689), (712, 682)], w=1.4)      # its hem
 ticks([(678, 476), (668, 556), (660, 640), (657, 684)], ang=0, spacing=6, maxlen=6, w=0.6, t0=0.02, t1=0.98)
 ticks([(681, 474), (695, 556), (707, 640), (712, 682)], ang=180, spacing=6, maxlen=8, w=0.6, t0=0.02, t1=0.98)
@@ -499,6 +589,9 @@ S([(651, 716), (649, 730), (646, 742)], w=1.8)
 S([(593, 731), (620, 734), (648, 731)], w=1.1)
 S([(594, 742), (620, 745), (646, 742)], w=1.5)
 F([(594, 736), (589, 745), (586, 757)], w=0.9)
+for y in (719, 726):
+    pen.ellipse(596, y, 1.8, 1.8, w=0.8, hand=0.0, lift=0.0)
+    pen.ellipse(725, y - 3, 1.6, 1.8, w=0.8, hand=0.0, lift=0.0)
 F([(594, 737), (592, 752)], w=0.9)
 S([(676, 718), (676, 730), (678, 740)], w=1.8)                    # far leg
 S([(729, 709), (731, 726), (728, 740)], w=1.9)
@@ -517,10 +610,14 @@ S(legN_back, w=2.1)
 S(legN_front, w=1.9)
 S(legF_back, w=1.9)
 S(legF_front, w=2.0)
-across(legN_back, legN_front, spacing=6.5, frac=(0.3, 0.5), bow=3, w=0.65, t0=0.05, t1=0.97)
-across(legF_back, legF_front, spacing=6.5, frac=(0.45, 0.7), bow=3, w=0.65, t0=0.05, t1=0.97)
+across(legN_back, legN_front, spacing=7.0, frac=(0.28, 0.45), bow=3, w=0.65, t0=0.05, t1=0.97)
+across(legF_back, legF_front, spacing=7.0, frac=(0.42, 0.62), bow=3, w=0.65, t0=0.05, t1=0.97)
 tone(R([(678, 743), (728, 743), (727, 766), (675, 764)]), 62, 6.5, w=0.6)
 F([(611, 885), (615, 892)], w=0.8)                                 # ankle bones
+F([(606, 878), (616, 882), (628, 879)], w=0.7)                     # stockings wrinkling
+F([(608, 889), (618, 893), (630, 890)], w=0.7)
+F([(693, 875), (703, 879), (714, 876)], w=0.7)
+F([(694, 886), (704, 889), (713, 887)], w=0.7)
 F([(709, 878), (712, 885)], w=0.8)
 pen.occlude(R(legN_back + legN_front[::-1]))
 pen.occlude(R(legF_back + legF_front[::-1]))
@@ -562,41 +659,60 @@ ticks([(284, 646), (288, 660), (290, 674)], ang=0, spacing=5, maxlen=10, w=0.55)
 pen.occlude(R(cloth_top + cloth_hem))
 S(handle_o, w=1.7)
 S(handle_i, w=1.3)
-for t in (0.18, 0.3, 0.7, 0.82):
-    a = resample(C(handle_o), 1.0)
-    b = resample(C(handle_i), 1.0)
-    pa, pb = a[int(t * (len(a) - 1))], b[int(t * (len(b) - 1))]
-    F([lerp(pa, pb, 0.1), lerp(pa, pb, 0.9)], w=0.7)
+# the handle is a twisted withy: slanting turns all along it
+HA = resample(C(handle_o), 1.0)
+HB = resample(C(handle_i), 1.0)
+nturn = 30
+for k in range(1, nturn):
+    t = k / nturn
+    ta = min(1.0, t + 0.012)
+    pa, pb = HA[int(ta * (len(HA) - 1))], HB[int(max(0.0, t - 0.012) * (len(HB) - 1))]
+    F([lerp(pa, pb, 0.08), lerp(pa, pb, 0.92)], w=0.65)
 pen.occlude(R(handle_o + handle_i[::-1]))
 rim = ellipse_pts(bx, by, rim_rx, rim_ry, 0.0, 0, TAU, step=2.0)
 pen.line(ellipse_pts(bx, by, rim_rx, rim_ry, 0, -0.05, math.pi + 0.05, step=2.0), w=2.0, hand=0.5)
-pen.line(ellipse_pts(bx, by + 6, rim_rx - 1, rim_ry, 0, 0.05, math.pi - 0.05, step=2.0), w=1.4, hand=0.5)
+pen.line(ellipse_pts(bx, by + 7, rim_rx - 1, rim_ry, 0, 0.05, math.pi - 0.05, step=2.0), w=1.4, hand=0.5)
+# the rolled border: turns of withy slanting round the rim
+for k in range(1, 34):
+    a = 0.08 + (math.pi - 0.16) * k / 34
+    p0 = (bx + rim_rx * math.cos(a + 0.05), by + rim_ry * math.sin(a + 0.05))
+    p1 = (bx + (rim_rx - 1) * math.cos(a - 0.05), by + 7 + rim_ry * math.sin(a - 0.05))
+    F([lerp(p0, p1, 0.1), lerp(p0, p1, 0.9)], w=0.65)
 bot_rx, bot_ry, bot_y = 54, 11, 716
 S([(bx - rim_rx + 1, by + 4), (bx - 66, by + 25), (bx - 60, by + 48), (bx - bot_rx, bot_y)], w=2.0)
 S([(bx + rim_rx - 1, by + 4), (bx + 67, by + 25), (bx + 61, by + 48), (bx + bot_rx, bot_y)], w=2.0)
 pen.line(ellipse_pts(bx, bot_y, bot_rx, bot_ry, 0, 0.0, math.pi, step=2.0), w=2.0, hand=0.5)
-# wicker: stakes running down the round of the basket, weavers between them
-# drawn as short arcs, alternating row by row
-rows = [(by + 6, rim_rx - 1, rim_ry)]
+pen.line(ellipse_pts(bx, bot_y - 5, bot_rx + 2, bot_ry, 0, 0.12, math.pi - 0.12, step=2.0), w=0.9, hand=0.3)
+# wicker: weavers passing in front of and behind the stakes, row by row
+rows = [(by + 9, rim_rx - 1, rim_ry)]
 for k in range(1, 8):
     t = k / 7
-    rows.append((by + 6 + (bot_y - by - 6) * t, rim_rx - 1 + (bot_rx - rim_rx + 1) * t + 3 * math.sin(math.pi * t),
+    rows.append((by + 9 + (bot_y - 5 - by - 9) * t, rim_rx - 1 + (bot_rx - rim_rx + 1) * t + 3 * math.sin(math.pi * t),
                  rim_ry + (bot_ry - rim_ry) * t))
-stake_a = [math.pi / 2 + j * 0.24 for j in range(-6, 7)]
-for a in stake_a:
-    pts = [(bx + rx * math.cos(a), yy + ry * math.sin(a)) for yy, rx, ry in rows]
-    pen.line(C(pts), w=0.75, hand=0.2, lift=0.1)
-for r_i in range(len(rows) - 1):
-    (y0, rx0, ry0), (y1, rx1, ry1) = rows[r_i], rows[r_i + 1]
+stake_a = [math.pi / 2 + j * 0.235 for j in range(-6, 7)]
+
+
+def on_row(r, a, f):
+    (y0, rx0, ry0), (y1, rx1, ry1) = rows[r], rows[r + 1]
+    yy, rx, ry = y0 + (y1 - y0) * f, rx0 + (rx1 - rx0) * f, ry0 + (ry1 - ry0) * f
+    return (bx + rx * math.cos(a), yy + ry * math.sin(a))
+
+
+for r in range(len(rows) - 1):
     for j in range(len(stake_a) - 1):
-        if (j + r_i) % 2:
-            continue
-        a0, a1 = stake_a[j] + 0.03, stake_a[j + 1] - 0.03
-        ym = (y0 + y1) / 2
-        rxm, rym = (rx0 + rx1) / 2, (ry0 + ry1) / 2
-        arc = ellipse_pts(bx, ym, rxm, rym, 0, a0, a1, step=1.5)
-        pen.line(arc, w=0.75, hand=0.1, lift=0)
-ticks([(bx + 70, by + 8), (bx + 66, by + 30), (bx + 58, bot_y - 4)], ang=190, spacing=5.5, maxlen=14, w=0.6)
+        a0, a1 = stake_a[j], stake_a[j + 1]
+        if (r + j) % 2 == 0:
+            # the weaver in front: a rounded band across the cell
+            top = [on_row(r, a0 + (a1 - a0) * u, 0.18 + 0.1 * math.sin(math.pi * u)) for u in (0.08, 0.3, 0.5, 0.7, 0.92)]
+            bot = [on_row(r, a0 + (a1 - a0) * u, 0.86 - 0.08 * math.sin(math.pi * u)) for u in (0.08, 0.3, 0.5, 0.7, 0.92)]
+            pen.line(C(top), w=0.75, hand=0.1, lift=0)
+            pen.line(C(bot), w=0.7, hand=0.1, lift=0)
+        else:
+            # the stake in front: a short upright between the weavers
+            am = (a0 + a1) / 2
+            pen.line([on_row(r, am - 0.05, 0.1), on_row(r, am - 0.05, 0.9)], w=0.75, hand=0.1, lift=0)
+            pen.line([on_row(r, am + 0.05, 0.15), on_row(r, am + 0.05, 0.85)], w=0.65, hand=0.1, lift=0)
+ticks([(bx + 70, by + 10), (bx + 66, by + 30), (bx + 58, bot_y - 6)], ang=190, spacing=5.5, maxlen=12, w=0.6)
 pen.occlude(R(rim[::4]))
 pen.occlude([(bx - rim_rx, by), (bx + rim_rx, by), (bx + 67, by + 25), (bx + 61, by + 48)] +
             ellipse_pts(bx, bot_y, bot_rx, bot_ry, 0, 0, math.pi, step=4.0) + [(bx - 60, by + 48), (bx - 66, by + 25)])
@@ -611,6 +727,7 @@ sleeveW_in = [(318, 384), (311, 430), (304, 470), (297, 515), (290, 564)]
 S(sleeveW_out, w=2.1)
 S(sleeveW_in, w=1.8)
 S([(304, 466), (297, 472), (292, 482)], w=0.9)
+S([(291, 380), (284, 430), (278, 490), (274, 540)], w=0.75)         # sleeve seam
 S([(300, 480), (294, 488)], w=0.8)
 S([(296, 496), (289, 502)], w=0.8)
 S([(275, 456), (279, 466)], w=0.8)
@@ -633,32 +750,55 @@ S([(437, 370), (447, 405), (453, 440), (457, 466)], w=0.9)          # pull towar
 ticks([(437, 370), (447, 405), (453, 440), (457, 466)], ang=15, spacing=6, maxlen=7, w=0.6, t0=0.1, t1=0.9)
 pen.occlude(R(sleeveW2_out + [(456, 536), (446, 505), (436, 470), (428, 432), (430, 380)]))
 
-# ---- her head: the face, then the close linen cap around it
+# ---- her head: the face, the ties of her cap, then the close pleated cap
+# the cap's strings hang loose from under her jaw over the kerchief
+for (top, bot, sway) in [((351, 297), (346, 372), 2.0), ((392, 305), (394, 360), -1.5)]:
+    mid = (lerp(top, bot, 0.5)[0] + sway, lerp(top, bot, 0.5)[1])
+    rib = C([top, mid, bot])
+    F(rib, w=0.95)
+    F(offset(rib, 2.6), w=0.85)
+    pen.occlude(rib + offset(rib, 2.6)[::-1])
+# face: far contour from the temple over the brow, the nose, lips and chin
 F([(405, 229), (406, 239), (407, 244)], w=1.6)
-F([(407, 244), (404, 251), (405, 254), (410, 261), (414, 266), (413, 269), (408, 271), (403, 270)], w=1.5)
-F([(406, 263), (402, 265), (401, 269), (404, 271)], w=1.0)             # nostril wing
-F([(407, 272), (406, 277), (405, 281)], w=1.2)                          # upper lip
-F([(391, 284), (398, 284.5), (406, 283)], w=1.3)                        # mouth
-F([(405, 283), (406, 287), (403, 290)], w=1.1)
-F([(396, 289), (401, 289)], w=0.7)
-F([(403, 290), (402, 296), (398, 301), (391, 304), (384, 304)], w=1.6)  # chin
+F([(407, 244), (404, 251), (405, 254), (409, 260), (412, 265), (412.5, 268), (410, 270), (407, 271), (404, 270)],
+  w=1.5)
+F([(406, 263), (402, 264), (400, 268), (403, 271)], w=1.0)              # nostril wing
+F([(408, 272), (406, 276), (407, 280)], w=1.1)                          # upper lip, in profile
+F([(407, 280), (405, 283), (407, 286), (404, 290)], w=1.2)              # the lips' fronts
+F([(391, 284), (396, 284.5), (401, 284.5), (405, 283.5)], w=1.3)        # mouth
+F([(389, 282.5), (390, 285.5)], w=0.7)                                  # its corner
+F([(395, 289), (400, 290), (404, 289)], w=0.8)                          # lower lip
+F([(404, 274), (403, 279)], w=0.6)                                      # philtrum
+F([(404, 290), (402, 296), (398, 301), (391, 304), (384, 304)], w=1.6)  # chin
+F([(396, 296), (400, 297)], w=0.6)
 F([(384, 304), (374, 301), (364, 295), (357, 289)], w=1.4)              # jaw
-F([(372, 252), (376, 248), (382, 247), (388, 250)], w=1.5)              # eyes
+# eyes: lids, lashes, irises
+F([(372, 252), (376, 248), (382, 247), (388, 250)], w=1.5)
+F([(374, 246), (380, 244), (387, 246)], w=0.65)                         # lid crease
 F([(375, 254), (381, 255), (387, 252)], w=0.7)
+for (x0, y0) in ((373, 251), (375, 249), (377.5, 247.5)):
+    F([(x0, y0), (x0 - 2.5, y0 - 2)], w=0.6)                            # lashes
 pen.blot(383.5, 250.6, 2.0, w=1.3)
 F([(397, 251), (401, 248), (405, 250)], w=1.3)
+F([(399, 253), (403, 253)], w=0.6)
 pen.blot(401.5, 250.5, 1.4, w=1.1)
 F([(369, 244), (376, 241), (384, 241), (390, 243)], w=1.2)              # brows
 F([(398, 243), (404, 242)], w=1.1)
-F([(392, 255), (395, 262), (400, 266)], w=0.6)
+F([(391, 249), (393, 256), (396, 262), (400, 266)], w=0.65)             # side of the nose
+F([(367, 266), (371, 270)], w=0.6)                                      # the cheek's round
 S([(389, 305), (388, 316)], w=1.4)                                      # neck
 S([(358, 296), (357, 313)], w=1.5)
 ticks([(359, 298), (358, 312)], ang=0, spacing=5, maxlen=10, w=0.6)
-F([(375, 231), (385, 227), (394, 225), (405, 229)], w=1.0)              # hair, parted
-F([(394, 223), (386, 226), (378, 230)], w=0.7)
+ticks([(386, 306), (378, 304), (368, 300)], ang=95, spacing=5, maxlen=6, w=0.6, minlen=2)
+# hair under the cap's edge, parted and drawn back to the temples
+F([(374, 231), (385, 227), (394, 225), (405, 229)], w=1.0)
+for k in range(4):
+    F([(393 - k * 0.5, 223 + k * 0.5), (385 - k * 3, 226 + k * 1.5), (375 - k * 2, 231 + k)], w=0.65)
 F([(395, 223), (400, 226), (405, 229)], w=0.7)
+F([(366, 236), (364, 244), (366, 252)], w=0.7)                          # a strand at the temple
 pen.occlude(R([(372, 224), (405, 228), (407, 244), (414, 267), (403, 290), (386, 306), (388, 312), (357, 311),
                (356, 290), (352, 270), (358, 245)]))
+# cap: close linen, its front band finely pleated, its crown drawn into pleats
 cap_front = [(352, 300), (350, 280), (352, 258), (359, 240), (371, 226), (389, 219), (404, 222), (409, 230)]
 cap_band = [(345, 297), (343, 276), (346, 254), (353, 235), (366, 219), (386, 210), (403, 212), (410, 221)]
 cap_back = [(410, 221), (402, 210), (386, 201), (365, 197), (344, 201), (328, 211), (319, 228), (316, 248),
@@ -666,18 +806,30 @@ cap_back = [(410, 221), (402, 210), (386, 201), (365, 197), (344, 201), (328, 21
 S(cap_front, w=1.5)
 S(cap_band, w=1.2)
 S(cap_back, w=1.9)
-# the band's small pleats and the gathers drawn in at the nape
 A = resample(C(cap_front), 1.0)
 B = resample(C(cap_band), 1.0)
-for k in range(1, 14):
-    t = k / 14
+for k in range(1, 16):
+    t = k / 16
     pa, pb = A[int(t * (len(A) - 1))], B[int(t * (len(B) - 1))]
     F([lerp(pa, pb, 0.15), lerp(pa, pb, 0.85)], w=0.6)
-for (p0, p1) in [((330, 213), (338, 250)), ((321, 232), (334, 258)), ((318, 255), (331, 266)),
-                 ((322, 276), (333, 274)), ((332, 289), (338, 280))]:
-    F([p0, p1], w=0.7)
-S([(366, 201), (350, 212), (340, 232)], w=0.8)
-ticks([(319, 262), (326, 282), (339, 294), (350, 299)], ang=-60, spacing=5.5, maxlen=7, w=0.55)
+# pleats fanning from the nape to the band
+focus = (338, 290)
+Bb = resample(C(cap_back[:8]), 1.0)
+for k in range(9):
+    t = 0.04 + 0.92 * k / 8
+    tgt = Bb[int((1 - t) * (len(Bb) - 1))]
+    p0 = lerp(focus, tgt, 0.18)
+    p1 = lerp(focus, tgt, 0.9)
+    m = lerp(p0, p1, 0.5)
+    d = (p1[0] - p0[0], p1[1] - p0[1])
+    L = math.hypot(*d) or 1
+    bow = 3.0
+    F(catmull([p0, (m[0] + d[1] / L * bow, m[1] - d[0] / L * bow), p1], step=2.0), w=0.75)
+    if k % 2 == 0 and k < 8:
+        ticks([lerp(p0, p1, 0.1), (m[0] + d[1] / L * bow, m[1] - d[0] / L * bow), lerp(p0, p1, 0.85)],
+              ang=math.degrees(math.atan2(d[1], d[0])) + 70, spacing=5.5, maxlen=4, w=0.6, minlen=1.5)
+F([(331, 284), (338, 290), (345, 292)], w=0.9)                          # where the pleats are drawn in
+ticks([(319, 262), (326, 282), (339, 294), (350, 299)], ang=-60, spacing=5.5, maxlen=7, w=0.6)
 pen.occlude(R(cap_back + cap_band[::-1]))
 
 # ---- kerchief over her shoulders, pinned at the throat, tucked in front
@@ -690,6 +842,8 @@ S([(394, 444), (404, 418), (420, 390), (435, 366)], w=1.7)
 S([(392, 315), (418, 323), (432, 336), (437, 352), (435, 368)], w=2.0)
 F([(356, 313), (366, 318), (377, 320), (389, 315)], w=1.3)          # its edge round the neck
 S([(381, 320), (386, 337), (390, 354)], w=1.2)                      # the near end over the far
+F([(379, 331), (392, 326)], w=0.9)                                  # a straight pin
+pen.dot(378, 331.5, r=1.5, w=1.0)
 S([(346, 318), (326, 342), (312, 370)], w=0.9)                      # folds from the neck
 S([(364, 322), (352, 356), (344, 392)], w=0.9)
 S([(404, 322), (413, 342), (417, 364)], w=0.9)
@@ -713,6 +867,11 @@ S([(441, 481), (453, 600), (463, 720), (469, 836)], w=1.8)
 S([(318, 838), (334, 842), (346, 846), (352, 843), (372, 849), (395, 852), (412, 849), (430, 847), (437, 850),
    (452, 842), (469, 836)], w=1.8)
 S([(373, 490), (371, 512), (369, 534)], w=0.9)                      # gathers under the band
+S([(386, 490), (385, 506)], w=0.8)
+S([(424, 488), (427, 512)], w=0.8)
+F([(351, 488), (344, 560), (335, 680), (327, 800), (322, 834)], w=0.7, hand=0.4)      # its hems
+F([(437, 487), (449, 600), (459, 720), (465, 831)], w=0.7, hand=0.4)
+F([(322, 832), (346, 839), (372, 843), (395, 846), (430, 841), (465, 830)], w=0.7, hand=0.4)
 S([(405, 491), (407, 515), (409, 530)], w=0.9)
 ticks([(350, 488), (372, 491), (396, 492), (420, 489), (440, 486)], ang=90, spacing=6, maxlen=12, w=0.55,
       t0=0.0, t1=1.0, prof=lambda u: 6 + 6 * math.sin(7 * u) ** 2)
@@ -738,6 +897,9 @@ pen.occlude(R([(328, 470), (360, 474), (396, 478), (430, 471), (431, 481), (396,
 S([(318, 384), (322, 430), (328, 470)], w=1.8)
 S([(436, 364), (432, 420), (430, 471)], w=1.8)
 S([(395, 442), (396, 470)], w=1.1)
+for y in (450, 459, 467):                                           # hooks at the front
+    F([(392, y), (398.5, y), (400, y + 1.6)], w=0.8)
+F([(356, 416), (357, 444), (359, 470)], w=0.8)                      # a dart
 tone(R([(306, 380), (332, 395), (360, 412), (386, 430), (395, 444), (396, 471), (328, 470), (322, 430), (318, 382)]),
      62, 7.5, w=0.65, skip=0.1)
 tone(R([(403, 415), (419, 388), (436, 364), (432, 420), (430, 471), (396, 471), (395, 442)]), 62, 6.0, w=0.65)
@@ -762,19 +924,24 @@ for fl in skirt_folds:
     S(fl, w=1.2)
 ticks(skirt_folds[0], ang=-15, spacing=6, maxlen=18, w=0.65, t0=0.05, t1=0.99, power=0.5)
 ticks(skirt_folds[1], ang=-15, spacing=6, maxlen=14, w=0.65, t0=0.05, t1=0.99, power=0.5)
-ticks(skirt_folds[2], ang=-15, spacing=6, maxlen=10, w=0.65, t0=0.1, t1=0.99, power=0.5)
-ticks(skirt_folds[3], ang=-15, spacing=6, maxlen=10, w=0.65, t0=0.1, t1=0.99, power=0.5)
+ticks(skirt_folds[2], ang=-15, spacing=6.5, maxlen=8, w=0.65, t0=0.1, t1=0.99, power=0.5)
+ticks(skirt_folds[3], ang=-15, spacing=6.5, maxlen=7, w=0.65, t0=0.1, t1=0.99, power=0.5)
 ticks(skirt_folds[5], ang=-15, spacing=6, maxlen=10, w=0.65, t0=0.05, t1=0.99, power=0.5)
 ticks(skirt_folds[6], ang=-15, spacing=6, maxlen=10, w=0.65, t0=0.05, t1=0.99, power=0.5)
 skirt = skirt_L + [(262, 909), (304, 921), (345, 927), (405, 929), (446, 927), (490, 913)] + skirt_R[::-1]
-tone(R(skirt), 70, 9.0, w=0.6, skip=0.1)
+tone(R(skirt), 70, 10.0, w=0.6, skip=0.15)
 tone(R([(462, 600), (475, 700), (488, 800), (498, 870), (504, 903), (470, 919), (469, 836), (463, 720), (453, 600)]),
      70, 6.0, w=0.65)
 ticks([(318, 840), (350, 848), (395, 853), (435, 848), (469, 838)], ang=75, spacing=6, maxlen=22, w=0.65,
       t0=0.0, t1=1.0, prof=lambda u: 10 + 12 * u)
 pen.occlude(R(skirt))
-S([(338, 928), (346, 935), (362, 937), (374, 934)], w=1.6)         # shoe toes under the hem
-S([(420, 928), (430, 934), (446, 935), (456, 930)], w=1.5)
+F([(234, 897), (262, 902), (284, 911), (306, 915), (345, 920), (375, 922), (405, 922), (446, 920), (470, 912),
+   (490, 906), (501, 896)], w=0.7, hand=0.5)                         # the skirt's hem
+S([(334, 929), (338, 937), (350, 941), (366, 942), (377, 938), (379, 931)], w=1.7)   # sturdy shoes
+S([(339, 940), (356, 945), (375, 942)], w=1.0)
+F([(352, 930), (358, 935), (364, 933)], w=0.8)
+S([(418, 929), (422, 935), (434, 938), (450, 938), (459, 933), (459, 928)], w=1.6)
+S([(423, 937), (440, 941), (457, 937)], w=0.9)
 
 # ---- the ground: their shadows fall to the right
 for (x0, x1, y) in [(470, 560, 932), (500, 590, 924), (690, 830, 940), (760, 860, 931), (520, 560, 940),
