@@ -1,13 +1,15 @@
 """03 RNA: a single strand folded into a hairpin, drawn as a precise textbook engraving.
 
 One sugar-phosphate backbone as a flat ribbon of constant width, its bases as
-rods of one length, evenly spaced along it on one side. The strand comes down
-from its 5' end, turns up into a stem of six base pairs (each pair two rods
-meeting at the middle, as in 04 DNA, its pair), rounds a loop of unpaired
-bases (tilted away from us, so it is foreshortened and its far side drawn
-lighter) and comes down the other side of the stem to its 3' tail. Tidy
-parallel hatching only along the edge of the ribbon away from the light
-(upper left). Sure, low-wobble lines without lifts, square-cut ends.
+narrow bars of one length, evenly spaced along it on one side. The strand
+comes down from its 5' end, turns up into a stem of six base pairs (each pair
+two bars meeting at the middle, as in 04 DNA, its pair), rounds a loop of
+seven unpaired bases (tilted away from us, so it is foreshortened and its far
+side drawn lighter) and comes down the other side of the stem into its 3'
+tail. The arm and the tail each make one long, even turn, the same way, so
+their bases fan out. Tidy parallel hatching only along the edge of the ribbon
+away from the light (upper left). Sure, low-wobble lines without lifts,
+square-cut ends.
 """
 
 import math
@@ -194,10 +196,9 @@ for smp in (samples[0], samples[-1]):
 # hatching along the edge away from the light: short, even, parallel strokes across the band,
 # longer where that edge turns further from the light, none where the band runs into the light
 HSP = 6.0
-acc = 0.0
+last = None
 for i in range(1, len(samples) - 1):
     smp = samples[i]
-    acc += dist(samples[i - 1]['c'], smp['c'])
     a, b = smp['e1'], smp['e2']
     m = smp['c']
     da = (a[0] - m[0]) * LIGHT[0] + (a[1] - m[1]) * LIGHT[1]
@@ -205,14 +206,16 @@ for i in range(1, len(samples) - 1):
     if da > db:
         a, b = b, a                         # a: the edge away from the light
     away = abs(da - db) / (2 * HW)
-    if away < 0.3:
-        acc = HSP * 0.5
+    if away < 0.3 or dist(a, b) < 6:
+        last = None
         continue
-    if acc < HSP or dist(a, b) < 6:
-        continue
-    acc -= HSP
     f = 0.22 + 0.3 * min(1.0, (away - 0.3) / 0.6)
-    ink([lerp(a, b, 0.06), lerp(a, b, f)], lambda x: depth_w(x, 1.0, 0.8), hand=0.05)
+    q0, q1 = lerp(a, b, 0.06), lerp(a, b, f)
+    # the next stroke comes once both its ends are a full space on from the last one's
+    if last is not None and min(dist(q0, last[0]), dist(q1, last[1])) < HSP:
+        continue
+    last = (q0, q1)
+    ink([q0, q1], lambda x: depth_w(x, 1.0, 0.8), hand=0.05)
 
 # ---------------------------------------------------------------- the bases
 
@@ -274,6 +277,7 @@ xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
 print('extent', round(max(xs) - min(xs)), round(max(ys) - min(ys)), 'loop bases', n_loop)
-pen.strokes = [([(x - cx + 500, y - cy + 500) for x, y in p], w) for p, w in pen.strokes]
+SCALE = 1.05
+pen.strokes = [([((x - cx) * SCALE + 500, (y - cy) * SCALE + 500) for x, y in p], w) for p, w in pen.strokes]
 pen.save('../03-rna.svg', mirror=False)
 pen.report()

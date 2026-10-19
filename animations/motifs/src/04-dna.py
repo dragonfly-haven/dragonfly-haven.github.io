@@ -210,31 +210,32 @@ def span(S, key):
 
 strands = {'a': strand('a'), 'b': strand('b')}
 
-# Each end is cut square across the front strand's ribbon as it lies in the picture, and the
-# strand behind it is cut on the same line, so the duplex ends flush. Points past the cut are
-# pulled back onto it.
-for uend, sgn in ((U_LO, -1), (U_HI, 1)):
-    ends = {}
-    for tag, S in strands.items():
-        j = min(range(len(S)), key=lambda k: abs(S[k]['u'] - uend))
-        ends[tag] = (S[j]['c'][2], j)
-    front = max(ends, key=lambda tg: ends[tg][0])
-    S = strands[front]
-    j = ends[front][1]
+# Both strands end at the same height, each cut square across its own ribbon as it lies in
+# the picture: points past the cut are pulled back onto it, so the ribbon ends on one straight
+# line. With PHI as set, at each end one strand lies in front and the other straight behind it.
+
+
+def cut_end(S, uend, sgn):
+    j = min(range(len(S)), key=lambda k: abs(S[k]['u'] - uend))
     p, q = S[j - 3]['c'], S[j + 3]['c']
     t = norm((q[0] - p[0], q[1] - p[1]))
     t = (t[0] * sgn, t[1] * sgn)
     ce = S[j]['c']
+    for smp in S:
+        if abs(smp['u'] - uend) > EXT + 20:
+            continue
+        for key in ('e1', 'e2', 'c'):
+            e = smp[key]
+            s = (e[0] - ce[0]) * t[0] + (e[1] - ce[1]) * t[1]
+            if s > 0:
+                smp[key] = (e[0] - t[0] * s, e[1] - t[1] * s, e[2])
+                smp['cut_' + key] = True
+
+
+for uend, sgn in ((U_LO, -1), (U_HI, 1)):
     for S in strands.values():
-        for smp in S:
-            if abs(smp['u'] - uend) > EXT + 20:
-                continue
-            for key in ('e1', 'e2', 'c'):
-                e = smp[key]
-                s = (e[0] - ce[0]) * t[0] + (e[1] - ce[1]) * t[1]
-                if s > 0:
-                    smp[key] = (e[0] - t[0] * s, e[1] - t[1] * s, e[2])
-                    smp['cut_' + key] = True
+        cut_end(S, uend, sgn)
+
 
 depth = Depth()
 QSTEP = 3
@@ -242,6 +243,8 @@ quads = {'a': [], 'b': []}
 for tag, S in strands.items():
     for i in range(0, len(S) - 1, QSTEP):
         p, q = S[i], S[min(len(S) - 1, i + QSTEP)]
+        if all(x.get('cut_e1') and x.get('cut_e2') for x in (p, q)):
+            continue                        # past the end: nothing left of the ribbon here
         poly3 = [p['e1'], q['e1'], q['e2'], p['e2']]
         poly = [c[:2] for c in poly3]
         z = sum(c[2] for c in poly3) / 4
@@ -311,20 +314,20 @@ for tag, S in strands.items():
 
 HSP = 6.0                                    # even spacing along the ribbon, in the picture
 for tag, S in strands.items():
-    acc = 0.0
+    last = None
     for i in range(1, len(S) - 1):
         smp = S[i]
-        acc += dist(S[i - 1]['c'], smp['c'])
         if smp['N'][2] > -0.06 or smp.get('cut_e1') or smp.get('cut_e2'):
-            acc = HSP * 0.5
+            last = None
             continue
-        if acc < HSP:
+        a, b = lerp3(smp['e1'], smp['e2'], 0.1), lerp3(smp['e1'], smp['e2'], 0.9)
+        # the next stroke comes once both its ends are a full space on from the last one's
+        if last is not None and min(dist(a, last[0]), dist(b, last[1])) < HSP:
             continue
-        acc -= HSP
-        a, b = smp['e1'], smp['e2']
-        if dist(a, b) < 6:
+        last = (a, b)
+        if dist(a, b) < 5:
             continue
-        draw3([lerp3(a, b, 0.1), lerp3(a, b, 0.9)], lambda z: 1.0, own(tag, i, 8), eps=1.0, hand=0.1, minlen=3.5)
+        draw3([a, b], lambda z: 1.0, own(tag, i, 8), eps=1.0, hand=0.1, minlen=3.5)
 
 # ---------------------------------------------------------------- the base pairs
 
@@ -346,7 +349,8 @@ for k, (u, halves) in enumerate(pairs):
 xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
-pen.strokes = [([(x - cx + 500, y - cy + 500) for x, y in p], w) for p, w in pen.strokes]
+SCALE = 1.035
+pen.strokes = [([((x - cx) * SCALE + 500, (y - cy) * SCALE + 500) for x, y in p], w) for p, w in pen.strokes]
 print('pairs', len(pairs))
 pen.save('../04-dna.svg', mirror=False)
 pen.report()
