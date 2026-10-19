@@ -30,7 +30,7 @@ const HALF = unit([LIGHT[0], LIGHT[1], LIGHT[2] + 1]);
 // downstroke and turns its leading edge up to slice back on the upstroke,
 // turning just before each reversal and more towards its tip. Dragonflies beat
 // 30 to 40 times a second; this is slowed so that the eye can follow it.
-const BEAT = 4; // beats a second
+const BEAT = 8; // beats a second
 const AMPLITUDE = [0.56, 0.6]; // radians either side of the middle of the stroke, hind and fore
 const MIDDLE = 0.08; // the middle of the stroke, and the wings at rest, above flat
 const LEAD = 0.5; // how far the hindwings lead the forewings, as a share of a beat
