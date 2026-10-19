@@ -461,7 +461,8 @@ MEMB = 6.5                       # outer to inner membrane of a bacterium
 
 # ---- the bacterium being taken in: it goes in end-first through a dimple on the
 # host's shadow side, rising toward the eye and to the upper right
-E = (C[0] + 236.0 * math.cos(math.radians(10)), C[1] + 236.0 * math.sin(math.radians(10)))
+EA, ER = math.radians(22), 250.0
+E = (C[0] + ER * math.cos(EA), C[1] + ER * math.sin(EA))
 N_E = v_norm(surf(E))                                   # surface normal at the entry
 A3 = v_norm((N_E[0] + 0.30, N_E[1] - 0.78, N_E[2] - 0.22))   # the rod's axis, outward
 KXY = math.hypot(A3[0], A3[1])                          # its foreshortening
@@ -494,7 +495,7 @@ def sunk(p):
 
 
 # the dimple: a circle of the sphere round the entry, 62 across... in 3D
-_rho = 78.0 / R
+_rho = 50.0 / R
 _t1 = v_norm(v_cross(N_E, (0.0, 0.0, 1.0)))
 _t2 = v_cross(N_E, _t1)
 
@@ -513,38 +514,57 @@ DIMPLE = dimple_ring(1.0)
 DIMPLE_REG = Region(DIMPLE[:-1])
 
 
-def lobe(ctrl_out, tip_t, tip_o, ctrl_in, tip_r):
-    """A membrane lobe as a closed outline (rod coordinates in, screen points out):
-    the outer edge to the tip, a round tip, and the free edge back."""
-    out_e = [rod_pt(t, o) for t, o in resample(catmull(ctrl_out, step=1.0), 1.0)]
-    in_e = [rod_pt(t, o) for t, o in resample(catmull(ctrl_in, step=1.0), 1.0)]
-    tc = rod_pt(tip_t, tip_o)
-    a0 = math.atan2(out_e[-1][1] - tc[1], out_e[-1][0] - tc[0])
-    a1 = math.atan2(in_e[0][1] - tc[1], in_e[0][0] - tc[0])
-    # sweep through the side facing along the rod
+def arm(ctrl, hw, outer):
+    """A membrane arm of the host (rod coordinates in, screen points out): a
+    tapering band along a centre line with a round tip. outer: the side (+1 or -1
+    in o) away from the rod. Returns the outer edge (base to tip), the tip, the
+    inner edge (tip to base), and the inner edge's rod coordinates.
+    hw(u): the half-width, u from 0 at the base to 1 at the tip."""
+    cl = resample(catmull(ctrl, step=1.0), 1.0)
+    n = len(cl)
+    o_e, i_e = [], []
+    for i, (t, o) in enumerate(cl):
+        a, b = cl[max(0, i - 1)], cl[min(n - 1, i + 1)]
+        d = unit((b[0] - a[0], b[1] - a[1]))
+        nrm = (-d[1] * outer, d[0] * outer)          # toward the outer side
+        h = hw(i / (n - 1))
+        o_e.append((t + nrm[0] * h, o + nrm[1] * h))
+        i_e.append((t - nrm[0] * h, o - nrm[1] * h))
+    tc = cl[-1]
+    a0 = math.atan2(o_e[-1][1] - tc[1], o_e[-1][0] - tc[0])
+    a1 = math.atan2(i_e[-1][1] - tc[1], i_e[-1][0] - tc[0])
     da = (a1 - a0) % (2 * math.pi)
-    mid = a0 + da / 2
-    if math.cos(mid - RA) < 0:
+    d = unit((cl[-1][0] - cl[-2][0], cl[-1][1] - cl[-2][1]))
+    if math.cos(a0 + da / 2 - math.atan2(d[1], d[0])) < 0:
         da -= 2 * math.pi
-    tip = ellipse_pts(tc[0], tc[1], tip_r, tip_r, 0, a0, a0 + da, step=1.0)
-    return out_e, tip, in_e
+    tip = ellipse_pts(tc[0], tc[1], hw(1.0), hw(1.0), 0, a0, a0 + da, step=1.0)
+    scr = lambda pts: [rod_pt(t, o) for t, o in pts]
+    return scr(o_e), scr(tip), scr(i_e[::-1]), i_e[::-1]
 
 
-# near lobe: in front, along the rod's lower side, wrapping over its face
-NL_OUT = [(T_E - 8, 62), (T_E + 22, 58), (T_E + 62, 51), (T_E + 104, 44), (T_E + 134, 39)]
-NL_IN = [(T_E + 134, 21), (T_E + 104, 18), (T_E + 62, 10), (T_E + 24, 0), (T_E - 2, -8)]
-nl_out, nl_tip, nl_in = lobe(NL_OUT, T_E + 135, 30, NL_IN, 9.0)
+# near arm: in front, rising from the dimple's lower rim along the rod's lower
+# side and reaching over its face to about half way up the rod
+def taper(h0, h1, hold=0.0):
+    return lambda u: h0 if u < hold else h0 + (h1 - h0) * ((u - hold) / (1 - hold)) ** 1.2
+
+
+nl_out, nl_tip, nl_in, nl_in_rc = arm([(T_E - 22, 50), (T_E + 6, 45), (T_E + 40, 37), (T_E + 72, 28)], taper(21.0, 15.0), +1)
 NEAR = Region(nl_out + nl_tip[1:-1] + nl_in)
-# far lobe: behind, along the rod's upper side; only its outer edge and tip show
-FL_OUT = [(T_E - 4, -64), (T_E + 24, -68), (T_E + 58, -63), (T_E + 92, -53)]
-FL_IN = [(T_E + 92, -30), (T_E + 58, -26), (T_E + 24, -24), (T_E - 4, -30)]
-fl_out, fl_tip, fl_in = lobe(FL_OUT, T_E + 94, -42, FL_IN, 11.0)
+# far arm: rising from behind the rod above its upper side, then coming over
+# its top so the tip rests on its face
+fl_out, fl_tip, fl_in, fl_in_rc = arm([(T_E + 10, -54), (T_E + 38, -57), (T_E + 62, -52), (T_E + 82, -38), (T_E + 94, -21)], taper(17.0, 10.0, 0.5), -1)
+T_SW = min(fl_in_rc, key=lambda q: q[1])[0]            # where its free edge comes over the rod's top
 FAR = Region(fl_out + fl_tip[1:-1] + fl_in)
 ROD_REG = Region(capsule_pts(RC[0], RC[1], RA, HLP, ROD_R, step=2.0))
 
 
+def far_front(p):
+    """On the part of the far arm that lies over the rod's face (in front of it)."""
+    return rod_to(p)[0] > T_SW and p in FAR
+
+
 def eng_hide(p):
-    """Inside the engulfment (rod, lobes, dimple): host lines stay out."""
+    """Inside the engulfment (rod, arms, dimple): host lines stay out."""
     return p in NEAR or (p in ROD_REG and not sunk(p)) or p in FAR or p in DIMPLE_REG
 
 
@@ -634,37 +654,51 @@ def rod(cx, cy, ang, hl, r, hide=lambda p: False, flag=None, outline=True):
 
 # ---- the engulfment, front to back
 
-# near lobe: outline (heavier below), a thickness line along its free edge,
-# and its underside hatched along its form
-nl_line = nl_out + nl_tip[1:-1] + nl_in
-ink_outline(nl_line, lambda p: False, 1.3, 2.3, sign=area_sign(nl_line + [nl_out[0]]) * 1)
-thick = [rod_pt(t, o + 4.0) for t, o in resample(catmull(NL_IN, step=1.0), 1.0)]
-for run in runs(thick[6:-10], lambda p: p not in NEAR):
-    ink(run, 0.9, hand=0.12)
-for k in range(1, 4):
-    band = [(t, o - 5.2 * k) for t, o in NL_OUT[:-1]] + [(NL_OUT[-1][0] - 8 * k, NL_OUT[-1][1] - 5.2 * k)]
-    pts = [rod_pt(t, o) for t, o in resample(catmull(band, step=1.0), 1.0)]
-    ink_hatch(pts, lambda p: p not in NEAR, minlen=10, trim=3 + 4 * k)
 
-# the rod itself, behind the near lobe, its inner end gone into the dimple
-rod_hide = lambda p: p in NEAR or sunk(p)
+def form_lines(outline, keep, hide, n, step=5.6, w=W_HATCH, trim=6):
+    """Lines just inside an arm's outline, following it round the tip, kept
+    where the outline turns from the light."""
+    fine = resample(outline, 1.0)
+    sign = area_sign(fine)
+    nrm = [(q[0] * sign, q[1] * sign) for q in normals(fine)]   # outward
+    for k in range(1, n + 1):
+        pts = []
+        for q, m in zip(fine, nrm):
+            d = -(m[0] * LIGHT[0] + m[1] * LIGHT[1])           # 1: facing away from the light
+            pts.append((q[0] - m[0] * step * k, q[1] - m[1] * step * k) if d > keep[k - 1] else None)
+        for sgm in split_none(pts):
+            ink_hatch(sgm, hide, w=w, minlen=10, trim=trim)
+
+
+# near arm: outline (heavier below), a thickness line along its free edge,
+# and its underside shaded with lines that follow it round the tip
+nl_line = nl_out + nl_tip[1:-1] + nl_in
+nl_sign = area_sign(nl_line)
+ink_outline(nl_line, lambda p: False, 1.3, 2.4, sign=nl_sign)
+thick = [rod_pt(t, o + 4.0) for t, o in nl_in_rc]
+for run in runs(thick[8:-6], lambda p: p not in NEAR):
+    ink(run, 0.9, hand=0.12)
+form_lines(nl_line, (-0.25, 0.15, 0.5), lambda p: p not in NEAR or dist(p, thick[0]) < 9, 3)
+
+# far arm: the part over the rod's face hides the rod
+fl_line = fl_out + fl_tip[1:-1]
+behind_rod = lambda p: p in ROD_REG and not sunk(p) and rod_to(p)[0] <= T_SW
+
+# the rod itself, behind the near arm (and the far arm's tip), its inner end gone into the dimple
+rod_hide = lambda p: p in NEAR or far_front(p) or sunk(p)
 rod(RC[0], RC[1], RA, HLP, ROD_R, hide=rod_hide)
 # where it meets the dimple's floor: the near half of the cut circle
 cut = []
 for i in range(91):
     u = -1 + 2 * i / 90
     cut.append(rod_pt(T_CUT - BULGE * math.sqrt(1 - u * u), ROD_R * u))
-for run in runs(cut, lambda p: p in NEAR):
+for run in runs(cut, lambda p: p in NEAR or p in FAR):
     ink(run, 1.5)
 
-# far lobe: behind the rod, its outer edge and tip; hatched along its form near the rod
-fl_line = fl_out + fl_tip[1:-1]
-far_hide = lambda p: p in ROD_REG and not sunk(p)
-ink_outline(fl_line, far_hide, 1.2, 2.0, sign=area_sign(fl_line + fl_in))
-for k in range(1, 3):
-    band = [(t, o + 5.2 * k) for t, o in FL_OUT]
-    pts = [rod_pt(t, o) for t, o in resample(catmull(band, step=1.0), 1.0)]
-    ink_hatch(pts, lambda p: far_hide(p) or p not in FAR, minlen=10, trim=4 + 5 * k)
+# the far arm's outline: its outer edge and tip, and its free edge where it lies over the rod
+ink_outline(fl_line + [q for q, rc in zip(fl_in, fl_in_rc) if rc[0] > T_SW], behind_rod, 1.2, 2.2,
+            sign=area_sign(fl_line + fl_in))
+form_lines(fl_line, (-0.1, 0.35), lambda p: p not in FAR or behind_rod(p), 2)
 
 # the dimple: its rim, and its inner wall shaded where it turns from the light
 eng_front = lambda p: p in NEAR or p in FAR or (p in ROD_REG and not sunk(p))
@@ -781,7 +815,7 @@ while cc > -R + 20:
         q = [cc * _nf[m] + rc * (math.cos(f) * _e1[m] + math.sin(f) * _e2[m]) for m in range(3)]
         p = (C[0] + q[0], C[1] + q[1])
         ang = math.degrees(math.atan2(q[1], q[0]))
-        ok = q[2] > 2.0 and lam3((q[0] / R, q[1] / R, q[2] / R)) < -0.40 and 14 < ang < 80 and shell_ok(p)
+        ok = q[2] > 2.0 and lam3((q[0] / R, q[1] / R, q[2] / R)) < -0.36 and 12 < ang < 84 and shell_ok(p)
         pts.append(p if ok else None)
     if None in pts and pts[0] is not None:
         i0 = pts.index(None)
@@ -791,7 +825,7 @@ while cc > -R + 20:
         ink_hatch(sgm, lambda p: CORE_GRID.near(p, 5.6), minlen=14, trim=6, grid=drawn, w=0.7)
     for cell in drawn.g.values():
         CORE_GRID.add(cell)
-    cc -= 11.0
+    cc -= 8.5
 
 # ---- inside, on the cut face (plane coordinates)
 
@@ -821,32 +855,38 @@ for t, o in [(-66, -6), (-56, 15), (62, -15), (70, 8), (-14, -22), (14, 22), (40
     pen.dot(q[0], q[1], r=2.0, w=1.2)
 
 # the host's chromosome: one circular strand folded into looped domains, each a
-# twisted pair of strands radiating from a small centre and ending in a loop
-NUC = (64.0, 92.0)
-N_PETALS = 7
+# twisted pair of strands running out from a small open hub and ending in a loop;
+# between domains the strand turns round the hub without crossing itself
+NUC = (60.0, 92.0)
+N_ARMS = 6
 nuc_pts, nuc_depth = [], []
 _rng = random.Random(61)
-_angs = [2 * math.pi * k / N_PETALS + math.radians(_rng.uniform(-4, 4)) + 0.3 for k in range(N_PETALS)]
-_lens = [2, 3, 2, 2, 3, 2, 3]
-CORE = 8.0
-PERIOD = 25.0
+_angs = [2 * math.pi * k / N_ARMS + math.radians(_rng.uniform(-4, 4)) + 0.35 for k in range(N_ARMS)]
+_lens = [2.0, 1.5, 2.0, 2.0, 1.5, 2.0]
+HUB = 14.0
+PERIOD = 40.0
+S0 = 10.0                                               # the strands run side by side this far before twisting
+AMP = 9.0
+arms = []
 for k, al in enumerate(_angs):
-    d = (math.cos(al), math.sin(al))
-    nk = (math.sin(al), -math.cos(al))
-    L = PERIOD * _lens[k] + 6
-    amp = lambda s: 1.6 + 5.8 * min(1.0, s / 16.0)
+    L = PERIOD * _lens[k] + S0
     seg_a, seg_b = [], []
-    bend = math.radians(_rng.uniform(6, 14)) * (1 if k % 2 else -1)
-    for i in range(int(L) + 1):
-        s = float(i)
-        ab = al + bend * (s / L) ** 1.5
-        c = (NUC[0] + d[0] * CORE + math.cos(ab) * s, NUC[1] + d[1] * CORE + math.sin(ab) * s)
-        nk = (math.sin(ab), -math.cos(ab))
-        grow = 1.0 + 0.7 * max(0.0, (s - (L - 14)) / 14) ** 1.5
-        off = (amp(s) * math.cos(2 * math.pi * (s - 6) / PERIOD) if s > 6 else amp(s)) * grow
-        dep = math.sin(2 * math.pi * (s - 6) / PERIOD) if s > 6 else 0.0
-        seg_a.append(((c[0] + nk[0] * off, c[1] + nk[1] * off), dep))
-        seg_b.append(((c[0] - nk[0] * off, c[1] - nk[1] * off), -dep))
+    bend = math.radians(_rng.uniform(8, 14)) * (1 if k % 2 else -1)
+    n = int(L)
+    cx, cy = NUC[0] + math.cos(al) * HUB, NUC[1] + math.sin(al) * HUB
+    for i in range(n + 1):
+        s_ = L * i / n
+        ab = al + bend * (s_ / L) ** 1.5                # the centre line: a gentle curve out from the hub
+        if i:
+            cx, cy = cx + math.cos(ab) * L / n, cy + math.sin(ab) * L / n
+        nk = (math.sin(ab), -math.cos(ab))               # toward the previous arm
+        amp = 3.6 + (AMP - 3.6) * min(1.0, max(0.0, s_ - S0) / 10.0)
+        grow = 1.0 + 0.55 * max(0.0, (s_ - (L - 12)) / 12) ** 1.5
+        ph = 2 * math.pi * max(0.0, s_ - S0) / PERIOD
+        off = amp * math.cos(ph) * grow
+        dep = math.sin(ph) if s_ > S0 else 0.0
+        seg_a.append(((cx + nk[0] * off, cy + nk[1] * off), dep))
+        seg_b.append(((cx - nk[0] * off, cy - nk[1] * off), -dep))
     # the loop at the end: round from strand a to strand b
     ea, eb = seg_a[-1][0], seg_b[-1][0]
     mc = ((ea[0] + eb[0]) / 2, (ea[1] + eb[1]) / 2)
@@ -854,34 +894,30 @@ for k, al in enumerate(_angs):
     a0 = math.atan2(ea[1] - mc[1], ea[0] - mc[0])
     sweep = math.pi if math.cos(a0 + math.pi / 2 - ab) > 0 else -math.pi
     loop = [(q, 0.0) for q in ellipse_pts(mc[0], mc[1], rr, rr, 0, a0, a0 + sweep, step=1.0)[1:-1]]
-    petal = seg_a + loop + seg_b[::-1]
-    # across the centre to the next petal
-    if nuc_pts:
-        last = nuc_pts[-1]
-        first = petal[0][0]
-        for j in range(1, 6):
-            u = j / 6
-            nuc_pts.append((last[0] + (first[0] - last[0]) * u, last[1] + (first[1] - last[1]) * u))
-            nuc_depth.append(0.0)
-    for q, dp in petal:
-        nuc_pts.append(q)
-        nuc_depth.append(dp)
-# close the ring
-last, first = nuc_pts[-1], nuc_pts[0]
-for j in range(1, 6):
-    u = j / 6
-    nuc_pts.append((last[0] + (first[0] - last[0]) * u, last[1] + (first[1] - last[1]) * u))
-    nuc_depth.append(0.0)
-nuc_pts.append(first)
+    arms.append(seg_a + loop + seg_b[::-1])
+for k, petal in enumerate(arms):
+    nuc_pts += [q for q, _ in petal]
+    nuc_depth += [d for _, d in petal]
+    # round the hub to the next arm: a short curve bowing in toward the centre
+    p0 = petal[-1][0]
+    p3 = arms[(k + 1) % N_ARMS][0][0]
+    am = (_angs[k] + _angs[(k + 1) % N_ARMS] + (2 * math.pi if k == N_ARMS - 1 else 0)) / 2
+    ctrl = (NUC[0] + math.cos(am) * HUB * 0.55, NUC[1] + math.sin(am) * HUB * 0.55)
+    for j in range(1, 12):
+        u = j / 12
+        nuc_pts.append(((1 - u) ** 2 * p0[0] + 2 * u * (1 - u) * ctrl[0] + u * u * p3[0],
+                        (1 - u) ** 2 * p0[1] + 2 * u * (1 - u) * ctrl[1] + u * u * p3[1]))
+        nuc_depth.append(0.0)
+nuc_pts.append(nuc_pts[0])
 nuc_depth.append(0.0)
 nuc_screen = [plane(x, y) for x, y in nuc_pts]
-for run in break_crossings(nuc_screen, nuc_depth, gap=3.8):
-    ink(run, 1.15, hand=0.08)
+for run in break_crossings(nuc_screen, nuc_depth, gap=4.2):
+    ink(run, 1.4, hand=0.08)
 NUC_GRID = Grid(8.0)
 NUC_GRID.add(resample(nuc_screen, 2.0))
 
-# ribosomes: small dots in loose, irregular clusters
-_rr = random.Random(606)
+# the cut face: long, evenly spaced section lines, as on 07's cut faces, broken
+# only round the bacterium, the chromosome and a lit area by the upper left rim
 
 
 def eb_dist(X, Y):
@@ -890,67 +926,66 @@ def eb_dist(X, Y):
     return math.hypot(X - (EB[0] + _a[0] * t), Y - (EB[1] + _a[1] * t))
 
 
-centres = []
-tries = 0
-while tries < 4000 and len(centres) < 13:
-    tries += 1
-    X, Y = _rr.uniform(-R_FACE, R_FACE), _rr.uniform(-R_FACE, R_FACE)
-    if X * X + Y * Y > (R_FACE - 40) ** 2 or math.hypot(X - NUC[0], Y - NUC[1]) < 110 or eb_dist(X, Y) < EB_R + 34:
-        continue
-    if any(math.hypot(X - a, Y - b) < 74 for a, b in centres):
-        continue
-    centres.append((X, Y))
-ribo = []
-for X, Y in centres:
-    n = _rr.choice([3, 4, 4, 5, 6])
-    pts = []
-    for _ in range(60):
-        if len(pts) >= n:
-            break
-        a = _rr.uniform(0, 2 * math.pi)
-        rr = _rr.uniform(0, 17)
-        q = (X + rr * math.cos(a), Y + rr * math.sin(a))
-        if all(math.hypot(q[0] - b[0], q[1] - b[1]) > 8 for b in pts):
-            pts.append(q)
-    ribo += pts
-for X, Y in ribo:
-    q = plane(X, Y)
-    pen.dot(q[0], q[1], r=2.6, w=1.3)
-
-# the cut face: very light, widely spaced section hatching, broken and staggered
-# as in 07, kept clear of the chromosome, the bacterium and the dots
+# the lit area: a crescent along the upper left rim, outside the face's own
+# outline moved down and to the right (on screen, so it is a true crescent)
+LIT_SHIFT = 78.0
+_lit = (-LIGHT[0] * LIT_SHIFT, -LIGHT[1] * LIT_SHIFT)
 
 
-def face_clear(p):
+def in_lit(p, extra):
+    X, Y = plane_inv((p[0] - _lit[0], p[1] - _lit[1]))
+    return X * X + Y * Y > (R_FACE - extra) ** 2
+
+
+ROW = 12.5
+rows = []
+Yh = -R_FACE + 10.0
+while Yh < R_FACE - 6:
+    rows.append((Yh, 9.0 if len(rows) % 2 else 0.0))   # every other line stops a little short of the light
+    Yh += ROW
+
+
+def face_clear(p, extra):
     X, Y = plane_inv(p)
-    if X * X + Y * Y > (R_FACE - 13) ** 2:
+    if X * X / (R_FACE - 15) ** 2 + Y * Y / (R_FACE - 13) ** 2 > 1:
         return True
-    if eb_dist(X, Y) < EB_R + 16:
+    if in_lit(p, extra):
         return True
-    if NUC_GRID.near(p, 10.0):
+    if eb_dist(X, Y) < EB_R + 18:
         return True
-    if any((X - a) ** 2 + (Y - b) ** 2 < 7.5 ** 2 for a, b in ribo):
+    if NUC_GRID.near(p, 13.0):
         return True
     return host_hide(p)
 
 
-_hr = random.Random(6060)
-Yh = -R_FACE + 9.0
-while Yh < R_FACE:
+for Yh, extra in rows:
     half = math.sqrt(max(0.0, R_FACE ** 2 - Yh * Yh))
-    X = -half + _hr.uniform(0, 40)
-    while X < half:
-        seg = _hr.uniform(50, 150)
-        x1 = min(half, X + seg)
-        # lighter toward the light: fewer strokes up and to the left
-        mid = plane((X + x1) / 2, Yh)
-        u = ((mid[0] - FC[0]) * -LIGHT[0] + (mid[1] - FC[1]) * -LIGHT[1]) / R_FACE
-        if x1 - X > 12 and _hr.random() < 0.18 + 0.62 * (u + 1) / 2:
-            line = [plane(X, Yh), plane(x1, Yh)]
-            for run in runs(line, face_clear, minlen=8):
-                ink(run, 0.62, hand=0.1, piece=(80, 160))
-        X = x1 + _hr.uniform(16, 44)
-    Yh += 13.0
+    line = [plane(-half, Yh), plane(half, Yh)]
+    for run in runs(line, lambda p: face_clear(p, extra), minlen=10):
+        ink(run, 0.62, hand=0.1, piece=(80, 160))
+
+# ribosomes: a few single grains, or pairs, set between the section lines
+_rr = random.Random(606)
+grains = []
+tries = 0
+while tries < 4000 and len(grains) < 7:
+    tries += 1
+    k = _rr.randrange(len(rows) - 1)
+    Y = rows[k][0] + ROW / 2
+    X = _rr.uniform(-R_FACE, R_FACE)
+    if X * X / (R_FACE - 40) ** 2 + Y * Y / (R_FACE - 36) ** 2 > 1:
+        continue
+    if math.hypot(X - NUC[0], Y - NUC[1]) < 130 or eb_dist(X, Y) < EB_R + 30:
+        continue
+    if any(math.hypot(X - a, Y - b) < 90 for a, b in grains):
+        continue
+    grains.append((X, Y))
+for X, Y in grains:
+    for j in range(_rr.choice([1, 2, 2])):
+        q = plane(X + j * 9.0, Y + _rr.uniform(-1.2, 1.2))
+        a = _rr.uniform(0, math.pi)
+        d = (math.cos(a) * 3.0, math.sin(a) * 3.0)
+        ink([(q[0] - d[0], q[1] - d[1]), (q[0] + d[0], q[1] + d[1])], 2.2, hand=0.0)
 
 pen.save(OUT)
 pen.report()
