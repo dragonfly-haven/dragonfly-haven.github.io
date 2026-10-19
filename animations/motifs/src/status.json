@@ -27,20 +27,22 @@
       "when": "2026-10-19",
       "scores": [
         8,
-        9,
-        8
+        8,
+        9
       ],
-      "note": "second round; polished: looser bends at the stem foot, freer hatch ticks, weight nearer the centre"
+      "maxim": "more sleek: yes",
+      "note": "rework after Maxim's notes: one smooth even strand; polish asked: bases at the stem foot, better balance"
     },
     "dna": {
       "passed": true,
       "when": "2026-10-19",
       "scores": [
-        8,
-        8,
-        8
+        9,
+        9,
+        9
       ],
-      "note": "polished: square-cut ends, far strand's end hidden, more open far sides, rungs tucked under their strands"
+      "maxim": "more sleek and regular: yes",
+      "note": "rework after Maxim's notes: exact B-DNA geometry; polish asked: far bars capped short of the ribbon edge, bottom stub"
     },
     "prokaryotic-cell": {
       "passed": true,
