@@ -152,7 +152,17 @@
         8,
         8
       ],
-      "note": "polish asked: hands, a strip of waistcoat, folds, legs and shoes, kerchief hem"
+      "note": "polish asked: hands, a strip of waistcoat, folds, legs and shoes, kerchief hem",
+      "rework": {
+        "round": "w1",
+        "scores": [
+          8,
+          8,
+          8
+        ],
+        "maxim": "not a clear yes: too little added detail, man's face muddy at 1x",
+        "passed": false
+      }
     },
     "neural-net": {
       "passed": true,
