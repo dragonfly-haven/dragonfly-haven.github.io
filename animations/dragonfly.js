@@ -44,8 +44,13 @@ const TWIST = (f) => 0.3 + 0.7 * f; // the share of the pitch at a fraction f of
 const WEIGHTS = [1.45, 1, 0.75];
 // So that a wing always shows its veins and lace, it is drawn with as many
 // dashes across a forewing as FINE, finer than the body's dashes if need be,
-// but none shorter than MIN_DASH device pixels, below which a dash stops reading as one.
-const FINE = 7, MIN_DASH = 2.4;
+// but none shorter than MIN_DASH device pixels. Where its dashes would be
+// shorter than LINE_DASH device pixels, too short for the gaps between them to
+// show, as on most screens that aren't high-resolution, the wing is drawn in
+// fine unbroken lines instead, with the veins a little and the lace well
+// lighter than the outline (LINE_TONES), the way light shows through a wing.
+const FINE = 7, MIN_DASH = 2.4, LINE_DASH = 3.2;
+const LINE_WEIGHTS = [1.15, 0.9, 0.75], LINE_TONES = [1, 0.9, 0.6];
 
 // ---------------------------------------------------------------------------
 // The model. Units: about 100 from head to tail. +y points to the head, +x to
@@ -244,9 +249,9 @@ export function mountDragonfly(el, options = {}) {
   const G = mul(rotX(-o.tilt), mul(rotZ(-o.rotate), rotY(o.roll)));
   const towards = [G[6], G[7], G[8]]; // towards the viewer, in model space
 
-  let scale = 1, ox = 0, oy = 0, dash = dashSize(1), half = 1, wingWidth = 1;
+  let scale = 1, ox = 0, oy = 0, dash = dashSize(1), half = 1, wingWidth = 1, lines = false;
   let body = null; // the still body, as one path in canvas pixels
-  let strokes = []; // per wing and weight: its dashes as (s, c, ds, dc, half length) in the wing's plane
+  let strokes = []; // per wing and weight: its dashes, or short pieces of line, as (s, c, ds, dc, half length) in the wing's plane
   let job = null; // a layout under way
   // The beat: its clock, how strongly the wings beat now (0 still, 1 full), and
   // what keeps them beating; the frame loop runs only while they move.
@@ -428,12 +433,13 @@ export function mountDragonfly(el, options = {}) {
     const Lw = clamp(chord / FINE, MIN_DASH / (scale * ratio), L); // a wing dash's length in model units
     const detail = chord / Lw;
     wingWidth = Math.max(1 / ratio, Math.min(dash.width, Lw * scale * 0.27));
+    lines = Lw * scale * ratio < LINE_DASH;
     const laid = [];
     for (const [i, w] of wings.entries()) {
       const f = frames[i], weights = WEIGHTS.map(() => []);
-      yield* wingDashes(w.spec, Lw, detail, rand, o.texture, o.cell, (s, c, ds, dc, weight) => {
+      yield* wingDashes(w.spec, Lw, detail, lines, rand, o.texture, o.cell, (s, c, ds, dc, weight, h) => {
         if (thorax.some((part) => part.surface.inside(add(f.root, add(scaled(f.S, s), scaled(f.C, c)))))) return;
-        weights[weight].push(s, c, ds, dc, Lw * 0.45 * (0.85 + 0.3 * rand()));
+        weights[weight].push(s, c, ds, dc, h ?? Lw * 0.45 * (0.85 + 0.3 * rand()));
       });
       laid.push(weights.map((d) => Float32Array.from(d)));
       yield;
@@ -498,7 +504,8 @@ export function mountDragonfly(el, options = {}) {
       for (const [paths, alpha] of list) {
         ctx.globalAlpha = alpha;
         paths.forEach((p, weight) => {
-          ctx.lineWidth = wingWidth * o.weight * WEIGHTS[weight];
+          ctx.globalAlpha = alpha * (lines ? LINE_TONES[weight] : 1);
+          ctx.lineWidth = wingWidth * o.weight * (lines ? LINE_WEIGHTS : WEIGHTS)[weight];
           ctx.stroke(p);
         });
       }
@@ -741,16 +748,18 @@ function insidePolygon(poly, x, y) {
 
 // Emits a wing's dashes as (s, c, ds, dc, weight): a dash centre, the
 // direction it lies along and its weight (see WEIGHTS), for dashes `L` long.
-// It always draws the outline and pterostigma, the main veins and the texture
-// between them; `detail`, how many dashes fit across a forewing, decides how
-// many rows make up the edges and veins and how many of the smaller veins
-// show, so that a small wing stays a clean drawing. Bolder parts come first
-// and win where two would crowd each other. The texture is one of
+// With `lines`, it emits short pieces of unbroken line instead, each with its
+// half length as a sixth argument. It always draws the outline and
+// pterostigma, the main veins and the texture between them; `detail`, how
+// many dashes fit across a forewing, decides how many rows make up the edges
+// and veins and how many of the smaller veins show, so that a small wing stays
+// a clean drawing. Bolder parts come first and win where two would crowd each
+// other. The texture is one of
 //   'cells': a lace of small cells, `cell` dash lengths across, as most of a real wing is;
 //   'cross': cross veins running across the wing like the rungs of a ladder;
 //   'hatch': short dashes scattered across the wing, the way cross veins run.
 // Yields between parts so the work can be spread out.
-function* wingDashes(spec, L, detail, rand, texture, cell, emit) {
+function* wingDashes(spec, L, detail, lines, rand, texture, cell, emit) {
   const W = spec.chord, length = spec.length;
   const { lead, trail, outline } = wingOutline(spec);
   const widest = Math.max(...outline.map(([s]) => (chordAt(trail, s) ?? 0) - (chordAt(lead, s) ?? 0)));
@@ -773,11 +782,25 @@ function* wingDashes(spec, L, detail, rand, texture, cell, emit) {
     emit(s, c, ds, dc, weight);
   };
   // Rows of dashes along a line, at `offsets` across it (positive towards the
-  // trailing edge for lines that run root to tip), of the given weights.
+  // trailing edge for lines that run root to tip), of the given weights; or,
+  // with `lines`, unbroken rows, kept within the wing unless on its edge.
   const along = (poly, offsets, weights, gap = L * 0.36, step = L * 1.12) => {
     offsets.forEach((off, r) => {
-      walk(poly, step, step / 2 + L * 0.5 * r, (p, t) => put(p[0] - t[1] * off, p[1] + t[0] * off, t[0], t[1], weights[r], gap));
+      if (!lines) {
+        walk(poly, step, step / 2 + L * 0.5 * r, (p, t) => put(p[0] - t[1] * off, p[1] + t[0] * off, t[0], t[1], weights[r], gap));
+        return;
+      }
+      const row = poly.map((p, i) => {
+        const a = poly[Math.max(0, i - 1)], b = poly[Math.min(poly.length - 1, i + 1)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        return [p[0] - ((b[1] - a[1]) / l) * off, p[1] + ((b[0] - a[0]) / l) * off];
+      });
+      for (let i = 1; i < row.length; i++) piece(row[i - 1], row[i], weights[r], !off);
     });
+  };
+  // A piece of unbroken line from p to q, if its middle lies within the wing.
+  const piece = (p, q, weight, edge = false) => {
+    const dx = q[0] - p[0], dy = q[1] - p[1], l = Math.hypot(dx, dy), ms = (p[0] + q[0]) / 2, mc = (p[1] + q[1]) / 2;
+    if (l > 1e-6 && (edge || insidePolygon(outline, ms, mc))) emit(ms, mc, dx / l, dy / l, weight, l / 2 + L * 0.02);
   };
 
   // The leading edge, bold, with the pterostigma near the tip: rows packed
@@ -818,7 +841,17 @@ function* wingDashes(spec, L, detail, rand, texture, cell, emit) {
     // While the wing is only a few dashes across, fewer, larger cells.
     const size = L * cell * (detail < 6 ? 1.3 : 1);
     for (const [p, q] of yield* cellEdges(lead, trail, length, widest, size, rand)) {
-      if (keep((p[0] + q[0]) / 2) > 0.5) walk([p, q], L * 1.08, L * 0.54, (pt, t) => put(pt[0], pt[1], t[0], t[1], 2, L * 0.4));
+      if (keep((p[0] + q[0]) / 2) <= 0.5) continue;
+      if (!lines) {
+        walk([p, q], L * 1.08, L * 0.54, (pt, t) => put(pt[0], pt[1], t[0], t[1], 2, L * 0.4));
+        continue;
+      }
+      // An edge as unbroken line, in short pieces so that it stops at the wing's outline.
+      const n = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / (L * 0.5)));
+      for (let k = 0; k < n; k++) {
+        const at = (t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+        piece(at(k / n), at((k + 1) / n), 2);
+      }
     }
   }
 }
