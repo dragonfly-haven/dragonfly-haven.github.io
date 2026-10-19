@@ -219,30 +219,59 @@ def leg(heel, foot):
     occlude(polys[2])
 
 
-def thigh(front_pts, back_pts, tufts=5):
-    """A soft feathered thigh: a rounded lobe from the belly down to just above the heel,
-    a ragged lower edge of feather tips, curved strokes down it, darker behind."""
+def thigh(front_pts, back_pts, tufts=5, seed=0):
+    """A shaggy feathered thigh: a lobe from the belly down to just above the heel. Its
+    strokes start up in the belly's hatching, its front edge breaks into feather tips,
+    its lower edge is a ragged fringe, and its rear side lies in shadow."""
     F, B = Curve(C(front_pts, step=1.5)), Curve(C(back_pts, step=1.5))
-    lower = []
+    state = rng.getstate()
+    tr = random.Random(seed)
+    # the ragged lower fringe: tufts of uneven width and depth, hanging down and back
     pa, pb = F.at(1), B.at(1)
-    for k in range(tufts):
-        a, b = lerp(pa, pb, k / tufts), lerp(pa, pb, (k + 1) / tufts)
-        m = lerp(a, b, 0.45)
-        lower.append(C([a, (m[0] - 1, m[1] + 3.4), b], step=1))
-    draw(F.part(0.12, 1), w=1.6, hand=0.3, lift=0.06)
-    draw(B.part(0.5, 1), w=1.2, hand=0.3, lift=0.1)
+    cuts = sorted([0.0, 1.0] + [min(0.95, max(0.05, (k + tr.uniform(-0.25, 0.25)) / tufts)) for k in range(1, tufts)])
+    lower = []
+    for c0, c1 in zip(cuts, cuts[1:]):
+        a, b = lerp(pa, pb, c0), lerp(pa, pb, c1)
+        m = lerp(a, b, tr.uniform(0.45, 0.7))
+        lower.append(C([a, (m[0] + 0.8, m[1] + tr.uniform(2.6, 5.6)), b], step=1))
     for seg in lower:
         draw(seg, w=1.15, hand=0, lift=0)
-    # strokes following the lobe, spaced about 5 units, broken toward the lit front
+    # front edge: dissolves into the belly above, breaks into feather tips below
+    for t0, t1 in ((0.32, 0.58), (0.58, 0.82), (0.82, 1.0)):
+        seg = F.part(t0, t1)
+        draw(seg, w=1.5, hand=0.3, lift=0)
+        e = seg[-1]
+        tx, ty = F.tangent(t1)
+        nx, ny = -ty, tx
+        if nx < 0:
+            nx, ny = -nx, -ny                      # forward, out of the lobe
+        if t1 < 1.0:
+            draw(C([(e[0] - nx * 1.5, e[1] - ny * 1.5), (e[0] + nx * 1.6 + tx * 2.5, e[1] + ny * 1.6 + ty * 2.5),
+                    (e[0] + nx * 1.8 + tx * 5.5, e[1] + ny * 1.8 + ty * 5.5)], step=0.8), w=1.2, hand=0, lift=0)
+    # rear side: broken outline and a few shadow strokes
+    draw(B.part(0.55, 0.78), w=1.2, hand=0.3, lift=0)
+    draw(B.part(0.84, 1.0), w=1.2, hand=0.3, lift=0)
+    for f, w in ((0.8, 1.3), (0.88, 1.45), (0.95, 1.5)):
+        t0, t1 = tr.uniform(0.25, 0.4), tr.uniform(0.86, 0.95)
+        draw([lerp(F.at(t), B.at(t), f) for t in np.linspace(t0, t1, 20)], w=w, hand=0.3, lift=0, taper=0.3)
+    # strokes down the lobe, starting a little way up in the belly's hatching
     m = int(dist(F.at(0.5), B.at(0.5)) / 5.0)
     for i in range(1, m):
         f = i / m
-        t0 = 0.05 + rng.uniform(0, 0.1)
-        t1 = 0.93 - rng.uniform(0, 0.06)
+        t0 = tr.uniform(0.0, 0.06)
+        t1 = 0.97 - tr.uniform(0, 0.12)
         pts = [lerp(F.at(t), B.at(t), f) for t in np.linspace(t0, t1, 24)]
+        up = (pts[0][0] - pts[2][0], pts[0][1] - pts[2][1])
+        L = math.hypot(*up) or 1.0
+        reach = tr.uniform(4, 9)
+        pts.insert(0, (pts[0][0] + up[0] / L * reach, pts[0][1] + up[1] / L * reach))
         if f < 0.22:
             pts = pts[len(pts) // 3:]
         draw(pts, w=0.9 + 0.5 * f, hand=0.3, lift=0.15, taper=0.25)
+    # the rest of the drawing keeps the random sequence it was made with
+    rng.setstate(state)
+    for _ in range(2 * (m - 1)):
+        rng.uniform(0, 1)
     poly = F.pts() + [q for seg in lower for q in seg] + list(reversed(B.pts()))
     occlude(poly)
 
@@ -312,7 +341,7 @@ def wing_lines():
             for a in np.linspace(0, math.pi, 13):
                 v = v0 + (v1 - v0) * (1 - math.cos(a)) / 2
                 pts.append(W(covert_u(row, v) + du * math.sin(a), v))
-            out.append((pts, 1.25 if row == 2 else 1.1))
+            out.append((pts, 1.55 if row == 2 else 1.1))
     # flight-feather edges inside the wing, each ending at the tip of the card above
     for k in range(1, len(CARDS)):
         a = CARDS[k][0]
@@ -611,8 +640,8 @@ def main():
     # --- legs, feet and thighs (in front of the belly)
     leg(*LEG_NEAR)
     leg(*LEG_FAR)
-    thigh([(624, 600), (631, 617), (625, 633), (612, 643)], [(566, 616), (568, 629), (576, 640), (585, 646)])
-    thigh([(572, 616), (575, 630), (566, 641), (553, 647)], [(510, 612), (512, 626), (520, 638), (530, 645)], tufts=5)
+    thigh([(624, 600), (631, 617), (625, 633), (612, 643)], [(566, 616), (568, 629), (576, 640), (585, 646)], seed=31)
+    thigh([(572, 616), (575, 630), (566, 641), (553, 647)], [(510, 612), (512, 626), (520, 638), (530, 645)], tufts=5, seed=32)
 
     # --- the wing, in front of the body and the tail
     wl = wing_lines()
@@ -720,10 +749,11 @@ def main():
     draw_tail()
 
     # --- ground
-    draw(C([(300, GROUND + 2), (420, GROUND + 1.5), (500, GROUND + 2)]), w=1.1, hand=0.8, lift=0.3)
-    draw(C([(680, GROUND + 2), (780, GROUND + 2.5)]), w=1.1, hand=0.8, lift=0.3)
-    for k, (x0, x1) in enumerate([(470, 650), (440, 610), (500, 670), (480, 590)]):
-        y = GROUND + 6 + k * 5.2
+    # ground: the line stops short of the feet, the shadow lies a little below the toes
+    draw(C([(300, GROUND + 2), (400, GROUND + 1.5), (468, GROUND + 2)]), w=1.1, hand=0.8, lift=0.3)
+    draw(C([(690, GROUND + 2), (780, GROUND + 2.5)]), w=1.1, hand=0.8, lift=0.3)
+    for k, (x0, x1) in enumerate([(470, 650), (500, 630), (488, 600)]):
+        y = GROUND + 13 + k * 5.5
         draw([(x0 + rng.uniform(-8, 8), y), (x1 + rng.uniform(-8, 8), y + rng.uniform(-0.5, 0.5))], w=0.8, hand=0.5, lift=0.3)
 
     pen.save('../16-crow.svg', mirror=True)
