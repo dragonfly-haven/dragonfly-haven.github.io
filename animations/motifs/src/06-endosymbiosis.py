@@ -1,23 +1,29 @@
 #!/usr/bin/env python3
 """06 Endosymbiosis: an Asgard archaeon taking in an alphaproteobacterium.
 
-The origin of mitochondria as a clean textbook figure in ink.
+The origin of mitochondria as a clean textbook figure in ink (reworked for
+Maxim's note "a bit cleaner, more technical, less messy").
 
 - The host: an Asgard archaeon (like Prometheoarchaeum), a roundish cell drawn
-  as a sphere cut through its middle by one tilted plane. The cut face looks
-  up and to the left, toward the light, and shows the inside on clean paper:
-  the cell membrane as a firm edge with a thin inner line, a circular
-  chromosome as one regular supercoiled loop (crossings broken where the
-  strand passes under), and ribosomes as small rings scattered evenly.
-- Inside, on the cut face, one alphaproteobacterium already taken in, its
+  as a ball with one side sliced off by a tilted plane. The cut face looks up
+  and to the left, toward the light, and shows the inside on clean paper: the
+  single cell membrane as a firm edge, the circular chromosome as one
+  regularly supercoiled loop (broken where the strand passes under itself),
+  and ribosomes as small rings scattered evenly.
+- On the cut face, one alphaproteobacterium already taken in, its
   gram-negative envelope cut through: outer and inner membrane as two clean
-  parallel lines, its own small looped genome and a few ribosomes inside.
-- The rest of the host's surface shows as a crescent on the shadow side,
-  shaded with meridians of the sphere that thin out where they converge.
-- Long, thin, smooth protrusions (some branching once) curve out from the
-  host; two of them cradle a rod-shaped bacterium at the upper right, the
-  moment it is being taken in.
-- One free bacterium nearby with a single polar flagellum.
+  parallel lines, its own small circular genome (one loop, twisted twice) and
+  a few ribosomes.
+- The rest of the ball shows as a broad crescent on the shadow side, shaded
+  with rings of the sphere parallel to the cut (as in 07): every ring in the
+  shadow, every second and fourth ring into the half-tones, never closer than
+  5 where they crowd toward the limb.
+- Long, thin, smooth protrusions (two branching once) curve out from the
+  host. At the upper right a rod-shaped bacterium sits end-first in a shallow
+  cup of the host's membrane; the membrane runs on as one line up two arms
+  that rise along the rod and curl over its edges: the moment of engulfment.
+- Two free bacteria nearby, each with a single polar flagellum, shaded with
+  lines that follow their outline on the side turned from the light.
 
 Lines are steady (low hand wobble, no pen lifts on contours) and heavier on
 the side turned from the light; everything is deterministic. Not mirrored
@@ -28,7 +34,7 @@ the side turned from the light; everything is deterministic. Not mirrored
 import math
 import random
 
-from pen import Pen, bezier, catmull, ellipse_pts, resample, dist, length
+from pen import Pen, bezier, ellipse_pts, resample, dist, length
 
 OUT = '../06-endosymbiosis.svg'
 SEED = 606
@@ -42,7 +48,6 @@ LIGHT = (LIGHT[0] / _l, LIGHT[1] / _l)
 LIGHT3 = (LIGHT[0] * 0.75, LIGHT[1] * 0.75, 0.66)   # ...and a little from the front
 
 W_HATCH = 0.75
-HATCH_GAP = 6.0
 
 
 # ---------------------------------------------------------------- helpers
@@ -461,7 +466,6 @@ ARM_B = arm(+1, 56.0, reach=12.0)
 CUP, CUP_A0, CUP_A1 = cup_membrane(ARM_A, ARM_B, math.radians(16), math.radians(21))
 _close = ellipse_pts(C[0], C[1], R, R, 0, CUP_A1, CUP_A0, step=2.0)
 CUP_REG = Region(CUP + _close[1:-1])
-ROD_REG = Region(capsule_pts(RC[0], RC[1], RA, ROD_HL, ROD_R, step=2.0))
 
 # ---- other protrusions: long, thin, gently waving, two branching once
 p_top = sprout(-98, (560, 64), -40, l0=90, l3=80, wave=5, waves=1.2)
@@ -491,7 +495,7 @@ for g in groups:
             return in_host(p) or any(p in o.region for o in others)
 
         for ol in t.outline:
-            ink_outline(ol, hide, 0.95, 1.95, sign=1)
+            ink_outline(ol, hide, 1.1, 2.1, sign=1)
 
 
 # ---- rods
@@ -532,7 +536,7 @@ def rod(cx, cy, ang, hl, r, hide=lambda p: False, flag=None):
             cut = min(len(sgm) // 4, 5)
             sgm = sgm[cut:len(sgm) - cut]
             for run in runs(sgm, hide, minlen=8):
-                ink(run, W_HATCH, hand=0.12, piece=(80, 160))
+                ink(run, 0.85, hand=0.12, piece=(80, 160))
     if flag:
         end, ln, wave, amp, bend = flag
         a = (math.cos(ang), math.sin(ang))
@@ -564,15 +568,15 @@ rod(864, 752, math.radians(-100), ROD_HL, ROD_R, hide=tube_hide,
 
 
 def face_pt(rr, phi):
-    """A point on a circle of radius rr on the cut face, and its depth (z toward the eye)."""
+    """A point on a circle of radius rr on the cut face."""
     X, Y = rr * math.cos(phi), rr * math.sin(phi)
     return plane(X, Y)
 
 
 def face_z(phi, rr=R_FACE):
-    # 3D: centre D n + rr (cos E1' + sin E2'), with the face axes in 3D
-    X, Y = rr * math.cos(phi), rr * math.sin(phi)
-    # X runs along -E2 = (-cos U, +sin) in (screen, z); Y along -E1 or E1 (z = 0)
+    """Depth (toward the eye) of the face's edge at angle phi: the face's X axis
+    climbs toward the eye by sin(TILT) per unit, its Y axis lies flat."""
+    X = rr * math.cos(phi)
     return D_CUT * COS_T + X * SIN_T
 
 
