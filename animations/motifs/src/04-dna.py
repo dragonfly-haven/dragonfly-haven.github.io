@@ -482,13 +482,18 @@ def face_strokes(cs, name, dark, far, own):
     """Even strokes along a slab's dark side face: two or three that stay parallel and at
     least 5 apart, else one heavier line down its middle; fewer on the far side."""
     (p0, p1), (q0, q1) = SIDES[name]
-    spa = dist(proj(cs[p0])[:2], proj(cs[q0])[:2])
-    spb = dist(proj(cs[p1])[:2], proj(cs[q1])[:2])
+    # the face's width on the page square to its long edges (a face seen slantwise is narrow
+    # there however long its short edges look)
+    P0, P1, Q0, Q1 = (proj(cs[j])[:2] for j in (p0, p1, q0, q1))
+    ex, ey = P1[0] - P0[0], P1[1] - P0[1]
+    L = math.hypot(ex, ey) or 1.0
+    spa = abs(ex * (Q0[1] - P0[1]) - ey * (Q0[0] - P0[0])) / L
+    spb = abs(ex * (Q1[1] - P1[1]) - ey * (Q1[0] - P1[0])) / L
     lo, hi = min(spa, spb), max(spa, spb)
     nl = min(3, int(lo / 5.5) - 1)
     if not far and nl >= 2 and hi <= 1.3 * lo:
         fr, wt = [j / (nl + 1) for j in range(1, nl + 1)], 0.9 + 0.5 * (dark - 0.45)
-    elif lo >= 3.5 and dark > (0.8 if far else 0.6):
+    elif lo >= 7.0 and dark > (0.8 if far else 0.6):     # room for it clear of the edges
         fr, wt = [0.5], (1.0 if far else 1.35)
     else:
         return

@@ -1,15 +1,18 @@
-"""03 RNA: one strand folded on itself, as an engraver would draw a physical model of it.
+"""03 RNA: one strand folded back on itself into a hairpin, as an engraver would draw a
+physical model of it.
 
-The same model and hand as 04 DNA, so 03 reads as one strand and 04 as the double
-helix. A single sugar-phosphate backbone as a solid round tube, its bases as flat
-slabs standing out of it. From its 5' end the strand comes as a loose single-stranded
-tail, its bases standing in from its sweep and turning gently along it, into the foot
-of a short stem of eleven base pairs: one turn of A-form helix, wider and more compact
-than 04's B-form, its pairs tilted, the purine of each pair the longer slab. Over the
-top pair it rounds a loop of five unpaired bases pointing in, comes back down the stem
-and is cut square at its 3' end at the foot. Modelled in 3D and drawn with a depth test;
-light from the upper left, contour lines along the tube on its shadow side, a few cross
-strokes under the bends, the slabs' dark faces lined, the cut ends shown as cut.
+The same model and hand as 04 DNA, so 03 reads as one strand and 04 as the double helix:
+a single sugar-phosphate backbone as a solid round tube, its bases as thin flat slabs
+standing out of it. From its 5' end at the lower right the strand comes as a loose
+single-stranded tail, a gentle S with five bases stacked nearly parallel and tilted along
+it, up into the foot of a short upright stem of seven base pairs: about 0.6 of a turn of
+A-form helix, wider and more compact than 04's B-form, its pairs tilted, the purine of
+each pair the longer slab. Above the top pair it rises on two short legs into an open
+round head, its plane turned to us, with seven unpaired bases pointing in; then it comes
+back down the stem as the other strand and is cut square at its 3' end, a short stub on
+the left of the foot. Modelled in 3D and drawn with a depth test; light from the upper
+left, contour lines along the tube on its shadow side, a few cross strokes under the
+bends, the slabs' dark faces lined, the cut ends shown as cut.
 """
 
 import math
@@ -244,10 +247,10 @@ def rot(v, axis, a):
 
 # ---------------------------------------------------------------- the stem: A-form
 
-AXA = math.radians(-50)                     # the stem rises up to the right in the picture
+AXA = math.radians(-88)                     # the stem stands upright, the head at the top
 TILT = math.radians(4)                      # its upper end turned a little away from us
 A3 = norm((math.cos(AXA) * math.cos(TILT), math.sin(AXA) * math.cos(TILT), -math.sin(TILT)))
-X3 = norm((-math.sin(AXA), math.cos(AXA), 0.0))
+X3 = norm((-math.sin(AXA), math.cos(AXA), 0.0))     # across the stem, to the right
 Y3 = norm(cross(A3, X3))
 if Y3[2] < 0:
     Y3 = mul(Y3, -1)
@@ -257,16 +260,22 @@ BP_PER_TURN = 11.0
 RISE = PITCH / BP_PER_TURN
 K = -2 * math.pi / PITCH                    # right-handed, as 04
 RT = 16.0                                   # the backbone tube, as 04
-NSTEM = 11                                  # base pairs in the stem
+NSTEM = 7                                   # base pairs: about 0.6 of a turn, one front crossing
 DZ = 20.0                                   # a pair's partner on strand 2 sits this much higher: tilted pairs
 DELTA = math.radians(155)                   # strand 2 round from strand 1 at one height
 SEP = DELTA + K * DZ                        # the angle a pair spans round the axis
 U_TOP = (NSTEM - 1) * RISE
-PHI = math.radians(90) - SEP / 2 - K * U_TOP   # the top pair lies square to our view, the loop above it
-O = (-150.0, 170.0, 0.0)                    # the foot of the stem's axis
-LOOP_H, LOOP_TM, LOOP_T = 105.0, 200.0, 70.0  # the loop: height over the top pair, handles
-TAIL_REF = (240, -130, 0)                   # a point the tail sweeps round
-TAIL_PTS = ((50, 105, 40), (195, 150, 30), (360, 120, 10), (490, 10, -10), (545, -150, -20))
+PHI = math.radians(20)                      # strand 1 at the foot pair: on the front, to the right;
+                                            # strand 2 there on the front to the left (20 + SEP)
+O = (0.0, 150.0, 0.0)                       # the foot of the stem's axis
+RL = 165.0                                  # the head: radius of the loop's centreline (with the
+                                            # tube about 1.3 times the stem's width)
+LEG = 24.0                                  # the legs rise this far from the top pair to the head
+HEAD_Z = -25.0                              # the head's plane faces us, a little behind the axis
+# the 5' tail: a gentle S drooping off the stem's foot: on down the way the strand leaves the
+# helix, then round under the foot and away to the right (offsets from where it leaves the
+# helix: right, down, toward us)
+TAIL_PTS = ((-30, 58, 36), (-12, 122, 26), (50, 170, 12), (144, 188, 0), (232, 203, -8), (302, 222, -14))
 
 
 def hpos(u, th, r=R):
@@ -287,31 +296,49 @@ def dfd(f, u, sg=1):
 
 # ---------------------------------------------------------------- the whole strand, 5' to 3'
 
-E = 16.0                                    # the strand runs on a little past the end pairs
-E3 = 4.0                                    # its 3' end: cut square on the front, before the turn
-ET = 10.0                                   # at the top the loop takes over at once
-# the 5' tail: out of the stem's foot, round to the right in one long easy sweep (built
-# outward from the foot, then turned round to run 5' to 3')
+E = 18.0                                    # the 5' strand runs on past the foot pair, then leaves
+ET = 8.0                                    # at the top the legs take over at once
+# the 5' tail, built outward from the foot and then turned round to run 5' to 3'
 p5 = s1(-E)
 t5 = mul(dfd(s1, -E), -1)                   # outward, toward the 5' end
 TAIL = [add(p5, q) for q in TAIL_PTS]
-tail = hermite(p5, mul(t5, 110), TAIL[0], mul(norm(sub(TAIL[1], p5)), 200), 30)
+tail = hermite(p5, mul(t5, 70), TAIL[0], mul(norm(sub(TAIL[1], p5)), 90), 30)
 for a, b, c0, c1 in zip(TAIL, TAIL[1:], [None] + TAIL, TAIL[2:] + [None]):
     ma = mul(sub(b, c0 if c0 else a), 0.5 if c0 else 1.0)
     mb = mul(sub(c1 if c1 else b, a), 0.5 if c1 else 1.0)
     tail += hermite(a, ma, b, mb, 30)[1:]
 tail = tail[::-1]
 up = [s1(u) for u in [(-E) + j * 2.0 for j in range(int((U_TOP + E + ET) / 2.0) + 1)]]
-# the loop over the top pair: a round arch
+# the head: a round loop lifted clear above the top pair, its plane facing us, on two legs
 P1, T1 = s1(U_TOP + ET), dfd(s1, U_TOP + ET)
 P2, T2 = s2(U_TOP + DZ + ET), dfd(s2, U_TOP + DZ + ET, -1)
-mid_top = lerp3(P1, P2, 0.5)
-PM = add(mid_top, mul(A3, LOOP_H), mul(Y3, 10))
-TM = mul(norm(sub(P2, P1)), LOOP_TM)
-loop = hermite(P1, mul(T1, LOOP_T), PM, TM, 40)[1:] + hermite(PM, TM, P2, mul(T2, LOOP_T), 40)[1:]
-down = [s2(u) for u in [U_TOP + DZ + ET - j * 2.0 for j in range(int((U_TOP + ET + E3) / 2.0) + 1)]]
-pe = down[-1]
-rough = tail + up[1:] + loop + down[1:]
+X1, X2 = dot(sub(P1, O), X3), dot(sub(P2, O), X3)
+PHI0 = math.asin(((X2 - X1) / 2 + 20) / RL)  # the round meets its legs a little outside the strands' tops
+HC = add(O, mul(A3, U_TOP + DZ / 2 + ET + LEG + RL * math.cos(PHI0)), mul(X3, (X1 + X2) / 2), mul(Y3, HEAD_Z))
+
+
+def head(psi):
+    """The head's round, psi from its lowest point, positive to the right."""
+    return add(HC, mul(X3, RL * math.sin(psi)), mul(A3, -RL * math.cos(psi)))
+
+
+def head_t(psi):
+    """Its direction of travel (psi decreasing: up the left, over, down the right)."""
+    return norm(mul(add(mul(X3, math.cos(psi)), mul(A3, math.sin(psi))), -1))
+
+
+PSI0, PSI1 = -PHI0, -(2 * math.pi - PHI0)
+round_ = [head(PSI0 + (PSI1 - PSI0) * j / 120) for j in range(121)]
+# each leg leaves the helix heading straight for the round, so it bends once, into the round
+leg1 = hermite(P1, mul(norm(sub(round_[0], P1)), 30), round_[0], mul(head_t(PSI0), 50), 30)
+leg2 = hermite(round_[-1], mul(head_t(PSI1), 50), P2, mul(norm(sub(P2, round_[-1])), 30), 30)
+loop = leg1[1:] + round_[1:] + leg2[1:]
+down = [s2(u) for u in [U_TOP + DZ + ET - j * 2.0 for j in range(int((U_TOP + ET + 6) / 2.0) + 1)]]
+# the 3' end: a short stub hanging off the foot on the left, cut square
+pe, te = down[-1], dfd(s2, DZ - 6, -1)
+STUB_END = add(pe, mul(A3, -52), mul(X3, -14), mul(Y3, 8))
+stub = hermite(pe, mul(te, 40), STUB_END, mul(norm(add(mul(A3, -1), mul(X3, -0.25))), 40), 16)
+rough = tail + up[1:] + loop + down[1:] + stub[1:]
 C = smooth3(resample3(rough, 1.4), 6)
 NC = len(C)
 
@@ -378,11 +405,11 @@ for smp in (S[0], S[-1]):                   # the cut faces, as discs
 SLAB_T = 6.0                                # as 04
 SLAB_W = 17.0
 GAP = 2.0
-SEQ1 = 'GGCAUCGCAGC'                         # the stem's 5' side, foot to top
+SEQ1 = 'GGCAUCC'                             # the stem's 5' side, foot to top
 PAIR = {'G': 'C', 'C': 'G', 'A': 'U', 'U': 'A'}
-LOOP_SEQ = 'GAAAU'
-TAIL_SEQ = 'ACCUAGUCAGAUCG'
-REACH = {True: 92.0, False: 76.0}           # an unpaired purine reaches further than a pyrimidine
+LOOP_SEQ = 'UGAAAGU'
+TAIL_SEQ = 'ACUAGC'
+REACH = {True: 86.0, False: 70.0}           # an unpaired purine reaches further than a pyrimidine
 
 
 def purine(b):
@@ -417,9 +444,10 @@ for k in range(NSTEM):
 
 
 def single(i, b, roll):
-    """An unpaired base standing out of the tube at sample i, toward b, turned by roll about itself."""
+    """An unpaired base standing out of the tube at sample i toward b: a thin flat slab, stacked
+    along the strand (its thin side along it), its broad side turned to us, rolled a touch."""
     c, t = S[i]['c'], S[i]['t']
-    dd = norm(sub(b, mul(t, dot(b, t))))
+    dd = norm(b)
     tv0 = norm(sub(t, mul(dd, dot(t, dd))))
     wv0 = cross(dd, tv0)
     tv = add(mul(tv0, math.cos(roll)), mul(wv0, math.sin(roll)))
@@ -427,37 +455,38 @@ def single(i, b, roll):
     return dd, wv, tv
 
 
-# loop bases, evenly along the loop, pointing in toward its middle
-i_top1, i_top2 = stem_idx[-2], stem_idx[-1]
-QC = add(mid_top, mul(A3, LOOP_H * 0.42))
-for j, b in enumerate(LOOP_SEQ):
-    s = SARC[i_top1] + (SARC[i_top2] - SARC[i_top1]) * (j + 1) / (len(LOOP_SEQ) + 1)
-    i = min(range(i_top1, i_top2), key=lambda q: abs(SARC[q] - s))
-    dd, wv, tv = single(i, sub(QC, S[i]['c']), math.radians(25 * math.sin(1.3 * j + 0.4)))
-    c = S[i]['c']
-    box(add(c, mul(dd, RT * 0.4)), add(c, mul(dd, REACH[purine(b)] * 0.86)), wv, tv)
+ROLL = math.radians(8)                      # the same small roll on every unpaired base: lit alike
+SP_NT = 57.0                                # nucleotide to nucleotide along the tail
 
-# the 5' tail's bases, standing in from its sweep on the lit side, turning gently along it
+# the head's bases, evenly round it, short, pointing in, leaning a little the same way
+i_top1, i_top2 = stem_idx[-2], stem_idx[-1]
+i_h0, i_h1 = nearest(round_[0], i_top1, i_top2), nearest(round_[-1], i_top1, i_top2)
+for j, b in enumerate(LOOP_SEQ):
+    s = SARC[i_h0] + (SARC[i_h1] - SARC[i_h0]) * (j + 0.5) / len(LOOP_SEQ)
+    i = min(range(i_h0, i_h1), key=lambda q: abs(SARC[q] - s))
+    inward = norm(sub(HC, S[i]['c']))
+    dd, wv, tv = single(i, rot(inward, norm(cross(X3, A3)), math.radians(12)), ROLL)
+    c = S[i]['c']
+    box(add(c, mul(dd, RT * 0.4)), add(c, mul(dd, REACH[purine(b)] * 0.95)), wv, tv)
+
+# the tail's bases: on its upper, lit side, nearly parallel (stacked), leaning toward the 5' end
 i5 = stem_idx[0]
-SP_NT = 64.0
-singles = []
-REF = add(p5, TAIL_REF)
-s = SARC[i5] - 1.5 * SP_NT                  # the first clear of the stem's foot
+STACK = norm((-0.55, -0.83, 0.0))           # up and a little left in the picture
+LEAN = norm((0.72, -0.69, 0.0))             # their common lean: up and a little toward the 5' end
+s = SARC[i5] - 235.0                        # the first just past the bend under the foot
 j = 0
-while s > 30 and j < len(TAIL_SEQ):
+while s > 40 and j < len(TAIL_SEQ):
     i = min(range(0, i5), key=lambda q: abs(SARC[q] - s))
     t = S[i]['t']
-    out = norm(cross(t, (0, 0, 1)))         # across the strand in the picture ...
-    if dot(out, sub(S[i]['c'], REF)) > 0:
-        out = mul(out, -1)                  # ... to the inside of its sweep, the lit side
-    out = rot(out, t, math.radians(-10 + 50 * math.sin(0.75 * j + 0.3)))   # tipped to and from us
-    singles.append((i, TAIL_SEQ[::-1][j], out, math.radians(40 * math.cos(0.6 * j))))
+    side = norm(cross(t, (0, 0, 1)))
+    if dot(side, STACK) < 0:
+        side = mul(side, -1)
+    lean = norm(add(mul(side, 0.35), mul(LEAN, 0.65)))   # nearly parallel, leaning toward the 5' end
+    dd, wv, tv = single(i, lean, ROLL)
+    c = S[i]['c']
+    box(add(c, mul(dd, RT * 0.4)), add(c, mul(dd, REACH[purine(TAIL_SEQ[::-1][j])])), wv, tv)
     s -= SP_NT
     j += 1
-for i, b, direction, roll in singles:
-    dd, wv, tv = single(i, direction, roll)
-    c = S[i]['c']
-    box(add(c, mul(dd, RT * 0.4)), add(c, mul(dd, REACH[purine(b)])), wv, tv)
 
 FACES = [((0, 1, 3, 2), 'root'), ((4, 6, 7, 5), 'tip'), ((0, 4, 5, 1), 'w-'), ((2, 3, 7, 6), 'w+'),
          ((0, 2, 6, 4), 't-'), ((1, 5, 7, 3), 't+')]
@@ -610,13 +639,18 @@ def face_strokes(cs, name, dark, far, own):
     """Even strokes along a slab's dark side face: two or three that stay parallel and at
     least 5 apart, else one heavier line down its middle; fewer on the far side."""
     (p0, p1), (q0, q1) = SIDES[name]
-    spa = dist(proj(cs[p0])[:2], proj(cs[q0])[:2])
-    spb = dist(proj(cs[p1])[:2], proj(cs[q1])[:2])
+    # the face's width on the page square to its long edges (a face seen slantwise is narrow
+    # there however long its short edges look)
+    P0, P1, Q0, Q1 = (proj(cs[j])[:2] for j in (p0, p1, q0, q1))
+    ex, ey = P1[0] - P0[0], P1[1] - P0[1]
+    L = math.hypot(ex, ey) or 1.0
+    spa = abs(ex * (Q0[1] - P0[1]) - ey * (Q0[0] - P0[0])) / L
+    spb = abs(ex * (Q1[1] - P1[1]) - ey * (Q1[0] - P1[0])) / L
     lo, hi = min(spa, spb), max(spa, spb)
     nl = min(3, int(lo / 5.5) - 1)
     if not far and nl >= 2 and hi <= 1.3 * lo:
         fr, wt = [j / (nl + 1) for j in range(1, nl + 1)], 0.9 + 0.5 * (dark - 0.45)
-    elif lo >= 3.5 and dark > (0.8 if far else 0.6):
+    elif lo >= 7.0 and dark > (0.8 if far else 0.6):     # room for it clear of the edges
         fr, wt = [0.5], (1.0 if far else 1.35)
     else:
         return
@@ -649,7 +683,7 @@ xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
 SCALE = 1.15                                # the backbone tube about 19 wide on the page in 03 and 04
-NUDGE = (0.0, 0.0)
+NUDGE = (40.0, 0.0)                         # the head is the heavier part: set it nearer the middle
 pen.strokes = [([((x - cx) * SCALE + 500 + NUDGE[0], (y - cy) * SCALE + 500 + NUDGE[1]) for x, y in p], w)
                for p, w in pen.strokes]
 pen.save('../03-rna.svg', mirror=False)
