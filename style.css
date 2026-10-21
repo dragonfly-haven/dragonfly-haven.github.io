@@ -12,6 +12,14 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "EB Garamond";
+  src: url("fonts/eb-garamond-latin-400-italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
   --ivory: #fffdf6;
   --ink: #2b2a27;
@@ -98,7 +106,7 @@ main {
   font-weight: 500;
 }
 
-.mail {
+.about a {
   color: var(--ink);
   text-decoration-color: var(--muted);
   text-decoration-thickness: 1px;
@@ -106,8 +114,8 @@ main {
   transition: text-decoration-color 0.2s;
 }
 
-.mail:hover,
-.mail:focus-visible {
+.about a:hover,
+.about a:focus-visible {
   text-decoration-color: var(--ink);
   text-decoration-thickness: 2px;
 }
