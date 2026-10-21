@@ -53,7 +53,18 @@
         9
       ],
       "maxim": "more sleek and regular: yes",
-      "note": "rework after Maxim's notes: exact B-DNA geometry; polished: far bars stop short of the ribbon edge, far strand tucks behind at the foot"
+      "note": "rework after Maxim's notes: exact B-DNA geometry; polished: far bars stop short of the ribbon edge, far strand tucks behind at the foot",
+      "rework2": {
+        "round": "s1",
+        "scores": [
+          8,
+          8,
+          8
+        ],
+        "maxim": "a different direction, closer to the others: clear yes",
+        "passed": true,
+        "note": "solid engraved model; fixes asked: re-cut both ends (no hook, flat cut faces), ease dark slab faces, calm the ribbing"
+      }
     },
     "prokaryotic-cell": {
       "passed": true,
