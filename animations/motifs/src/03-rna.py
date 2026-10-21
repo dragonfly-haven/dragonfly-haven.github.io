@@ -4,10 +4,12 @@ physical model of it.
 The same model and hand as 04 DNA, so 03 reads as one strand and 04 as the double helix:
 a single sugar-phosphate backbone as a solid round tube, its bases as thin flat slabs
 standing out of it. From its 5' end at the lower right the strand comes as a loose
-single-stranded tail, a gentle S with seven bases along it whose angles open out round
-the bends, up into the foot of an upright stem of eight base pairs: an A-form helix (A',
-twelve pairs a turn), wider than 04's B-form, its pairs tilted, the purine of each pair
-the longer slab, with one front crossing. From the top pair the strand goes straight on
+single-stranded tail, a gentle S with seven bases along it, evenly spaced as they stand,
+whose angles open out round the bend and then rise steadily toward the tip, up into the
+foot of an upright stem of eight base pairs: an A-form helix (A', twelve pairs a turn),
+wider than 04's B-form, its pairs tilted, the purine of each pair the longer slab, with
+one front crossing (the two pairs behind it left out, the back strand showing through
+there). From the top pair the strand goes straight on
 round a low dome a little narrower than the stem, flaring into it: three bases stacked on
 its 5' side as if the stem went on, two near the crown pointing in and down, one flipped
 out on the 3' side, the middle clear. Then it comes back down the stem as the other strand
@@ -276,7 +278,7 @@ O = (0.0, 150.0, 0.0)                       # the foot of the stem's axis
 # the head: a low dome straight off the top pair, a little narrower than the stem, its crown
 # set a touch to the left and its right side further from us (coordinates across, up from the
 # top pair, toward us, relative to the stem's axis)
-HEAD_PTS = ((-110, 50, 34), (-94, 104, 18), (-60, 144, 2), (-10, 162, -10), (40, 150, -20), (80, 108, -28), (102, 54, -30))
+HEAD_PTS = ((-110, 50, 34), (-94, 104, 18), (-60, 144, 2), (-10, 162, -10), (40, 150, -20), (76, 108, -28), (104, 50, -30))
 # the 5' tail: drooping off the stem's foot the way the strand leaves the helix, round under
 # the foot and away to the right (offsets from where it leaves the helix: right, down, toward us)
 TAIL_PTS = ((-30, 54, 36), (-10, 112, 26), (52, 156, 12), (146, 172, 0), (234, 184, -8), (304, 200, -14))
@@ -327,8 +329,10 @@ P1, T1 = s1(U_TOP + ET), dfd(s1, U_TOP + ET)
 P2, T2 = s2(U_TOP + DZ + ET), dfd(s2, U_TOP + DZ + ET, -1)
 HB = add(O, mul(A3, U_TOP))                 # the head's points are measured from here
 HEAD = [add(HB, mul(X3, x), mul(A3, h), mul(Y3, z)) for x, h, z in HEAD_PTS]
-# (each end leaves along the helix turned up toward the dome, so it bends once, into the dome)
-loop = spline([P1] + HEAD + [P2], mul(norm(add(T1, mul(A3, 1.2))), 45), mul(norm(add(T2, mul(A3, -1.2))), 45))[1:]
+# (each end leaves along the helix turned up toward the dome, so it bends once, into the dome;
+# the right side comes down onto the 3' strand nearly in its own line, so the tube there stays
+# one even thickness round into the stem)
+loop = spline([P1] + HEAD + [P2], mul(norm(add(T1, mul(A3, 1.2))), 45), mul(norm(add(T2, mul(A3, -0.4))), 45))[1:]
 down = [s2(u) for u in [U_TOP + DZ + ET - j * 2.0 for j in range(int((U_TOP + ET + 12) / 2.0) + 1)]]
 # the 3' end: a short stub hanging off the foot on the left, cut square
 pe, te = down[-1], dfd(s2, DZ - 12, -1)
@@ -424,12 +428,17 @@ def box(a0, a1, wv, tv):
     slabs.append((len(slabs), cs, norm(sub(a1, a0)), wv, tv))
 
 
-# the stem's pairs: two slabs meeting end to end, the purine the longer
+# the stem's pairs: two slabs meeting end to end, the purine the longer. The two in the middle,
+# behind the front crossing, are left out: the front strand would hide nearly all of them and
+# leave only broken pieces, so the back strand shows there instead
+NO_PAIR = (3, 4)
 stem_idx = []
 for k in range(NSTEM):
     u = k * RISE
     pa, pb = s1(u), s2(u + DZ)
     stem_idx += [nearest(pa), nearest(pb)]
+    if k in NO_PAIR:
+        continue
     f = 0.5 + (0.08 if purine(SEQ1[k]) else -0.08)
     m = lerp3(pa, pb, f)
     d = norm(sub(pb, pa))
@@ -452,7 +461,6 @@ def single(i, b, roll):
 
 
 ROLL = math.radians(8)                      # the same small roll on most unpaired bases: lit alike
-SP_NT = 62.0                                # nucleotide to nucleotide along the tail
 
 
 def height(p):
@@ -477,26 +485,58 @@ for f, b, out, turn in ((0.50, 'U', False, 0), (0.67, 'C', False, 0), (0.84, 'A'
     c = S[i]['c']
     d = norm(sub(c, HI)) if out else norm(add(norm(sub(HI, c)), mul(A3, -1.0)))   # in ones lean down
     dd, wv, tv = single(i, rot(d, norm(cross(X3, A3)), math.radians(turn)), ROLL)
-    box(add(c, mul(dd, RT * 0.4)), add(c, mul(dd, LOOP_REACH[purine(b)] * (1.1 if out else 1.0))), wv, tv)
+    box(add(c, mul(dd, RT * 0.4)), add(c, mul(dd, LOOP_REACH[purine(b)] * (0.88 if out else 1.0))), wv, tv)
 
-# the tail's bases, all along it from near the foot: on the side away from the stem (to the
-# right going down, on top going out), all leaning up and to the right, so their angles open
-# out round the bends without crowding; two of them turned a little toward us
+# the tail's bases, all along it from near the foot, on the side away from the stem (to the
+# right going down, on top going out), evenly spaced as they stand: their middles as far apart
+# round the bend, where they close up like a fan, as along the straight. Their angle to the
+# strand opens out round the bend, then on the straight rises steadily from a lean toward the
+# 5' end to nearly upright at the tip; three of them turned a little toward us
 i5 = stem_idx[0]
-UPRIGHT = norm((0.55, -0.83, 0.0))
-s = SARC[i5] - 75.0
-j = 0
-while s > 40 and j < len(TAIL_SEQ):
-    i = min(range(0, i5), key=lambda q: abs(SARC[q] - s))
-    t = S[i]['t']
-    o = norm((-t[0], -t[1], 0.0))           # outward along the tail, in the picture
-    side = (o[1], -o[0], 0.0)
-    roll = math.radians({0: -34, 1: -20, 2: 48, 5: 48}.get(j, 8))   # the first two turned edge-on near the foot
-    dd, wv, tv = single(i, add(norm(side), mul(UPRIGHT, 1.0)), roll)
+PA = [0.0]                                  # arc length along the strand in the picture, from the 5' end
+for a, b in zip(C, C[1:]):
+    PA.append(PA[-1] + dist(proj(a)[:2], proj(b)[:2]))
+TAIL_REL = (135, 112, 86, 55, 63, 72, 80)   # each base's angle to the strand toward the 5' end, in the picture
+TAIL_ROLL = (-34, -20, 48, 8, -26, 48, 8)   # the first two edge-on near the foot, three turned toward us
+TIP_GAP = 45.0                              # the last base this far from the 5' end, in the picture
+
+
+def tail_dir(j, i):
+    a, b = proj(C[min(i5, i + 3)]), proj(C[max(0, i - 3)])
+    ang = math.atan2(b[1] - a[1], b[0] - a[0]) - math.radians(TAIL_REL[j])    # turned up from the strand
+    return (math.cos(ang), math.sin(ang), 0.0), REACH[purine(TAIL_SEQ[::-1][j])]
+
+
+def tail_mid(j, i):
+    dd, L = tail_dir(j, i)
+    return proj(add(C[i], mul(dd, (RT * 0.4 + L) / 2)))[:2]
+
+
+def tail_place(D):
+    at = [min(range(0, i5), key=lambda q: abs(SARC[q] - (SARC[i5] - 75.0)))]
+    m = tail_mid(0, at[0])
+    for j in range(1, len(TAIL_SEQ)):
+        i = at[-1] - 1
+        while i > 0 and dist(tail_mid(j, i), m) < D:
+            i -= 1
+        at.append(i)
+        m = tail_mid(j, i)
+    return at
+
+
+lo_d, hi_d = 30.0, 120.0                    # the widest even spacing that still fits
+for _ in range(30):
+    D = (lo_d + hi_d) / 2
+    if PA[tail_place(D)[-1]] >= TIP_GAP:
+        lo_d = D
+    else:
+        hi_d = D
+TAIL_AT = tail_place(lo_d)
+for j, i in enumerate(TAIL_AT):
+    b, L = tail_dir(j, i)
+    dd, wv, tv = single(i, b, math.radians(TAIL_ROLL[j]))
     c = S[i]['c']
-    box(add(c, mul(dd, RT * 0.4)), add(c, mul(dd, REACH[purine(TAIL_SEQ[::-1][j])])), wv, tv)
-    s -= SP_NT
-    j += 1
+    box(add(c, mul(dd, RT * 0.4)), add(c, mul(dd, L)), wv, tv)
 
 FACES = [((0, 1, 3, 2), 'root'), ((4, 6, 7, 5), 'tip'), ((0, 4, 5, 1), 'w-'), ((2, 3, 7, 6), 'w+'),
          ((0, 2, 6, 4), 't-'), ((1, 5, 7, 3), 't+')]
@@ -594,7 +634,7 @@ def draw_tube(S, own, tzf):
                     draw(run, None, own, ids=rid, hand=0.15)
                 run, rid = [], []
     # cross strokes round the tube in the core shadow on the underside of each bend:
-    # three to five, centred on the bend's tightest point, none near the ends
+    # up to three, centred on the bend's tightest point, none near the ends
     cands = []
     run_len, last = 0.0, None
     for s in S[40:-40]:
@@ -630,7 +670,7 @@ def draw_tube(S, own, tzf):
         if len(g) < 3:
             continue
         core = min(g, key=lambda q: q[1])[0]
-        for i, rb, arc, aid in sorted(g, key=lambda q: abs(q[0] - core))[:5]:
+        for i, rb, arc, aid in sorted(g, key=lambda q: abs(q[0] - core))[:3]:
             draw(arc, None, own, ids=aid, hand=0.08)
 
 
