@@ -1,20 +1,20 @@
-"""04 DNA: the double helix, drawn as a precise textbook engraving.
+"""04 DNA: the double helix as an engraver would draw a physical model of it.
 
-Right-handed B-DNA on a diagonal: two sugar-phosphate backbones as flat
-ribbons of constant width wound on one cylinder, at constant radius and
-pitch; ten base pairs a turn as evenly spaced bars across the helix, each
-split at its middle (one base from each strand); the strands offset round
-the helix so a wide (major) and a narrow (minor) groove repeat identically
-every turn. Modelled in 3D and drawn front to back with a depth test. The
-far side of each ribbon, seen through the helix, carries even parallel
-hatching; the near side is left clean. Both strands end square at the same
-base pair. Sure, low-wobble lines without lifts: the set's diagram hand
-(see 03 RNA, its pair).
+Right-handed B-DNA, ten and a half base pairs a turn, a little over two turns
+on a diagonal, its upper end turned a little away from us (mild perspective).
+The two sugar-phosphate backbones are solid round tubes wound on one
+cylinder, offset round it so a narrow (minor) and a wide (major) groove
+repeat every turn. The bases are flat slabs, two to a pair, meeting near the
+middle; the pair planes lie square across the axis, so as the helix turns a
+slab is seen as a bar, or tipped to show its face. Modelled in 3D and drawn
+with a depth test, near parts over far ones. Shading as in 05 and 07: light
+from the upper left, contour hatching along each tube on its shadow side,
+heavier in the core of the shadow, parallel strokes on the slabs' dark faces.
 """
 
 import math
 
-from pen import Pen, dist, lerp, inside, length, resample
+from pen import Pen, dist, lerp, length, resample
 
 pen = Pen(seed=404)
 
@@ -25,12 +25,24 @@ def add(*vs):
     return tuple(sum(c) for c in zip(*vs))
 
 
+def sub(a, b):
+    return tuple(x - y for x, y in zip(a, b))
+
+
 def mul(v, k):
     return tuple(c * k for c in v)
 
 
+def dot(a, b):
+    return sum(x * y for x, y in zip(a, b))
+
+
+def cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
 def norm(v):
-    L = math.sqrt(sum(c * c for c in v)) or 1.0
+    L = math.sqrt(dot(v, v)) or 1.0
     return tuple(c / L for c in v)
 
 
@@ -38,99 +50,130 @@ def lerp3(a, b, t):
     return tuple(x + (y - x) * t for x, y in zip(a, b))
 
 
-class Depth:
-    """Occluders with depth: a 2D polygon, its depth (z, larger is nearer) and a tag.
-    A point is hidden when it falls inside a nearer polygon not excused by its tag."""
+# ---------------------------------------------------------------- camera
 
-    def __init__(self, cell=40):
+FOCAL = 2600.0                              # eye distance: mild perspective
+EYE = (0.0, 0.0, FOCAL)                     # x right, y down, z toward us
+
+
+def proj(p):
+    """Picture point (x, y) and depth z (larger is nearer) of a model point."""
+    k = FOCAL / (FOCAL - p[2])
+    return (500 + p[0] * k, 500 + p[1] * k, p[2])
+
+
+def view(p):
+    return norm(sub(EYE, p))
+
+
+LIGHT = norm((-0.5, -0.62, 0.6))            # from the upper left, a little in front
+
+# ---------------------------------------------------------------- depth test (triangles)
+
+
+class Depth:
+    """Triangles in the picture with a depth at each corner; a point is hidden when a
+    triangle over it is nearer there (interpolated), unless its tag is excused."""
+
+    def __init__(self, cell=30):
         self.cell = cell
         self.grid = {}
-        self.items = []
+        self.tris = []
 
-    def add(self, poly, z, tag=None):
-        xs = [p[0] for p in poly]
-        ys = [p[1] for p in poly]
+    def add(self, a, b, c, tag):
+        xs, ys = (a[0], b[0], c[0]), (a[1], b[1], c[1])
         bb = (min(xs), min(ys), max(xs), max(ys))
-        k = len(self.items)
-        self.items.append((poly, bb, z, tag))
-        c = self.cell
-        for gx in range(int(bb[0] // c), int(bb[2] // c) + 1):
-            for gy in range(int(bb[1] // c), int(bb[3] // c) + 1):
+        det = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(det) < 1e-6:
+            return
+        k = len(self.tris)
+        self.tris.append((a, b, c, det, bb, tag))
+        s = self.cell
+        for gx in range(int(bb[0] // s), int(bb[2] // s) + 1):
+            for gy in range(int(bb[1] // s), int(bb[3] // s) + 1):
                 self.grid.setdefault((gx, gy), []).append(k)
 
-    def hidden(self, p, z, skip=None, eps=0.8):
-        c = self.cell
-        for k in self.grid.get((int(p[0] // c), int(p[1] // c)), ()):
-            poly, bb, zo, tag = self.items[k]
-            if zo <= z + eps:
-                continue
+    def quad(self, a, b, c, d, tag):
+        self.add(a, b, c, tag)
+        self.add(a, c, d, tag)
+
+    def hidden(self, p, skip=None, eps=1.0):
+        s = self.cell
+        for k in self.grid.get((int(p[0] // s), int(p[1] // s)), ()):
+            a, b, c, det, bb, tag = self.tris[k]
             if not (bb[0] <= p[0] <= bb[2] and bb[1] <= p[1] <= bb[3]):
                 continue
-            if skip and skip(tag):
+            l1 = ((b[1] - c[1]) * (p[0] - c[0]) + (c[0] - b[0]) * (p[1] - c[1])) / det
+            l2 = ((c[1] - a[1]) * (p[0] - c[0]) + (a[0] - c[0]) * (p[1] - c[1])) / det
+            l3 = 1 - l1 - l2
+            if l1 < -1e-9 or l2 < -1e-9 or l3 < -1e-9:
                 continue
-            if inside(p, poly):
+            z = l1 * a[2] + l2 * b[2] + l3 * c[2]
+            if z > p[2] + eps and not (skip and skip(tag)):
                 return True
         return False
 
-    def runs(self, pts3, skip=None, eps=0.8, step=1.2, force=(), minlen=3.0, ids=None):
-        """Visible runs of a 3D polyline, as lists of (x, y, z). With `ids` (a number per
-        point, such as its sample index), skip is asked about (tag, id) for each point."""
+    def runs(self, pts, skip=None, eps=1.0, step=1.2, minlen=3.0, ids=None):
+        """Visible runs of a projected polyline (points (x, y, z)). With ids, skip is
+        asked about (tag, id) at each point."""
         fine, fid = [], []
-        for i in range(len(pts3) - 1):
-            a, b = pts3[i], pts3[i + 1]
-            n = max(1, int(dist(a, b) / step))
+        for i in range(len(pts) - 1):
+            a, b = pts[i], pts[i + 1]
+            n = max(1, int(math.hypot(b[0] - a[0], b[1] - a[1]) / step))
             for j in range(n):
                 fine.append(lerp3(a, b, j / n))
-                fid.append(ids[i] + (ids[i + 1] - ids[i]) * j / n if ids else None)
-        fine.append(pts3[-1])
-        fid.append(ids[-1] if ids else None)
+                fid.append(None if ids is None else ids[i] + (ids[i + 1] - ids[i]) * j / n)
+        fine.append(pts[-1])
+        fid.append(None if ids is None else ids[-1])
         out, cur = [], []
         for p, q in zip(fine, fid):
-            hid = any(bb[0] <= p[0] <= bb[2] and bb[1] <= p[1] <= bb[3] and inside(p[:2], poly) for poly, bb in force)
-            sk = skip if q is None else (lambda t, q=q: skip(t, q))
-            if not hid and not self.hidden(p[:2], p[2], sk, eps):
+            sk = skip if q is None or skip is None else (lambda t, q=q: skip(t, q))
+            if not self.hidden(p, sk, eps):
                 cur.append(p)
             elif cur:
                 out.append(cur)
                 cur = []
         if cur:
             out.append(cur)
-        return [r for r in out if length([q[:2] for q in r]) > minlen]
+        return [r for r in out if length([x[:2] for x in r]) > minlen]
 
+
+depth = Depth()
 
 # ---------------------------------------------------------------- the sure line
 
 
-def ink(pts3, wz, hand=0.2, seg=26.0):
-    """A sure line through 3D points: a faint slow wobble, no lifts, and a weight
-    that follows depth smoothly (wz maps z to a weight)."""
-    pts = [p[:2] for p in pts3]
-    total = length(pts)
+def ink(pts, w, hand=0.25, seg=24.0):
+    """A sure line through projected points: a faint slow wobble, no lifts, and a weight
+    w(z) that may follow depth; with w None each point carries its own weight (x, y, z, w)."""
+    p2 = [q[:2] for q in pts]
+    total = length(p2)
     if total < 1.0:
         return
     n = max(2, int(total / 1.5))
-    fine, zs = [], []
-    # resample in step with the depths
     acc = [0.0]
-    for i in range(1, len(pts)):
-        acc.append(acc[-1] + dist(pts[i - 1], pts[i]))
+    for i in range(1, len(p2)):
+        acc.append(acc[-1] + dist(p2[i - 1], p2[i]))
+    fine, zs, wl = [], [], []
     j = 0
     for k in range(n + 1):
         s = total * k / n
-        while j < len(pts) - 2 and acc[j + 1] < s:
+        while j < len(p2) - 2 and acc[j + 1] < s:
             j += 1
         t = (s - acc[j]) / ((acc[j + 1] - acc[j]) or 1)
-        fine.append(lerp(pts[j], pts[j + 1], t))
-        zs.append(pts3[j][2] + (pts3[j + 1][2] - pts3[j][2]) * t)
+        fine.append(lerp(p2[j], p2[j + 1], t))
+        zs.append(pts[j][2] + (pts[j + 1][2] - pts[j][2]) * t)
+        if len(pts[j]) > 3:
+            wl.append(pts[j][3] + (pts[j + 1][3] - pts[j][3]) * t)
     if hand > 0:
-        ph, fq = pen.r(0, 6.3), pen.r(0.005, 0.01)
+        ph, fq = pen.r(0, 6.3), pen.r(0.006, 0.012)
         moved = []
         for k, p in enumerate(fine):
             s = total * k / n
             a, b = fine[max(0, k - 1)], fine[min(n, k + 1)]
             dx, dy = b[0] - a[0], b[1] - a[1]
             L = math.hypot(dx, dy) or 1
-            off = hand * math.sin(s * fq * 2 * math.pi + ph) * min(1.0, s / 10, (total - s) / 10)
+            off = hand * math.sin(s * fq * 2 * math.pi + ph) * min(1.0, s / 8, (total - s) / 8)
             moved.append((p[0] + dy / L * off, p[1] - dx / L * off))
         fine = moved
     m = max(1, int(round(total / seg)))
@@ -138,283 +181,254 @@ def ink(pts3, wz, hand=0.2, seg=26.0):
         k0, k1 = n * q // m, n * (q + 1) // m
         piece = fine[k0:k1 + 1]
         if len(piece) >= 2:
-            pen.raw(piece, wz(sum(zs[k0:k1 + 1]) / (k1 - k0 + 1)))
+            z = sum(zs[k0:k1 + 1]) / (k1 - k0 + 1)
+            if w is None:
+                ww = sum(wl[k0:k1 + 1]) / (k1 - k0 + 1)      # the weight rides on the points
+            elif callable(w):
+                ww = w(z)
+            else:
+                ww = w
+            pen.raw(piece, max(0.6, min(3.0, ww)))
 
 
-def zw(lo, hi):
-    """Weight from depth: lo at the back of the helix, hi at its front."""
-    return lambda z: lo + (hi - lo) * max(0.0, min(1.0, (z / R + 1) / 2))
+def draw(pts, w, skip=None, eps=1.0, hand=0.25, minlen=3.0, ids=None):
+    for run in depth.runs(pts, skip, eps, minlen=minlen, ids=ids):
+        ink(run, w, hand=hand)
 
 
 # ---------------------------------------------------------------- the helix
 
-AXA = math.radians(-46)                     # the axis runs up to the right
-A = (math.cos(AXA), math.sin(AXA))          # up the helix, in the picture
-X = (-A[1], A[0])                           # across it, down to the right
-CEN = (500, 500)
-PITCH = 368.0                               # one turn along the axis
-R = 116.0                                   # backbone radius
-HW = 14.0                                   # half width of a ribbon
-BP_PER_TURN = 10
-TURNS = 2.5
-DELTA = math.radians(132)                   # strand b leads strand a round the helix: minor groove 132 deg
-K = -2 * math.pi / PITCH                    # right-handed: theta falls as u rises (z toward us)
-PHI = math.radians(114)                     # strand a's angle at the lower end: each end has one
-                                            # strand in front and the other straight behind it
-BAR = 'bar'                                 # a base pair as a rod (one heavy line) or an outlined bar
-RT = 1.8 if BAR == 'rod' else 5.0          # half thickness of a base pair, along the axis
+AXA = math.radians(-44)                     # the axis runs up to the right in the picture
+TILT = math.radians(18)                     # and its upper end turns away from us
+A3 = norm((math.cos(AXA) * math.cos(TILT), math.sin(AXA) * math.cos(TILT), -math.sin(TILT)))
+X3 = norm((-math.sin(AXA), math.cos(AXA), 0.0))        # across the axis, down to the right
+Y3 = norm(cross(A3, X3))
+if Y3[2] < 0:
+    Y3 = mul(Y3, -1)                        # round the helix toward us
+R = 100.0                                   # backbone radius (about 10 A)
+PITCH = 357.0                               # one turn (about 36 A)
+BP_PER_TURN = 10.5
+TURNS = 2.25
+RT = 18.0                                   # radius of a backbone tube
+DELTA = math.radians(140)                   # strand b round from strand a across the minor groove
+K = -2 * math.pi / PITCH                    # right-handed (checked: the near strands rise to the right)
 U_LO, U_HI = -TURNS * PITCH / 2, TURNS * PITCH / 2
+PHI = math.radians(100)                     # strand a's angle at the lower end
+RISE = PITCH / BP_PER_TURN
+NBP = int(TURNS * BP_PER_TURN)
+U0 = (U_HI + U_LO) / 2 - RISE * (NBP - 1) / 2   # the pairs sit centred along the length
 
 
 def pos(u, th, r=R):
-    """3D point (x, y, z) at axis position u, angle th, radius r; z is toward us."""
-    return (CEN[0] + A[0] * u + X[0] * r * math.cos(th),
-            CEN[1] + A[1] * u + X[1] * r * math.cos(th),
-            r * math.sin(th))
+    return add(mul(A3, u), mul(X3, r * math.cos(th)), mul(Y3, r * math.sin(th)))
 
 
 def theta(tag, u):
     return PHI + (DELTA if tag == 'b' else 0.0) + K * (u - U_LO)
 
 
-def frame(u, th):
-    """Ribbon centre, unit half-width vector W (in the cylinder's surface, square across
-    the strand) and the outward normal N."""
-    c = pos(u, th)
-    a3 = (A[0], A[1], 0.0)
-    e_th = (-math.sin(th) * X[0], -math.sin(th) * X[1], math.cos(th))
-    W = norm(add(mul(a3, -R * K), e_th))
-    N = (math.cos(th) * X[0], math.cos(th) * X[1], math.sin(th))
-    return c, W, N
+# ---------------------------------------------------------------- backbone tubes
 
 
-EXT = 60.0                                  # sampled a little past each end, then cut square
+def tube(tag):
+    """Samples along a backbone: centre, tangent, and the frame of its visible half."""
+    out = []
+    u = U_LO
+    du = 0.7
+    while u <= U_HI + 1e-6:
+        c = pos(u, theta(tag, u))
+        t = norm(sub(pos(u + 0.5, theta(tag, u + 0.5)), pos(u - 0.5, theta(tag, u - 0.5))))
+        v = view(c)
+        m = norm(cross(t, v))               # across the tube, in the picture
+        w = norm(sub(v, mul(t, dot(v, t))))  # the side of the tube facing us
+        out.append(dict(u=u, c=c, t=t, m=m, w=w, i=len(out)))
+        u += du
+    return out
 
 
-def strand(tag):
-    n = int((U_HI - U_LO + 2 * EXT) / 1.2)
-    S = []
-    for i in range(n + 1):
-        u = U_LO - EXT + (U_HI - U_LO + 2 * EXT) * i / n
-        th = theta(tag, u)
-        c, W, N = frame(u, th)
-        S.append(dict(u=u, th=th, c=c, W=W, N=N, e1=add(c, mul(W, HW)), e2=add(c, mul(W, -HW)), i=i))
-    return S
+def surf(smp, o):
+    """The tube's visible surface point at o (-1 .. 1 across it) and its normal."""
+    n = add(mul(smp['m'], o), mul(smp['w'], math.sqrt(max(0.0, 1 - o * o))))
+    return add(smp['c'], mul(n, RT)), n
 
 
-def span(S, key):
-    """Indices of the first and last points of an edge, each on its cut line."""
-    idx = [k for k, smp in enumerate(S) if not smp.get('cut_' + key)]
-    return idx[0] - 1, idx[-1] + 1
+HALO = 3.0                                  # a hair of white where a near part crosses a far one
 
 
-strands = {'a': strand('a'), 'b': strand('b')}
-
-# Both strands end at the same height, each cut square across its own ribbon as it lies in
-# the picture: points past the cut are pulled back onto it, so the ribbon ends on one straight
-# line. With PHI as set, at each end one strand lies in front and the other straight behind it.
-
-
-def cut_end(S, uend, sgn):
-    j = min(range(len(S)), key=lambda k: abs(S[k]['u'] - uend))
-    p, q = S[j - 3]['c'], S[j + 3]['c']
-    t = norm((q[0] - p[0], q[1] - p[1]))
-    t = (t[0] * sgn, t[1] * sgn)
-    ce = S[j]['c']
-    for smp in S:
-        if abs(smp['u'] - uend) > EXT + 20:
-            continue
-        for key in ('e1', 'e2', 'c'):
-            e = smp[key]
-            s = (e[0] - ce[0]) * t[0] + (e[1] - ce[1]) * t[1]
-            if s > 0:
-                smp[key] = (e[0] - t[0] * s, e[1] - t[1] * s, e[2])
-                smp['cut_' + key] = True
+def occ(smp, o):
+    """An occluding point: the surface's depth, but a little wider than the tube."""
+    p, n = surf(smp, o)
+    q = proj(add(smp['c'], mul(n, RT + HALO)))
+    return (q[0], q[1], proj(p)[2])
 
 
-TUCK_ENDS = (-1,)                            # ends where the strand behind is tucked in (see below)
-for uend, sgn in ((U_LO, -1), (U_HI, 1)):
-    zs = {}
-    for tag, S in strands.items():
-        j = min(range(len(S)), key=lambda k: abs(S[k]['u'] - uend))
-        zs[tag] = S[j]['c'][2]
-    front = max(zs, key=zs.get)
-    back = min(zs, key=zs.get)
-    cut_end(strands[front], uend, sgn)
-    if sgn not in TUCK_ENDS:
-        cut_end(strands[back], uend, sgn)
-        continue
-    # The strand behind ends on the line of the front ribbon's nearer edge, so it reads as
-    # passing in behind that ribbon rather than poking out beside the ribbon's end.
-    F, B = strands[front], strands[back]
-    j = min(range(len(F)), key=lambda k: abs(F[k]['u'] - uend))
-    jb = min(range(len(B)), key=lambda k: abs(B[k]['u'] - uend))
-    key = min(('e1', 'e2'), key=lambda kk: dist(F[j][kk], B[jb]['c']))
-    other = 'e2' if key == 'e1' else 'e1'
-    p0, p1 = F[j - sgn * 12][key], F[j][key]
-    ed = norm((p1[0] - p0[0], p1[1] - p0[1]))
-    n = (-ed[1], ed[0])
-    if (F[j][other][0] - p1[0]) * n[0] + (F[j][other][1] - p1[1]) * n[1] < 0:
-        n = (-n[0], -n[1])                   # n points across the front ribbon
-    p1 = (p1[0] + n[0] * 3.0, p1[1] + n[1] * 3.0, p1[2])   # just inside its edge, so the cut is out of sight
-    order = range(len(B) // 2, len(B)) if sgn > 0 else range(len(B) // 2, -1, -1)
-    for kk in ('e1', 'e2', 'c'):
-        stop = None
-        for k in order:
-            smp = B[k]
-            e = smp[kk]
-            if stop is None and abs(smp['u'] - uend) <= 40:
-                s = (e[0] - p1[0]) * n[0] + (e[1] - p1[1]) * n[1]
-                if s > 0:
-                    # pulled back along the strand onto the line
-                    q = B[k - sgn][kk] if 0 <= k - sgn < len(B) else e
-                    sq = (q[0] - p1[0]) * n[0] + (q[1] - p1[1]) * n[1]
-                    f = sq / (sq - s) if sq != s else 0.0
-                    stop = lerp3(q, e, f)
-            if stop is not None:
-                smp[kk] = stop
-                smp['cut_' + kk] = True
+def cap_dir(smp, sg):
+    """In the plane square to the view: the way out of the tube's end."""
+    n2 = norm(cross(view(smp['c']), smp['m']))
+    return n2 if dot(n2, smp['t']) * sg > 0 else mul(n2, -1)
 
 
-depth = Depth()
-QSTEP = 3
-quads = {'a': [], 'b': []}
-for tag, S in strands.items():
-    for i in range(0, len(S) - 1, QSTEP):
-        p, q = S[i], S[min(len(S) - 1, i + QSTEP)]
-        if all(x.get('cut_e1') and x.get('cut_e2') for x in (p, q)):
-            continue                        # past the end: nothing left of the ribbon here
-        poly3 = [p['e1'], q['e1'], q['e2'], p['e2']]
-        poly = [c[:2] for c in poly3]
-        z = sum(c[2] for c in poly3) / 4
-        depth.add(poly, z, (tag, i))
-        xs = [c[0] for c in poly]
-        ys = [c[1] for c in poly]
-        quads[tag].append((i, poly, (min(xs), min(ys), max(xs), max(ys))))
+tubes = {'a': tube('a'), 'b': tube('b')}
+for tag, S in tubes.items():
+    for i in range(0, len(S) - 3, 3):
+        p, q = S[i], S[i + 3]
+        # the tube itself (it may hide its own far side where it bends), and a halo a
+        # little wider that only other parts see
+        for kind, fn in (('t', lambda smp, o: proj(surf(smp, o)[0])), ('h', occ)):
+            rails = [[fn(smp, o) for o in (-1.0, -0.5, 0.0, 0.5, 1.0)] for smp in (p, q)]
+            for j in range(4):
+                depth.quad(rails[0][j], rails[1][j], rails[1][j + 1], rails[0][j + 1], (kind, tag, i))
+    # the round ends: a fan over the half disc that shows beyond the tube
+    for smp, sg in ((S[0], -1), (S[-1], 1)):
+        e = cap_dir(smp, sg)
+        front = proj(add(smp['c'], mul(smp['w'], RT)))
+        rim = [proj(add(smp['c'], mul(smp['m'], (RT + HALO) * math.cos(math.pi * j / 12)),
+                        mul(e, (RT + HALO) * math.sin(math.pi * j / 12)))) for j in range(13)]
+        for a, b in zip(rim, rim[1:]):
+            depth.add(front, a, b, ('h', tag, smp['i']))
 
-# ---------------------------------------------------------------- base pairs
+# ---------------------------------------------------------------- base slabs
 
-def root_band(tag, u):
-    """The patch of ribbon a base is fixed to: the bar is tucked under it, front or back."""
-    S = strands[tag]
-    i = (u - S[0]['u']) / (S[-1]['u'] - S[0]['u']) * (len(S) - 1)
-    return [(poly, bb) for j, poly, bb in quads[tag] if abs(j - i) <= 14]
-
-
-def in_band(p, band):
-    return any(bb[0] <= p[0] <= bb[2] and bb[1] <= p[1] <= bb[3] and inside(p[:2], poly) for poly, bb in band)
-
-
-CAPGAP = 4.0                                # a bar in front of its own ribbon stops this short of it
-
-
-def trim(quad, band):
-    """A bar that rises toward us from its ribbon would lie across that ribbon's inner edge:
-    it stops a little short of the edge instead, square, so the edge runs on unbroken."""
-    L = dist(lerp3(quad[0], quad[3], 0.5), lerp3(quad[1], quad[2], 0.5)) or 1
-    t = 0.0
-    while t < 0.9 and (in_band(lerp3(quad[0], quad[1], t), band) or in_band(lerp3(quad[3], quad[2], t), band)):
-        t += 0.25 / L
-    t = min(0.9, t + CAPGAP / L)
-    return [lerp3(quad[0], quad[1], t), quad[1], quad[2], lerp3(quad[3], quad[2], t)]
-
-
-RISE = PITCH / BP_PER_TURN
-NBP = int(round(TURNS * BP_PER_TURN))
-GAP = 4.0                                   # half the gap where the two bases of a pair meet
-a3 = (A[0], A[1], 0.0)
-pairs = []
+SLAB_T = 6.0                                # half thickness, along the axis
+SLAB_W = 17.0                               # half width, across the pair's length
+GAP = 2.0                                   # half the gap where the two bases of a pair meet
+slabs = []                                  # (k, h, corners 8 x 3D)
 for k in range(NBP):
-    u = U_LO + RISE * (k + 0.5)
+    u = U0 + RISE * k
     pa, pb = pos(u, theta('a', u)), pos(u, theta('b', u))
     m = lerp3(pa, pb, 0.5)
-    d = norm(tuple(y - x for x, y in zip(pa, pb)))
-    halves, capped = [], []
-    for tag, s, e in (('a', pa, add(m, mul(d, -GAP))), ('b', pb, add(m, mul(d, GAP)))):
-        quad = [add(s, mul(a3, RT)), add(e, mul(a3, RT)), add(e, mul(a3, -RT)), add(s, mul(a3, -RT))]
-        rises = e[2] > s[2] + 1.0
-        if rises:
-            quad = trim(quad, root_band(tag, u))
-        halves.append(quad)
-        capped.append(rises)
-    pairs.append((u, halves, capped))
-    for h, quad in enumerate(halves):
-        nseg = 6
-        for j in range(nseg):
-            c0 = lerp3(quad[0], quad[1], j / nseg)
-            c1 = lerp3(quad[0], quad[1], (j + 1) / nseg)
-            c2 = lerp3(quad[3], quad[2], (j + 1) / nseg)
-            c3 = lerp3(quad[3], quad[2], j / nseg)
-            depth.add([c0[:2], c1[:2], c2[:2], c3[:2]], (c0[2] + c1[2] + c2[2] + c3[2]) / 4, ('p', k))
+    d = norm(sub(pb, pa))
+    wv = norm(cross(A3, d))
+    for h, (s0, e0, dd) in enumerate(((pa, m, d), (pb, m, mul(d, -1)))):
+        a0 = add(s0, mul(dd, RT * 0.4))
+        a1 = add(e0, mul(dd, -GAP))
+        corners = []
+        for end in (a0, a1):
+            for sw in (-1, 1):
+                for st in (-1, 1):
+                    corners.append(add(end, mul(wv, sw * SLAB_W), mul(A3, st * SLAB_T)))
+        slabs.append((k, h, corners, dd, wv))
+
+# faces of a slab as corner indices (corners: end(0/1) x w(-/+) x t(-/+))
+FACES = [((0, 1, 3, 2), 'root'), ((4, 6, 7, 5), 'tip'), ((0, 4, 5, 1), 'w-'), ((2, 3, 7, 6), 'w+'),
+         ((0, 2, 6, 4), 't-'), ((1, 5, 7, 3), 't+')]
 
 
-def own(tag, i, win):
-    return lambda t: t is not None and t[0] == tag and abs(t[1] - i) <= win
+def face_normal(name, dd, wv):
+    return {'root': mul(dd, -1), 'tip': dd, 'w-': mul(wv, -1), 'w+': wv, 't-': mul(A3, -1), 't+': A3}[name]
 
 
-def draw3(pts3, wz, skip=None, eps=0.8, force=(), hand=0.2, minlen=3.0, ids=None):
-    for run in depth.runs(pts3, skip, eps, force=force, minlen=minlen, ids=ids):
-        ink(run, wz, hand=hand)
+for k, h, cs, dd, wv in slabs:
+    P = [proj(c) for c in cs]
+    for idx, name in FACES:
+        depth.quad(P[idx[0]], P[idx[1]], P[idx[2]], P[idx[3]], ('s', k, h))
+    # its halo: a little wider and thicker, not longer (the pair's two halves meet end to end)
+    G = []
+    for j, c in enumerate(cs):
+        sw, st = (1 if j & 2 else -1), (1 if j & 1 else -1)
+        q = proj(add(c, mul(wv, sw * HALO), mul(A3, st * HALO)))
+        G.append((q[0], q[1], proj(c)[2]))
+    for idx, name in FACES:
+        depth.quad(G[idx[0]], G[idx[1]], G[idx[2]], G[idx[3]], ('g', k, h))
+
+# ---------------------------------------------------------------- drawing: the tubes
 
 
-# ---------------------------------------------------------------- ribbon edges and ends
+def lit(n):
+    return max(0.0, dot(n, LIGHT))
 
-EDGE = zw(1.7, 2.7)
-for tag, S in strands.items():
-    for key in ('e1', 'e2'):
-        k_lo, k_hi = span(S, key)
-        # each point is spared only by the bit of its own ribbon around it
-        draw3([c[key] for c in S[k_lo:k_hi + 1]], EDGE, lambda t, q, tag=tag: t is not None and t[0] == tag and abs(t[1] - q) <= 16,
-              eps=1.0, ids=[c['i'] for c in S[k_lo:k_hi + 1]])
-    for end in (0, 1):
-        # the cut, from where one edge meets it to where the other does
-        ends = [S[span(S, key)[end]][key] for key in ('e1', 'e2')]
-        i = span(S, 'e1')[end]
-        draw3(ends, zw(1.8, 2.5), own(tag, i, 12), eps=1.0, hand=0.1)
 
-# ---------------------------------------------------------------- shading: the far side of each ribbon
+def tz(lo, hi):
+    """Weight from depth: lo at the back of the helix, hi at its front."""
+    return lambda z: lo + (hi - lo) * max(0.0, min(1.0, (z / (R + RT) + 1) / 2))
 
-HSP = 6.0                                    # even spacing along the ribbon, in the picture
-for tag, S in strands.items():
-    last = None
-    for i in range(1, len(S) - 1):
-        smp = S[i]
-        if smp['N'][2] > -0.06 or smp.get('cut_e1') or smp.get('cut_e2'):
-            last = None
+
+def own_tube(tag):
+    return lambda t, q: t is not None and t[1] == tag and (t[0] == 'h' or (t[0] == 't' and abs(t[2] - q) <= 9))
+
+
+for tag, S in tubes.items():
+    ids = [s['i'] for s in S]
+    # the two silhouettes
+    for o in (-1.0, 1.0):
+        draw([proj(surf(s, o)[0]) for s in S], tz(1.8, 2.7), own_tube(tag), ids=ids)
+    # round ends
+    for smp, sg in ((S[0], -1), (S[-1], 1)):
+        e = cap_dir(smp, sg)
+        pts = []
+        for j in range(17):
+            f = math.pi * j / 16
+            p = add(smp['c'], mul(smp['m'], RT * math.cos(f)), mul(e, RT * math.sin(f)))
+            pts.append(proj(p))
+        draw(pts, tz(1.8, 2.6), own_tube(tag), ids=[smp['i']] * len(pts))
+    # contour hatching along the tube on its shadow side: lines at fixed places across
+    # it, each drawn where the surface there is dark enough, heavier in the core shadow
+    ease = int(RT * 0.9 / 1.4)              # samples over which the hatching thins out at an end
+    for o in (-0.72, -0.42, -0.12, 0.18, 0.48, 0.78):
+        run, rid = [], []
+        for s in S[ease // 2:-(ease // 2)] + [None]:
+            dark = 0.0
+            if s is not None:
+                p, n = surf(s, o)
+                dark = 1 - lit(n)
+            if dark > 0.52:
+                wt = 0.85 + 1.5 * min(1.0, (dark - 0.52) / 0.4) ** 1.5
+                wt = 0.85 + (wt - 0.85) * (0.55 if abs(o) > 0.7 else 1.0)   # reflected light at the rim
+                fade = min(s['i'], len(S) - 1 - s['i']) / ease                # thinning toward an end
+                if fade < 1:
+                    wt = 0.7 + (wt - 0.7) * max(0.0, fade)
+                run.append(proj(p) + (wt,))
+                rid.append(s['i'])
+            else:
+                if len(run) > 3:
+                    draw(run, None, own_tube(tag), ids=rid, hand=0.15)
+                run, rid = [], []
+
+# ---------------------------------------------------------------- drawing: the slabs
+
+
+# the long sides of the faces that run along a slab: strokes go from one to the other
+SIDES = {'t-': ((0, 4), (2, 6)), 't+': ((1, 5), (3, 7)), 'w-': ((0, 4), (1, 5)), 'w+': ((2, 6), (3, 7))}
+
+
+def own_slab(k, h):
+    return lambda t: t is not None and t[0] in 'sg' and t[1] == k and t[2] == h
+
+
+for k, h, cs, dd, wv in slabs:
+    P = [proj(c) for c in cs]
+    centre = lerp3(cs[0], cs[7], 0.5)
+    v = view(centre)
+    edges = {}
+    for idx, name in FACES:
+        n = face_normal(name, dd, wv)
+        if dot(n, v) <= 0.02:
             continue
-        a, b = lerp3(smp['e1'], smp['e2'], 0.1), lerp3(smp['e1'], smp['e2'], 0.9)
-        # the next stroke comes once both its ends are a full space on from the last one's
-        if last is not None and min(dist(a, last[0]), dist(b, last[1])) < HSP:
-            continue
-        last = (a, b)
-        if dist(a, b) < 5:
-            continue
-        draw3([a, b], lambda z: 1.0, own(tag, i, 8), eps=1.0, hand=0.1, minlen=3.5)
+        for j in range(4):
+            e = tuple(sorted((idx[j], idx[(j + 1) % 4])))
+            edges[e] = edges.get(e, 0) + 1
+        # shade the face with even strokes along the slab, as dark as it is turned from the light
+        dark = 1 - lit(n)
+        if dark > 0.45 and name in SIDES:
+            (p0, p1), (q0, q1) = SIDES[name]
+            sp = 5.5 if dark > 0.7 else 8.0
+            span = dist(proj(cs[p0])[:2], proj(cs[q0])[:2])
+            nl = int(span / sp)
+            for j in range(1, nl + 1):
+                f = j / (nl + 1)
+                s0, s1 = lerp3(cs[p0], cs[q0], f), lerp3(cs[p1], cs[q1], f)
+                s0, s1 = lerp3(s0, s1, 0.06), lerp3(s0, s1, 0.94)
+                draw([proj(s0), proj(s1)], 0.9 + 0.8 * (dark - 0.45), own_slab(k, h), hand=0.1, eps=0.8)
+    for (i, j), cnt in edges.items():
+        draw([P[i], P[j]], tz(1.2, 1.9), own_slab(k, h), hand=0.1, eps=0.8)
 
-# ---------------------------------------------------------------- the base pairs
+# ---------------------------------------------------------------- frame it
 
-for k, (u, halves, capped) in enumerate(pairs):
-    for tag, q, cap in zip(('a', 'b'), halves, capped):
-        force = root_band(tag, u)
-        skip = (lambda t, k=k: t is not None and t[0] == 'p' and t[1] == k)
-        kw = dict(skip=skip, eps=0.6, force=force, minlen=4.0, hand=0.12)
-        if BAR == 'rod':
-            kw['eps'] = 3.0
-            draw3([lerp3(q[0], q[3], 0.5), lerp3(q[1], q[2], 0.5)], zw(2.2, 2.9), **kw)
-        else:
-            w = zw(1.4, 2.0)
-            draw3([q[0], q[1]], w, **kw)
-            draw3([q[3], q[2]], w, **kw)
-            draw3([q[1], q[2]], w, **kw)
-            if cap:
-                draw3([q[0], q[3]], w, **kw)
-
-# centre the drawing in the square
 xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
-SCALE = 1.035
+SCALE = 1.0
 pen.strokes = [([((x - cx) * SCALE + 500, (y - cy) * SCALE + 500) for x, y in p], w) for p, w in pen.strokes]
-print('pairs', len(pairs))
+print('pairs', NBP)
 pen.save('../04-dna.svg', mirror=False)
 pen.report()
