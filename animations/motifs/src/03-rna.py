@@ -243,7 +243,7 @@ def rot(v, axis, a):
 
 # ---------------------------------------------------------------- the stem: A-form
 
-AXA = math.radians(-62)                     # the stem rises up to the right in the picture
+AXA = math.radians(-55)                     # the stem rises up to the right in the picture
 TILT = math.radians(4)                      # its upper end turned a little away from us
 A3 = norm((math.cos(AXA) * math.cos(TILT), math.sin(AXA) * math.cos(TILT), -math.sin(TILT)))
 X3 = norm((-math.sin(AXA), math.cos(AXA), 0.0))
@@ -256,7 +256,7 @@ BP_PER_TURN = 11.0
 RISE = PITCH / BP_PER_TURN
 K = -2 * math.pi / PITCH                    # right-handed, as 04
 RT = 16.0                                   # the backbone tube, as 04
-NSTEM = 8                                   # base pairs in the stem
+NSTEM = 11                                  # base pairs in the stem
 DZ = 34.0                                   # a pair's partner on strand 2 sits this much higher: tilted pairs
 DELTA = math.radians(155)                   # strand 2 round from strand 1 at one height
 SEP = DELTA + K * DZ                        # the angle a pair spans round the axis
@@ -293,15 +293,15 @@ up = [s1(u) for u in [(-E) + j * 2.0 for j in range(int((U_TOP + 2 * E) / 2.0) +
 P1, T1 = s1(U_TOP + E), dfd(s1, U_TOP + E)
 P2, T2 = s2(U_TOP + DZ + E), dfd(s2, U_TOP + DZ + E, -1)
 mid_top = lerp3(P1, P2, 0.5)
-LOOP_H = 150.0
-PM = add(mid_top, mul(A3, LOOP_H), mul(Y3, 25))
-TM = mul(norm(sub(P2, P1)), 190)
-loop = hermite(P1, mul(T1, 170), PM, TM, 40)[1:] + hermite(PM, TM, P2, mul(T2, 170), 40)[1:]
+LOOP_H = 105.0
+PM = add(mid_top, mul(A3, LOOP_H), mul(Y3, 10))
+TM = mul(norm(sub(P2, P1)), 200)
+loop = hermite(P1, mul(T1, 70), PM, TM, 40)[1:] + hermite(PM, TM, P2, mul(T2, 70), 40)[1:]
 down = [s2(u) for u in [U_TOP + DZ + E - j * 2.0 for j in range(int((U_TOP + 2 * E) / 2.0) + 1)]]
 # the 3' tail: out of the stem's foot, round to the right in one long easy sweep
 pe = down[-1]
 te = dfd(s2, DZ - E, -1)
-TAIL = [add(O, q) for q in ((60, 250, 50), (260, 330, 30), (470, 270, 0), (610, 120, -20), (660, -60, -30))]
+TAIL = [add(pe, q) for q in ((70, 140, 40), (230, 190, 30), (400, 150, 10), (560, 70, -10))]
 tail = hermite(pe, mul(te, 160), TAIL[0], mul(norm(sub(TAIL[1], pe)), 220), 30)[1:]
 for a, b, c0, c1 in zip(TAIL, TAIL[1:], [None] + TAIL, TAIL[2:] + [None]):
     ma = mul(sub(b, c0 if c0 else a), 0.5 if c0 else 1.0)
@@ -374,7 +374,7 @@ for smp, sg in ((S[0], -1), (S[-1], 1)):
 SLAB_T = 6.0                                # as 04
 SLAB_W = 17.0
 GAP = 2.0
-SEQ1 = 'GGCAUCGC'                           # the stem's 5' side, foot to top
+SEQ1 = 'GGCAUCGCAGC'                         # the stem's 5' side, foot to top
 PAIR = {'G': 'C', 'C': 'G', 'A': 'U', 'U': 'A'}
 LOOP_SEQ = 'GAAAU'
 TAIL_SEQ = 'ACCUAGUCA'
@@ -437,7 +437,7 @@ for j, b in enumerate(LOOP_SEQ):
 i5 = stem_idx[0]
 i_end2 = stem_idx[1]
 SP_NT = 64.0
-singles = [(nearest(s1(-E - 30), 0, i5), 'A', mul(A3, -1), 0.0)]
+singles = []
 s = SARC[i_end2] + SP_NT
 j = 0
 while s < SARC[-1] - 30 and j < len(TAIL_SEQ):
