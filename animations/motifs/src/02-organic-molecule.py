@@ -8,19 +8,31 @@ three alternating Kekule double bonds, each a second, shorter line just inside
 the ring; no letters; the line laid down in two close passes; the tidy cast
 shadow of ticks along the light from the upper left), and several of them, at
 different sizes, turns and depths, swim in a warm, shallow early sea, seen in
-section as in a natural-history plate: the surface line with a fine broken
-line under it, the water as tidy rows of broken, gently waving lines that
-open up near the surface, close up with depth and dissolve at the sides, fine
-suspended particles, bubbles rising from a vent in the sediment floor and from
-a crack, breaking at the surface with small ripples; beyond the water a far
-volcanic shore on the horizon, its plume of smoke drifting off (early Earth),
-drawn light because it is far away.
+section and engraved as in a natural-history plate, lit from the upper left:
+
+- the water: rows of broken, gently waving lines, open under the surface and
+  closing up with depth to about 5.6 apart (longer near the floor), so it
+  darkens toward the bottom; over the outer fifth at either side the rows grow
+  shorter, sparser and ragged, so the mass has a soft, slightly oval outline;
+- the surface: a sure line that breaks up into short strokes before the sides,
+  a fine broken line under it, a few glints and wavelets;
+- the floor in section: the sediment's surface, strata below it (fine level
+  dashes, a band of diagonal hatching, a scatter of grit) fading downward and
+  to the sides; a vent mound shaded on its lower right, bubbles rising from it
+  and from a crack, breaking at the surface; pebbles with shaded undersides
+  and short cast shadows; fine particles suspended in the water;
+- above: a soft column of steam lifting off the water over the crack, and on
+  the far horizon a volcano (form lines on its shadowed flank, ridges on the
+  lit one) whose plume rolls off to the left; steam and plume are billows,
+  each with a sure contour on its shaded lower right, a fine broken one toward
+  the light and curved parallel hatching along its lower right.
 
 Depth: the nearest ring is the passed drawing's ring, frontal and heaviest;
 the others are smaller and lighter the farther they are, and turned in the
-water (foreshortened about an axis), so they tumble rather than tile. The
-water shows through every ring but keeps clear of its lines and shadow; the
-farthest ring lies deep enough that the water's lines pass in front of it.
+water (foreshortened about an axis), so they tumble rather than tile. Every
+ring has a clean halo: the water's lines stop 7 units short of its lines and
+shadow and never cross the gap inside a double bond; the water shows through
+the two large rings, and the small ones are kept clean inside.
 
 Not mirrored (slot 02 faces as drawn). Run from this folder:
     python3 02-organic-molecule.py
@@ -446,24 +458,36 @@ for bx, sc in ((vx + 4, 1.0), (322.0, 0.85)):
                      w=0.85 - 0.1 * j, hand=0, lift=0, occlude=False)
 
 
-# ---- warm vapour: two faint columns of small soft billows lifting off the water and leaning
-# with the wind, drawn like the plume but paler: only their shaded sides, open to the light
-def vapour(x0, puffs, ph):
-    y0 = surface_y(x0) - 4.0
+def billows(circles, w_shade, w_lit, hatch=3):
+    """Rolling billows of smoke or steam, nearest first, lit from the upper left. Each shows its
+    contour where no nearer billow hides it: a sure line on the shaded lower right, a fine broken
+    one toward the light; curved parallel hatching follows each billow's lower right."""
     occ0 = len(pen.occluders)
-    for k, (dx, dy, r) in enumerate(puffs):
-        cx, cy = x0 + dx, y0 + dy - r
-        pen.line(ellipse_pts(cx, cy, r, r * 0.9, 0, math.radians(-40 + 8 * math.sin(k + ph)), math.radians(150), step=1.2),
-                 w=0.75, hand=0.1, lift=0.15, piece=(12, 30))
-        if r > 8:
-            pen.line(ellipse_pts(cx, cy, r * 0.62, r * 0.56, 0, math.radians(10), math.radians(95), step=1.0),
-                     w=0.62, hand=0.05, lift=0)
-        pen.occlude(ellipse_pts(cx, cy, r + 0.8, (r + 0.8) * 0.9, 0, step=2.0))
+    for cx, cy, r in circles:
+        ry = r * 0.88
+        a0 = math.radians(-35)
+        pen.line(ellipse_pts(cx, cy, r, ry, 0, a0, math.radians(165), step=1.2), w=w_shade, hand=0.1, lift=0.04, piece=(30, 80))
+        # toward the light: a few short, fine pieces
+        arc = ellipse_pts(cx, cy, r, ry, 0, math.radians(165), math.radians(325), step=1.2)
+        k = int(rng.uniform(0, 4))
+        while k < len(arc) - 2:
+            ln = rng.randint(4, 9)
+            pen.line(arc[k:k + ln], w=w_lit, hand=0.05, lift=0, piece=(400, 800))
+            k += ln + rng.randint(3, 8)
+        for j, (fr, b0, b1) in enumerate(((0.8, -15, 125), (0.62, 5, 105), (0.45, 25, 85))[:hatch]):
+            if r * fr < 4:
+                break
+            pen.line(ellipse_pts(cx, cy, r * fr, ry * fr, 0, math.radians(b0), math.radians(b1), step=1.0),
+                     w=0.62, hand=0.05, lift=0, piece=(400, 800))
+        pen.occlude(ellipse_pts(cx, cy, r + 1.0, ry + 1.0, 0, step=2.0))
     del pen.occluders[occ0:]
 
 
-vapour(262.0, [(0, 0, 8), (-6, -16, 12), (-20, -38, 16), (-42, -58, 15)], 0.4)
-vapour(472.0, [(0, 0, 7), (-5, -14, 10), (-17, -32, 13)], 1.9)
+# ---- warm vapour: a soft column of steam lifting off the water where the crack's bubbles break,
+# drawn like the plume but smaller and paler, leaning with the same wind
+steam = [(0, -6, 6), (-3, -17, 8), (-9, -30, 10), (-18, -46, 12), (4, -40, 8), (-30, -62, 14), (-12, -64, 9),
+         (-46, -78, 13), (-64, -86, 9)]
+billows([(322.0 + dx, surface_y(322.0) + dy - 3, r) for dx, dy, r in steam], 0.78, 0.6, hatch=2)
 
 
 # ---- beyond the water: a far volcano on the horizon, its plume rolling off to the left
@@ -505,23 +529,10 @@ def volcano(xl, xr, xc, top, crater, w):
 
 
 def plume(x, y):
-    """Rolling billows climbing from the crater and drifting left: each shaded on its lower
-    right with curved parallel hatching, open on the lit upper left; nearer billows hide those behind."""
-    path = [(0, -10, 11), (-10, -36, 18), (-34, -64, 25), (-74, -84, 30), (-122, -90, 28), (-164, -86, 21)]
-    occ0 = len(pen.occluders)
-    for dx, dy, r in path:
-        cx, cy = x + dx, y + dy - r * 0.5
-        # the outline on the shaded side only
-        pen.line(ellipse_pts(cx, cy, r, r * 0.86, 0, math.radians(-50), math.radians(165), step=1.5),
-                 w=0.9, hand=0.1, lift=0.05, piece=(30, 80))
-        # curved hatching along the lower right, shorter toward the centre
-        for j, (fr, a0, a1) in enumerate(((0.8, -20, 125), (0.62, 0, 105), (0.44, 20, 85))):
-            if r * fr < 4:
-                break
-            pen.line(ellipse_pts(cx, cy, r * fr, r * fr * 0.86, 0, math.radians(a0), math.radians(a1), step=1.2),
-                     w=0.65, hand=0.05, lift=0)
-        pen.occlude(ellipse_pts(cx, cy, r + 1.0, (r + 1.0) * 0.86, 0, step=2.0))
-    del pen.occluders[occ0:]
+    """The volcano's plume: billows climbing from the crater and rolling off to the left."""
+    puffs = [(0, -10, 10), (-6, -30, 15), (8, -44, 11), (-20, -54, 20), (-46, -74, 25), (-14, -78, 16),
+             (-82, -88, 28), (-58, -104, 18), (-122, -92, 26), (-104, -112, 16), (-160, -88, 20), (-186, -84, 13)]
+    billows([(x + dx, y + dy, r) for dx, dy, r in puffs], 0.95, 0.65, hatch=3)
 
 
 tip = volcano(742.0, 910.0, 834.0, 82.0, 10.0, 1.2)
