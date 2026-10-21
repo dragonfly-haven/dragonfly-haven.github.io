@@ -17,15 +17,17 @@ section and engraved as in a natural-history plate, lit from the upper left:
 - the surface: a sure line that breaks up into short strokes before the sides,
   a fine broken line under it, a few glints and wavelets;
 - the floor in section: the sediment's surface, strata below it (fine level
-  dashes, a band of diagonal hatching, a scatter of grit) fading downward and
+  dashes, a band of diagonal hatching, a few grains of grit) fading downward and
   to the sides; a vent mound shaded on its lower right, bubbles rising from it
   and from a crack, breaking at the surface; pebbles with shaded undersides
   and short cast shadows; fine particles suspended in the water;
-- above: a soft column of steam lifting off the water over the crack, and on
-  the far horizon a volcano (form lines on its shadowed flank, ridges on the
-  lit one) whose plume rolls off to the left; steam and plume are billows,
-  each with a sure contour on its shaded lower right, a fine broken one toward
-  the light and curved parallel hatching along its lower right.
+- above: three fine, broken, wavering wisps of steam lifting off the water over
+  the crack, and on the far horizon a volcano (form lines on its shadowed
+  flank, ridges on the lit one) whose plume rolls off to the left as one cloud,
+  small and tight at the vent, broader and flatter downwind and thinning out
+  into broken strokes: a sure edge on its shaded underside, a fine broken one
+  toward the light, a few fold arcs inside and curved hatching along its
+  underside.
 
 Depth: the nearest ring is the passed drawing's ring, frontal and heaviest;
 the others are smaller and lighter the farther they are, and turned in the
@@ -39,11 +41,13 @@ Not mirrored (slot 02 faces as drawn). Run from this folder:
 """
 
 import math
+import random
 
 from pen import Pen, lerp, inside, clip_segments, resample, catmull, ellipse_pts
 
 pen = Pen(seed=202)
 rng = pen.rng
+rng2 = random.Random(2002)          # for the final polish, so the passed parts keep their draws
 
 LIGHT = 60.0                          # the rings' shadows fall this way (degrees, y down)
 LU = (math.cos(math.radians(LIGHT)), math.sin(math.radians(LIGHT)))
@@ -334,13 +338,15 @@ y = SURF_Y + 20.0
 while y < FLOOR_Y + 14:
     u = min(1.0, (y - SURF_Y) / (FLOOR_Y - SURF_Y))
     hw = half_width(y)
-    x = XC - hw + rng.uniform(0, 30)
+    xl = XC - hw + rng2.uniform(-25, 25)              # each row ends a little in or out
+    xr = XC + hw + rng2.uniform(-25, 25)
+    x = xl + rng.uniform(0, 30)
     ph = rng.uniform(0, 6.3)
     amp = 0.5 + 1.5 * (1 - u)
-    while x < XC + hw:
-        f = fade(x, y)
+    while x < xr:
+        f = smooth(xl, xl + 0.2 * hw, x) * smooth(xr, xr - 0.2 * hw, x)
         L = (26 + 120 * u ** 1.3) * rng.uniform(0.6, 1.4) * (0.3 + 0.7 * f)
-        xe = min(XC + hw, x + L)
+        xe = min(xr, x + L)
         if rng.random() < 0.15 + 0.85 * f ** 0.8:
             seg = [(xx, y + amp * math.sin(xx * 0.06 + ph)) for xx in [x + (xe - x) * i / max(2, int((xe - x) / 6)) for i in range(max(2, int((xe - x) / 6)) + 1)]]
             for run in clip_segments(seg, lambda p: p[1] < floor_y(p[0]) - 6 and clear_of_lines(p)):
@@ -394,8 +400,10 @@ while x < XC + hw:
 for k in range(60):
     xx = XC + rng.uniform(-1, 1) * half_width(FLOOR_Y) * 0.5
     yy = floor_y(xx) * 0.6 + FLOOR_Y * 0.4 + rng.uniform(43, 56)
-    if rng.random() < smooth(1.0, 0.6, abs(xx - XC) / (half_width(FLOOR_Y) * 0.5)):
-        pen.dot(xx, yy, r=rng.uniform(0.8, 1.4), w=0.9)
+    keep = rng.random() < smooth(1.0, 0.6, abs(xx - XC) / (half_width(FLOOR_Y) * 0.5))
+    r0 = rng.uniform(0.8, 1.4)
+    if keep and k % 3 == 0:                         # a third of them, as grains rather than specks
+        pen.line(ellipse_pts(xx, yy, 2.2 + r0, 1.5 + 0.6 * r0, 0.0), w=0.9, hand=0, lift=0, occlude=False)
 
 # ---- the vent: a mouth on the mound's top, the mound shaded on its lower right
 vx, vy = VENT, floor_y(VENT)
@@ -483,11 +491,41 @@ def billows(circles, w_shade, w_lit, hatch=3):
     del pen.occluders[occ0:]
 
 
-# ---- warm vapour: a soft column of steam lifting off the water where the crack's bubbles break,
-# drawn like the plume but smaller and paler, leaning with the same wind
-steam = [(0, -6, 6), (-3, -17, 8), (-9, -30, 10), (-18, -46, 12), (4, -40, 8), (-30, -62, 14), (-12, -64, 9),
-         (-46, -78, 13), (-64, -86, 9)]
-billows([(322.0 + dx, surface_y(322.0) + dy - 3, r) for dx, dy, r in steam], 0.78, 0.6, hatch=2)
+# ---- warm vapour: a few fine wisps wavering up off the water over the crack, each a thin
+# open curve of its own, breaking up and fading as it rises
+def wisp(x0, y0, h, lean, w):
+    f1, f2 = rng2.uniform(0.7, 1.2), rng2.uniform(1.8, 2.6)
+    p1, p2 = rng2.uniform(0, 6.3), rng2.uniform(0, 6.3)
+    a1 = rng2.uniform(6.0, 9.0)
+    pts = []
+    for i in range(61):
+        u = i / 60
+        amp = a1 * (0.3 + 0.9 * u)
+        x = x0 - lean * u ** 1.4 + amp * (0.75 * math.sin(u * f1 * 2 * math.pi + p1) + 0.25 * math.sin(u * f2 * 2 * math.pi + p2))
+        pts.append((x, y0 - h * u))
+    # lay it down in pieces that shorten and part further as it rises
+    fine = resample(pts, 1.5)
+    s_at = [0.0]
+    for k in range(1, len(fine)):
+        s_at.append(s_at[-1] + math.dist(fine[k - 1], fine[k]))
+    total = s_at[-1]
+    k = 0
+    while k < len(fine) - 2:
+        u = s_at[k] / total
+        want = (26 - 18 * u) * rng2.uniform(0.7, 1.3)
+        j = k + 1
+        while j < len(fine) - 1 and s_at[j] - s_at[k] < want:
+            j += 1
+        pen.line(fine[k:j + 1], w=w * (1 - 0.3 * u), hand=0.1, lift=0, piece=(400, 800), occlude=False)
+        gap = (2 + 9 * u) * rng2.uniform(0.7, 1.4)
+        while j < len(fine) - 1 and s_at[j] - s_at[k] < want + gap:
+            j += 1
+        k = j
+
+
+for x0, dy, h, lean, w in ((313.0, 5.0, 88.0, 16.0, 0.75), (296.0, 13.0, 60.0, 24.0, 0.65),
+                           (339.0, 8.0, 72.0, 2.0, 0.7)):
+    wisp(x0, surface_y(x0) - dy, h, lean, w)
 
 
 # ---- beyond the water: a far volcano on the horizon, its plume rolling off to the left
@@ -529,10 +567,81 @@ def volcano(xl, xr, xc, top, crater, w):
 
 
 def plume(x, y):
-    """The volcano's plume: billows climbing from the crater and rolling off to the left."""
-    puffs = [(0, -10, 10), (-6, -30, 15), (8, -44, 11), (-20, -54, 20), (-46, -74, 25), (-14, -78, 16),
-             (-82, -88, 28), (-58, -104, 18), (-122, -92, 26), (-104, -112, 16), (-160, -88, 20), (-186, -84, 13)]
-    billows([(x + dx, y + dy, r) for dx, dy, r in puffs], 0.95, 0.65, hatch=3)
+    """The volcano's plume, as one cloud: small and tight at the vent, broader and flatter
+    downwind. Its outer edge is a sure line on the shaded underside and a fine broken one toward
+    the light, thinning out into broken strokes at the far end; a few fold arcs inside, and a
+    row of curved hatching along the shaded underside."""
+    # billows as ellipses (dx, dy, rx, ry), from the vent downwind
+    E = [(0, -8, 7, 6.5), (-3, -20, 10, 9), (-11, -35, 13, 11), (-24, -51, 17, 13), (-43, -66, 22, 15),
+         (-68, -77, 27, 16), (-99, -84, 31, 16), (-134, -87, 32, 14.5), (-168, -87, 29, 12),
+         (-199, -85, 23, 9), (-225, -83, 16, 6.5),
+         (-56, -84, 15, 10), (-90, -99, 20, 11), (-126, -100, 19, 9.5), (-160, -98, 15, 7.5)]
+    E = [(x + dx, y + dy, rx, ry) for dx, dy, rx, ry in E]
+
+    def in_e(p, e, grow=0.0):
+        cx, cy, rx, ry = e
+        return ((p[0] - cx) / (rx + grow)) ** 2 + ((p[1] - cy) / (ry + grow)) ** 2 < 1.0
+
+    def in_union(p, skip=None, grow=0.0):
+        return any(in_e(p, e, grow) for i, e in enumerate(E) if i != skip)
+
+    x_far = x - 150.0                       # beyond this the cloud thins out
+    for i, (cx, cy, rx, ry) in enumerate(E):
+        pts = ellipse_pts(cx, cy, rx, ry, 0, 0, 2 * math.pi, step=1.2)
+        for run in clip_segments(pts, lambda p: not in_union(p, i)):
+            # split the run into lit and shaded pieces by the way the edge faces
+            cur, cur_lit = [], None
+            pieces = []
+            for p in run:
+                nx_, ny_ = (p[0] - cx) / rx, (p[1] - cy) / ry
+                lit = (nx_ * -0.6 + ny_ * -0.8) > 0.15
+                if cur and lit != cur_lit:
+                    pieces.append((cur, cur_lit))
+                    cur = [cur[-1]]
+                cur.append(p)
+                cur_lit = lit
+            if len(cur) > 1:
+                pieces.append((cur, cur_lit))
+            for seg, lit in pieces:
+                far = smooth(x_far, x_far - 90.0, seg[len(seg) // 2][0])     # 0 near, 1 at the far end
+                if not lit and far < 0.2:
+                    pen.line(seg, w=0.95, hand=0.1, lift=0.03, piece=(30, 90), occlude=False)
+                    continue
+                # toward the light, and all of the far end: fine broken strokes, sparser far off
+                k = int(rng2.uniform(0, 3))
+                while k < len(seg) - 2:
+                    ln = rng2.randint(4, 9) if lit else rng2.randint(6, 12)
+                    pen.line(seg[k:k + ln], w=(0.65 if lit else 0.85 - 0.2 * far), hand=0.05, lift=0, piece=(400, 800), occlude=False)
+                    k += ln + rng2.randint(3, 7) + int(10 * far)
+    # fold arcs: where a billow rolls in front of the next one downwind, its lower right shows
+    for i in (2, 4, 5, 6, 12):
+        cx, cy, rx, ry = E[i]
+        arc = ellipse_pts(cx, cy, rx, ry, 0, math.radians(-10), math.radians(115), step=1.2)
+        for run in clip_segments(arc, lambda p: in_union(p, i, -2.0)):
+            if len(run) > 5:
+                pen.line(run, w=0.75, hand=0.05, lift=0, piece=(400, 800), occlude=False)
+    # curved hatching along the shaded underside, just inside the edge
+    for i, (cx, cy, rx, ry) in enumerate(E[:9]):
+        for fr in (0.8, 0.62):
+            if ry * (1 - fr) < 2.5 or rx * fr < 5:
+                continue
+            arc = ellipse_pts(cx, cy, rx * fr, ry * fr, 0, math.radians(15), math.radians(130), step=1.0)
+            for run in clip_segments(arc, lambda p: not in_union(p, i) or not in_union(p, i, -1.0)):
+                pass
+            # only where this billow's own underside is the cloud's underside
+            keep = [p for p in arc if not any(in_e((p[0], p[1] + ry * (1 - fr) + 2), e) for j, e in enumerate(E) if j != i)]
+            if len(keep) > 6:
+                runs, cur = [], [keep[0]]
+                for a, b in zip(keep, keep[1:]):
+                    if math.dist(a, b) > 2.0:
+                        runs.append(cur)
+                        cur = [b]
+                    else:
+                        cur.append(b)
+                runs.append(cur)
+                for run in runs:
+                    if len(run) > 5:
+                        pen.line(run, w=0.62, hand=0.05, lift=0, piece=(400, 800), occlude=False)
 
 
 tip = volcano(742.0, 910.0, 834.0, 82.0, 10.0, 1.2)
