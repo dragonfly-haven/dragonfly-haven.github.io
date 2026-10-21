@@ -414,6 +414,20 @@ def sleeve(fig, S, E, W, widths, w=1.8, body_cx=None, t_in=0.24):
     return out
 
 
+def hairy_head(hc, rx, ry, w=1.8, amp=0.03):
+    """The back of a head as its hair's outline: an oval with small locks."""
+    ph1, ph2 = R(0, 6.3), R(0, 6.3)
+    pts = []
+    N = int(2 * math.pi * max(rx, ry) / 1.0)
+    for k in range(N + 1):
+        a = 2 * math.pi * k / N
+        top = max(0.0, -math.sin(a))  # locks on the crown and sides, a smooth nape
+        r = 1 + amp * top * (0.6 * math.sin(9 * a + ph1) + 0.4 * math.sin(14 * a + ph2))
+        pts.append((hc[0] + math.cos(a) * rx * r, hc[1] + math.sin(a) * ry * r))
+    pen.line(pts, w=w, hand=0.25, lift=0.04)
+    return pts
+
+
 def hair_short(hc, rx, ry, crown, n, u, tousle=0.0, seed_side=1):
     """Short hair on the back of a head: strands sweeping from the crown whorl
     down and round to the nape and sides, of varied length, clumped, and more
@@ -422,8 +436,8 @@ def hair_short(hc, rx, ry, crown, n, u, tousle=0.0, seed_side=1):
     for k in range(n):
         f = (k + R(0.2, 0.8)) / n
         a = math.pi * (0.04 + 0.92 * f)            # 0 = right side ... pi = left side, through the bottom
-        r0 = R(0.08, 0.45)
-        st = (crown[0] + math.cos(a) * rx * r0 * 0.6, crown[1] + R(0.0, 0.35) * ry * r0)
+        r0 = R(0.22, 0.5)
+        st = (crown[0] + math.cos(a) * rx * r0 * 0.7, crown[1] + math.sin(a) * ry * r0 * 0.45 + ry * 0.04)
         reach = R(0.72, 0.98) if R() < 0.75 else R(0.45, 0.7)
         en = (hc[0] + math.cos(a) * rx * reach, hc[1] + math.sin(a) * ry * reach * 0.9 + ry * 0.05)
         tw = 0.18 * rx * (1 if k % 2 else -0.6)            # the sweep round the whorl
@@ -479,12 +493,12 @@ def family(ox, oy, H):
         ear = f.Ps([(sgn * 0.084, -0.912), (sgn * 0.101, -0.906), (sgn * 0.104, -0.884), (sgn * 0.093, -0.866),
                     (sgn * 0.082, -0.866)])
         pen.line(C(ear, step=0.8), w=1.2, hand=0.2, lift=0)
-    pen.line(head, w=1.8, hand=0.35, lift=0.05)
+    head = hairy_head(hc, 0.088 * u, 0.102 * u, amp=0.035)
     nape = C(f.Ps([(-0.082, -0.858), (-0.06, -0.836), (-0.03, -0.826), (0, -0.822), (0.03, -0.829), (0.058, -0.838),
                    (0.082, -0.858)]), step=1)
     fine(nape, w=1.1, hand=0.3)
     # tousled short hair, from a whorl at the crown
-    hair_short(hc, 0.088 * u, 0.102 * u, f.P((0.014, -0.968)), 17, u, tousle=0.14)
+    hair_short(hc, 0.088 * u, 0.102 * u, f.P((0.014, -0.962)), 14, u, tousle=0.14)
     pen.occlude(head)
     # neck
     fine(C(f.Ps([(-0.033, -0.826), (-0.035, -0.8)]), step=1), w=1.0)
@@ -509,6 +523,7 @@ def family(ox, oy, H):
     tunic = outline_of(f.Ps(tl), f.Ps(hem), f.Ps(tr), f.Ps(top))
     pen.line(tunic, w=1.8, hand=0.45, lift=0.06)
     fine(C(f.Ps([(-0.054, -0.781), (0, -0.773), (0.054, -0.781)]), step=1), w=0.9)          # collar band
+    fine(C(f.Ps([(-0.137, -0.424), (0, -0.42), (0.137, -0.424)]), step=1), w=0.8)            # the hem's turn
     fine(C(f.Ps([(-0.118, -0.58), (0, -0.572), (0.118, -0.58)]), step=1), w=0.85)            # a soft belt
     fine(C(f.Ps([(-0.12, -0.556), (0, -0.549), (0.12, -0.556)]), step=1), w=0.85)
     for x0, x1 in ((-0.05, -0.07), (0.045, 0.07)):
@@ -541,8 +556,8 @@ def family(ox, oy, H):
     u = f.u
     hl_ = [(0, -0.996), (-0.038, -0.99), (-0.058, -0.96), (-0.062, -0.92), (-0.066, -0.875), (-0.082, -0.83),
            (-0.092, -0.77), (-0.091, -0.71), (-0.084, -0.66)]
-    tips = [(-0.084, -0.66), (-0.066, -0.63), (-0.05, -0.645), (-0.028, -0.612), (-0.006, -0.634), (0.018, -0.606),
-            (0.04, -0.632), (0.062, -0.616), (0.086, -0.662)]
+    tips = [(-0.084, -0.66), (-0.072, -0.634), (-0.052, -0.62), (-0.036, -0.626), (-0.018, -0.607), (0.004, -0.612),
+            (0.026, -0.602), (0.05, -0.617), (0.068, -0.628), (0.086, -0.662)]
     hr_ = [(0.086, -0.662), (0.093, -0.712), (0.094, -0.772), (0.084, -0.832), (0.068, -0.877), (0.063, -0.92),
            (0.058, -0.96), (0.038, -0.99), (0, -0.996)]
     hair = C(f.Ps(hl_)) + C(f.Ps(tips), step=0.8)[1:] + C(f.Ps(hr_))[1:]
@@ -590,6 +605,7 @@ def family(ox, oy, H):
     top = [(0.05, -0.86), (0, -0.866), (-0.05, -0.86)]
     dress = outline_of(f.Ps(dl_), f.Ps(hem), f.Ps(dr_), f.Ps(top))
     pen.line(dress, w=1.9, hand=0.45, lift=0.06)
+    fine(C(f.Ps([(-0.172, -0.072), (-0.1, -0.064), (0, -0.064), (0.1, -0.064), (0.172, -0.072)]), step=1), w=0.8)
     for yy in (-0.614, -0.59):
         fine(C(f.Ps([(-0.094, yy), (-0.04, yy + 0.003), (0.04, yy + 0.003), (0.094, yy)]), step=1), w=1.0)
     # the sash's knot and ends at the back
@@ -605,7 +621,7 @@ def family(ox, oy, H):
     # shade down the right side of the skirt and bodice
     sl = C(f.Ps([(-0.099, -0.545), (-0.122, -0.43), (-0.148, -0.27), (-0.166, -0.14), (-0.178, -0.05)]))
     sr = C(f.Ps([(0.099, -0.545), (0.122, -0.43), (0.148, -0.27), (0.166, -0.14), (0.178, -0.05)]))
-    lengthwise(sl, sr, 0.72, 0.97, spacing=5.6, clip=dress, t0=0.03, t1=0.99)
+    lengthwise(sl, sr, 0.64, 0.97, spacing=5.6, clip=dress, t0=0.03, t1=0.99)
     bl = C(f.Ps([(-0.112, -0.73), (-0.095, -0.66), (-0.089, -0.62)]))
     br = C(f.Ps([(0.112, -0.73), (0.095, -0.66), (0.089, -0.62)]))
     lengthwise(bl, br, 0.66, 0.96, spacing=5.4, clip=dress)
@@ -624,11 +640,11 @@ def family(ox, oy, H):
         ear = f.Ps([(sgn * 0.054, -0.948), (sgn * 0.066, -0.944), (sgn * 0.069, -0.925), (sgn * 0.06, -0.906),
                     (sgn * 0.052, -0.906)])
         pen.line(C(ear, step=0.8), w=1.2, hand=0.2, lift=0)
-    pen.line(head, w=1.8, hand=0.35, lift=0.05)
+    head = hairy_head(hc, 0.057 * u, 0.067 * u, amp=0.025)
     nape = C(f.Ps([(-0.054, -0.905), (-0.036, -0.887), (-0.012, -0.881), (0.012, -0.882), (0.036, -0.888),
                    (0.054, -0.905)]), step=1)
     fine(nape, w=1.1)
-    hair_short(hc, 0.057 * u, 0.067 * u, f.P((0.01, -0.985)), 16, u)
+    hair_short(hc, 0.057 * u, 0.067 * u, f.P((0.01, -0.978)), 13, u)
     pen.occlude(head)
     fine(C(f.Ps([(-0.03, -0.884), (-0.033, -0.866)]), step=1), w=1.0)
     fine(C(f.Ps([(0.03, -0.884), (0.033, -0.866)]), step=1), w=1.0)
@@ -648,6 +664,8 @@ def family(ox, oy, H):
     coat = outline_of(f.Ps(cl_), f.Ps(hem), f.Ps(cr_), f.Ps(top))
     pen.line(coat, w=2.0, hand=0.45, lift=0.06)
     fine(C(f.Ps([(-0.056, -0.85), (0, -0.854), (0.056, -0.85)]), step=1), w=1.0)        # collar
+    fine(C(f.Ps([(-0.125, -0.352), (-0.06, -0.347), (-0.008, -0.348)]), step=1), w=0.8)  # the hem's turn
+    fine(C(f.Ps([(0.008, -0.348), (0.06, -0.347), (0.125, -0.352)]), step=1), w=0.8)
     fine(C(f.Ps([(-0.126, -0.79), (-0.06, -0.778), (0, -0.776), (0.06, -0.778), (0.126, -0.79)]), step=1), w=0.85)
     fine(C(f.Ps([(0, -0.854), (0.0, -0.65), (0.001, -0.45)]), step=1), w=1.0)          # back seam
     fine(C(f.Ps([(0.001, -0.45), (0.006, -0.39), (0.007, -0.333)]), step=1), w=1.0)    # the vent
@@ -660,10 +678,11 @@ def family(ox, oy, H):
         ticks(ln, +1, spacing=5.6, L=(3, 7), t0=0.3, t1=0.95, clip=coat, ang=0.5)
     ul = C(f.Ps([(-0.13, -0.77), (-0.113, -0.70), (-0.106, -0.615)]))
     ur = C(f.Ps([(0.13, -0.77), (0.113, -0.70), (0.106, -0.615)]))
-    lengthwise(ul, ur, 0.66, 0.97, spacing=5.5, clip=coat)
+    lengthwise(ul, ur, 0.6, 0.97, spacing=5.5, clip=coat)
     ll = C(f.Ps([(-0.106, -0.592), (-0.111, -0.50), (-0.12, -0.40), (-0.127, -0.34)]))
     lr = C(f.Ps([(0.106, -0.592), (0.111, -0.50), (0.12, -0.40), (0.127, -0.34)]))
-    lengthwise(ll, lr, 0.7, 0.97, spacing=5.5, clip=coat)
+    lengthwise(ll, lr, 0.58, 0.97, spacing=5.5, clip=coat)
+    across(ll, lr, spacing=6.0, frac=(0.18, 0.34), bow=2.0, w=0.65, t0=0.12, t1=0.9, from_b=True, clip=coat)
     pen.occlude(coat)
     # trousers and shoes
     for sgn in (-1, 1):
@@ -857,7 +876,7 @@ def skyway(ctrl, W, elev, pylon_every=60.0, min_sep=34.0):
         if not (0 < bot[0] < 1000):
             continue
         last = bot
-        ht_w, mid_w, foot_w = F * 2.3 / Z, F * 0.95 / Z, F * 1.3 / Z
+        ht_w, mid_w, foot_w = F * 2.8 / Z, F * 1.35 / Z, F * 1.7 / Z
         lpts = C([(top[0] - ht_w, top[1]), (top[0] - mid_w * 1.25, top[1] + ht * 0.16), (bot[0] - mid_w, top[1] + ht * 0.55),
                   (bot[0] - foot_w, bot[1])], step=1.5)
         rpts = C([(top[0] + ht_w, top[1]), (top[0] + mid_w * 1.25, top[1] + ht * 0.16), (bot[0] + mid_w, top[1] + ht * 0.55),
@@ -1152,61 +1171,72 @@ def crown_shape(cx, cy, R0, lobes, scallop):
     return out
 
 
+def scallop_arc(c, r, a0, a1, per, amp):
+    """An arc of a circle edged with small outward bumps (a clump of leaves)."""
+    pts = ellipse_pts(c[0], c[1], r, r, 0, a0, a1, step=0.8)
+    out = []
+    s = 0.0
+    for k, p in enumerate(pts):
+        if k:
+            s += dist(pts[k - 1], p)
+        b = amp * abs(math.sin(math.pi * s / per)) ** 0.6
+        dx, dy = p[0] - c[0], p[1] - c[1]
+        L = math.hypot(dx, dy) or 1
+        out.append((p[0] + dx / L * b, p[1] + dy / L * b))
+    return out
+
+
 def tree(bx, by, h, w=None):
-    """A round-crowned broadleaf tree, its foot at (bx, by), h tall on the page:
-    a crown of lobes lit from the upper left, the lobes on the shade side
-    edged and hatched, a short trunk and a cast-shadow stroke. Skipped (False)
-    where it would run into something already drawn in front of it."""
+    """A round-crowned broadleaf tree, its foot at (bx, by), h tall on the page,
+    in the engraver's shorthand: a crown of leafy clumps, lit from the upper
+    left; each clump's lower edge scalloped where it lies over the clumps
+    behind, and its shaded side hatched; a short trunk and a cast shadow.
+    Skipped (False) where it would run into something already drawn in front."""
     if h < 5:
         return False
-    R0 = h * R(0.33, 0.4)
-    cx, cy = bx + G(h * 0.02), by - h + R0 * 1.02
-    m = 7 if h > 30 else 5
-    lobes = [(cx, cy + R0 * 0.08, R0 * 0.62)]
+    R0 = h * R(0.34, 0.4)
+    cx, cy = bx + G(h * 0.02), by - h + R0 * 0.95
+    m = 8 if h > 30 else 6
+    lobes = [(cx + G(R0 * 0.05), cy + R0 * 0.1, R0 * 0.5)]
     for k in range(m):
-        a = -math.pi / 2 + 2 * math.pi * (k + R(-0.18, 0.18)) / m
-        lr = R0 * R(0.42, 0.54)
-        d = R0 - lr
-        lobes.append((cx + math.cos(a) * d * 1.05, cy + math.sin(a) * d * 0.9, lr))
-    crown = crown_shape(cx, cy, R0, lobes, scallop=min(2.0, R0 * 0.07) if h > 12 else 0.0)
+        a = -math.pi / 2 + 2 * math.pi * (k + R(-0.2, 0.2)) / m
+        lr = R0 * R(0.32, 0.48)
+        d = (R0 - lr) * R(1.0, 1.12)
+        lobes.append((cx + math.cos(a) * d * 1.1, cy + math.sin(a) * d * 0.84, lr))
+    crown = crown_shape(cx, cy, R0, lobes, scallop=min(1.8, R0 * 0.06) if h > 12 else 0.0)
     tb = cy + R0 * 0.55
-    tw0, tw1 = max(1.2, h * 0.055), max(0.9, h * 0.035)
+    tw0, tw1 = max(1.2, h * 0.05), max(0.9, h * 0.032)
     lean = G(h * 0.015)
     trunk = [(bx - tw0, by), (bx - tw1 + lean, tb), (bx + tw1 + lean, tb), (bx + tw0, by)]
     probe = crown[::3] + trunk + [(bx - h * 0.3, by), (bx + h * 0.4, by)]
-    if any(pen.hidden(q) for q in probe):
+    if any(pen.hidden(q) for q in probe) or not all(14 < q[0] < 986 for q in probe):
         return False
     if w is None:
         w = clamp(0.7 + h / 55, 0.75, 1.6)
     pen.line(crown, w=w, hand=0.3, lift=0.05)
-    if h > 20:
-        # inner lobe edges, on each lobe's shade side, where it overlaps the crown
-        inner = [(cx + (p[0] - cx) * 0.93, cy + (p[1] - cy) * 0.93) for p in crown]
-        for lx, ly, lr in lobes[1:]:
-            if ly < cy - R0 * 0.25:
+    inner = [(cx + (p[0] - cx) * 0.94, cy + (p[1] - cy) * 0.94) for p in crown]
+    if h > 18:
+        # each clump's lower edge, where it lies over the clumps behind it
+        for lx, ly, lr in lobes:
+            if ly < cy - R0 * 0.3:
                 continue
-            arc = ellipse_pts(lx, ly, lr, lr, 0, math.radians(-25), math.radians(150), step=1.0)
+            arc = scallop_arc((lx, ly), lr, math.radians(5), math.radians(160), max(4.5, lr / 2.0),
+                              min(1.5, lr * 0.08))
             for run in clip_segments(arc, lambda p: inside(p, inner)):
                 if length(run) > 4:
-                    pen.line(run, w=w * 0.6, hand=0.3, lift=0.2, piece=(6, 14))
-    # shade: stronger toward the crown's lower right, and on each lobe's own lower right
+                    pen.line(run, w=w * 0.6, hand=0.2, lift=0.03)
 
-    def shade_at(p):
+    def tone(p):
         g = ((p[0] - cx) * SHADE[0] + (p[1] - cy) * SHADE[1]) / R0
-        lb = -1.0
+        best = -1.0
         for lx, ly, lr in lobes:
-            dd = math.hypot(p[0] - lx, p[1] - ly)
-            if dd < lr:
-                lb = max(lb, ((p[0] - lx) * SHADE[0] + (p[1] - ly) * SHADE[1]) / lr)
-        return 0.65 * g + 0.45 * lb
+            if math.hypot(p[0] - lx, p[1] - ly) < lr:
+                best = max(best, ((p[0] - lx) * SHADE[0] + (p[1] - ly) * SHADE[1]) / lr)
+        return 0.6 * g + 0.5 * best
     if h > 9:
-        sp = 5.2 if h > 30 else 5.6
-        region_hatch(crown, -50, sp, lambda p: inside(p, crown) and shade_at(p) > 0.28, w=0.68, minlen=2.5,
-                     broken=h > 24)
-        if h > 40:
-            region_hatch(crown, 20, 6.0, lambda p: inside(p, crown) and shade_at(p) > 0.62, w=0.65, minlen=2.5,
-                         broken=True)
-    else:
+        region_hatch(crown, -52, 5.0 if h > 30 else 5.5, lambda p: inside(p, crown) and tone(p) > 0.26, w=0.66,
+                     minlen=2.0)
+    if h <= 9:
         for k in range(3):
             a = R(0.2, 1.2)
             p = (cx + math.cos(a) * R0 * 0.55, cy + math.sin(a) * R0 * 0.55)

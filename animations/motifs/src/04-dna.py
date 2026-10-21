@@ -208,14 +208,28 @@ if Y3[2] < 0:
 R = 100.0                                   # backbone radius (about 10 A)
 PITCH = 357.0                               # one turn (about 36 A)
 BP_PER_TURN = 10.5
-TURNS = 2.25
 RT = 16.0                                   # radius of a backbone tube
 DELTA = math.radians(140)                   # strand b round from strand a across the minor groove
 K = -2 * math.pi / PITCH                    # right-handed (checked: the near strands rise to the right)
-U_LO, U_HI = -TURNS * PITCH / 2, TURNS * PITCH / 2
-PHI = math.radians(100)                     # strand a's angle at the lower end
+PHI = math.radians(100)                     # strand a's angle at u = 0
 RISE = PITCH / BP_PER_TURN
-NBP = int(TURNS * BP_PER_TURN)
+
+
+def u_at(tag, deg, near):
+    """The height nearest `near` where a strand stands at the angle deg round the axis."""
+    base = PHI + (DELTA if tag == 'b' else 0.0)
+    n = round((K * near - (math.radians(deg) - base)) / (2 * math.pi))
+    return (math.radians(deg) - base + 2 * math.pi * n) / K
+
+
+# Both strands are cut square across the helix, each clear of the edge where it turns
+# round (0 and 180 degrees): at the foot strand b on the front (45) and a at the back
+# (265); at the top a on the front (135), b at the back (275). The two front ends turn
+# their cut faces to us.
+U_LO = u_at('b', 45, -420)
+U_HI = u_at('a', 135, U_LO + 845)
+MARGIN = 13.0                               # the end pairs sit this far inside the cuts
+NBP = int((U_HI - U_LO - 2 * MARGIN) / RISE) + 1
 U0 = (U_HI + U_LO) / 2 - RISE * (NBP - 1) / 2   # the pairs sit centred along the length
 
 
@@ -224,29 +238,24 @@ def pos(u, th, r=R):
 
 
 def theta(tag, u):
-    return PHI + (DELTA if tag == 'b' else 0.0) + K * (u - U_LO)
+    return PHI + (DELTA if tag == 'b' else 0.0) + K * u
 
 
 # ---------------------------------------------------------------- backbone tubes
 
 
-TRIM = {'a': (24.0, 0.0), 'b': (0.0, 0.0)}   # strand a starts a little short: staggered ends
-
-
 def tube(tag):
     """Samples along a backbone: centre, tangent, and the frame of its visible half."""
     out = []
-    lo, hi = TRIM[tag]
-    u = U_LO + lo
-    du = 0.7
-    while u <= U_HI - hi + 1e-6:
+    n = int(round((U_HI - U_LO) / 0.7))
+    for j in range(n + 1):
+        u = U_LO + (U_HI - U_LO) * j / n
         c = pos(u, theta(tag, u))
         t = norm(sub(pos(u + 0.5, theta(tag, u + 0.5)), pos(u - 0.5, theta(tag, u - 0.5))))
         v = view(c)
         m = norm(cross(t, v))               # across the tube, in the picture
         w = norm(sub(v, mul(t, dot(v, t))))  # the side of the tube facing us
         out.append(dict(u=u, c=c, t=t, m=m, w=w, i=len(out)))
-        u += du
     return out
 
 
@@ -266,10 +275,11 @@ def occ(smp, o):
     return (q[0], q[1], proj(p)[2])
 
 
-def cap_dir(smp, sg):
-    """In the plane square to the view: the way out of the tube's end."""
-    n2 = norm(cross(view(smp['c']), smp['m']))
-    return n2 if dot(n2, smp['t']) * sg > 0 else mul(n2, -1)
+def cut_rim(smp, r=RT, n=32):
+    """The rim of the square cut at a tube's end, from one side round the front (j = 0 .. n/2)
+    and on round the back."""
+    return [add(smp['c'], mul(smp['m'], r * math.cos(2 * math.pi * j / n)), mul(smp['w'], r * math.sin(2 * math.pi * j / n)))
+            for j in range(n + 1)]
 
 
 tubes = {'a': tube('a'), 'b': tube('b')}
@@ -282,14 +292,12 @@ for tag, S in tubes.items():
             rails = [[fn(smp, o) for o in (-1.0, -0.5, 0.0, 0.5, 1.0)] for smp in (p, q)]
             for j in range(4):
                 depth.quad(rails[0][j], rails[1][j], rails[1][j + 1], rails[0][j + 1], (kind, tag, i))
-    # the round ends: a fan over the half disc that shows beyond the tube
-    for smp, sg in ((S[0], -1), (S[-1], 1)):
-        e = cap_dir(smp, sg)
-        front = proj(add(smp['c'], mul(smp['w'], RT)))
-        rim = [proj(add(smp['c'], mul(smp['m'], (RT + HALO) * math.cos(math.pi * j / 12)),
-                        mul(e, (RT + HALO) * math.sin(math.pi * j / 12)))) for j in range(13)]
+    # the cut faces, as discs
+    for smp in (S[0], S[-1]):
+        cen = proj(smp['c'])
+        rim = [proj(p) for p in cut_rim(smp, RT + HALO)]
         for a, b in zip(rim, rim[1:]):
-            depth.add(front, a, b, ('h', tag, smp['i']))
+            depth.add(cen, a, b, ('h', tag, smp['i']))
 
 # ---------------------------------------------------------------- base slabs
 
@@ -353,53 +361,75 @@ def own_tube(tag):
     return lambda t, q: t is not None and t[1] == tag and (t[0] == 'h' or (t[0] == 't' and abs(t[2] - q) <= 9))
 
 
-for tag, S in tubes.items():
+RAILS = (-0.725, -0.435, -0.145, 0.145, 0.435, 0.725)   # 0.29 x RT apart: over 5 on the page
+BEND_R = 46.0                               # a bend: the tube's path in the picture turns tighter than this
+RING = 7.5                                  # cross strokes this far apart along a bend
+
+
+def bend_radius(S, i, k=8):
+    a, b, c = proj(S[max(0, i - k)]['c']), proj(S[i]['c']), proj(S[min(len(S) - 1, i + k)]['c'])
+    area = abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2
+    if area < 1e-6:
+        return 1e9
+    return dist(a[:2], b[:2]) * dist(b[:2], c[:2]) * dist(a[:2], c[:2]) / (4 * area)
+
+
+def draw_tube(S, own, tzf):
+    """A backbone tube: its two silhouettes, the square cuts at its ends, contour lines along
+    it on the shadow side, and a few cross strokes in the core shadow under each bend."""
     ids = [s['i'] for s in S]
-    # the two silhouettes
     for o in (-1.0, 1.0):
-        draw([proj(surf(s, o)[0]) for s in S], tz(1.8, 2.7), own_tube(tag), ids=ids)
-    # round ends
+        draw([proj(surf(s, o)[0]) for s in S], tzf(1.8, 2.7), own, ids=ids)
+    # the cuts: the rim round the front; where the cut face is turned to us the whole rim,
+    # and the face hatched straight across if it is turned from the light
     for smp, sg in ((S[0], -1), (S[-1], 1)):
-        e = cap_dir(smp, sg)
-        pts = []
-        for j in range(17):
-            f = math.pi * j / 16
-            p = add(smp['c'], mul(smp['m'], RT * math.cos(f)), mul(e, RT * math.sin(f)))
-            pts.append(proj(p))
-        draw(pts, tz(1.8, 2.6), own_tube(tag), ids=[smp['i']] * len(pts))
-    # contour hatching along the tube on its shadow side: lines at fixed places across
-    # it, each drawn where the surface there is dark enough, heavier in the core shadow
-    ease = int(RT * 0.9 / 1.4)              # samples over which the hatching thins out at an end
-    for o in (-0.7, -0.35, 0.0, 0.35, 0.7):     # 0.35 x RT apart: at least 5.6 in the picture
+        fn = mul(smp['t'], sg)
+        facing = dot(fn, view(smp['c']))
+        rim = cut_rim(smp)
+        pts = rim if facing > 0.03 else rim[:17]
+        draw([proj(p) for p in pts], tzf(1.6, 2.4), own, ids=[smp['i']] * len(pts), hand=0.1)
+        dark = 1 - lit(fn)
+        if facing > 0.03 and dark > 0.4:
+            c = smp['c']
+            Lw = dist(proj(add(c, mul(smp['w'], RT)))[:2], proj(c)[:2])
+            nl = min(4, int(2 * Lw / 5.5) - 1)
+            for j in range(1, nl + 1):
+                y = -1 + 2 * j / (nl + 1)
+                h = math.sqrt(1 - y * y) * 0.8
+                a = add(c, mul(smp['w'], RT * y), mul(smp['m'], -RT * h))
+                b = add(c, mul(smp['w'], RT * y), mul(smp['m'], RT * h))
+                draw([proj(a), proj(b)], 0.75 + 0.4 * (dark - 0.4), own, ids=[smp['i']] * 2, hand=0.05)
+    # contour lines along the tube at fixed places across it, each drawn where the surface
+    # there is dark enough, heavier in the core shadow, eased at the rim (reflected light)
+    for o in RAILS:
         run, rid = [], []
-        for s in S[ease // 2:-(ease // 2)] + [None]:
+        for s in S + [None]:
             dark = 0.0
             if s is not None:
                 p, n = surf(s, o)
                 dark = 1 - lit(n)
-            if dark > 0.52:
-                wt = 0.85 + 1.5 * min(1.0, (dark - 0.52) / 0.4) ** 1.5
-                wt = 0.85 + (wt - 0.85) * (0.55 if abs(o) > 0.7 else 1.0)   # reflected light at the rim
-                fade = min(s['i'], len(S) - 1 - s['i']) / ease                # thinning toward an end
-                if fade < 1:
-                    wt = 0.7 + (wt - 0.7) * max(0.0, fade)
+            if dark > 0.5:
+                wt = 0.85 + 1.5 * min(1.0, (dark - 0.5) / 0.42) ** 1.5
+                wt = 0.85 + (wt - 0.85) * (0.55 if abs(o) > 0.7 else 1.0)
                 run.append(proj(p) + (wt,))
                 rid.append(s['i'])
             else:
                 if len(run) > 3:
-                    draw(run, None, own_tube(tag), ids=rid, hand=0.15)
+                    draw(run, None, own, ids=rid, hand=0.15)
                 run, rid = [], []
-
-    # in the core of the shadow, short contour strokes round the tube, crossing the lines
-    # along it (as in the darkest band of 05), every RING units along its middle
-    RING = 7.5
+    # cross strokes round the tube in the core shadow on the underside of each bend:
+    # three to five, centred on the bend's tightest point, none near the ends
+    cands = []
     run_len, last = 0.0, None
-    for s in S[ease:-ease]:
+    for s in S[40:-40]:
         cp = proj(s['c'])
         if last is not None:
             run_len += dist(cp[:2], last[:2])
         last = cp
         if run_len < RING:
+            continue
+        rb = bend_radius(S, s['i'])
+        if rb > BEND_R:
             continue
         arc, aid = [], []
         for j in range(25):
@@ -411,9 +441,25 @@ for tag, S in tubes.items():
                 aid.append(s['i'])
             elif len(arc) > 2:
                 break
-        if len(arc) > 2 and length([q[:2] for q in arc]) > 11:      # only where the shadow is broad
-            draw(arc, None, own_tube(tag), ids=aid, hand=0.08)
+        if len(arc) > 2 and length([q[:2] for q in arc]) > 11:
+            cands.append((s['i'], rb, arc, aid))
             run_len = 0.0
+    groups = []
+    for cnd in cands:
+        if groups and cnd[0] - groups[-1][-1][0] < 30:
+            groups[-1].append(cnd)
+        else:
+            groups.append([cnd])
+    for g in groups:
+        if len(g) < 3:
+            continue
+        core = min(g, key=lambda q: q[1])[0]
+        for i, rb, arc, aid in sorted(g, key=lambda q: abs(q[0] - core))[:5]:
+            draw(arc, None, own, ids=aid, hand=0.08)
+
+
+for tag, S in tubes.items():
+    draw_tube(S, own_tube(tag), tz)
 
 # ---------------------------------------------------------------- drawing: the slabs
 
@@ -424,6 +470,26 @@ SIDES = {'t-': ((0, 4), (2, 6)), 't+': ((1, 5), (3, 7)), 'w-': ((0, 4), (1, 5)),
 
 def own_slab(k, h):
     return lambda t: t is not None and t[0] in 'sg' and t[1] == k and t[2] == h
+
+
+def face_strokes(cs, name, dark, far, own):
+    """Even strokes along a slab's dark side face: two or three that stay parallel and at
+    least 5 apart, else one heavier line down its middle; fewer on the far side."""
+    (p0, p1), (q0, q1) = SIDES[name]
+    spa = dist(proj(cs[p0])[:2], proj(cs[q0])[:2])
+    spb = dist(proj(cs[p1])[:2], proj(cs[q1])[:2])
+    lo, hi = min(spa, spb), max(spa, spb)
+    nl = min(3, int(lo / 5.5) - 1)
+    if not far and nl >= 2 and hi <= 1.3 * lo:
+        fr, wt = [j / (nl + 1) for j in range(1, nl + 1)], 0.9 + 0.5 * (dark - 0.45)
+    elif lo >= 3.5 and dark > (0.8 if far else 0.6):
+        fr, wt = [0.5], (1.0 if far else 1.35)
+    else:
+        return
+    for f in fr:
+        a, b = lerp3(cs[p0], cs[q0], f), lerp3(cs[p1], cs[q1], f)
+        a, b = lerp3(a, b, 0.06), lerp3(a, b, 0.94)
+        draw([proj(a), proj(b)], wt, own, hand=0.1, eps=0.8)
 
 
 for k, h, cs, dd, wv in slabs:
@@ -441,15 +507,7 @@ for k, h, cs, dd, wv in slabs:
         # shade the face with even strokes along the slab, as dark as it is turned from the light
         dark = 1 - lit(n)
         if dark > 0.45 and name in SIDES:
-            (p0, p1), (q0, q1) = SIDES[name]
-            sp = 5.5 if dark > 0.7 else 8.0
-            span = dist(proj(cs[p0])[:2], proj(cs[q0])[:2])
-            nl = int(span / sp)
-            for j in range(1, nl + 1):
-                f = j / (nl + 1)
-                s0, s1 = lerp3(cs[p0], cs[q0], f), lerp3(cs[p1], cs[q1], f)
-                s0, s1 = lerp3(s0, s1, 0.06), lerp3(s0, s1, 0.94)
-                draw([proj(s0), proj(s1)], 0.9 + 0.8 * (dark - 0.45), own_slab(k, h), hand=0.1, eps=0.8)
+            face_strokes(cs, name, dark, centre[2] < -0.3 * R, own_slab(k, h))
     for (i, j), cnt in edges.items():
         draw([P[i], P[j]], tz(1.2, 1.9), own_slab(k, h), hand=0.1, eps=0.8)
 
@@ -458,7 +516,7 @@ for k, h, cs, dd, wv in slabs:
 xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
-SCALE = 1.12
+SCALE = 1.09
 pen.strokes = [([((x - cx) * SCALE + 500, (y - cy) * SCALE + 500) for x, y in p], w) for p, w in pen.strokes]
 print('pairs', NBP)
 pen.save('../04-dna.svg', mirror=False)
