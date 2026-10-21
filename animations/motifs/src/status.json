@@ -44,15 +44,15 @@
       "maxim": "more sleek: yes",
       "note": "rework after Maxim's notes: one smooth even strand; polished: bases continue round the stem foot, the 3' tail sweeps out to balance",
       "rework2": {
-        "round": "s2",
+        "round": "s3",
         "scores": [
-          7,
-          7,
+          8,
+          9,
           8
         ],
         "maxim": "a different direction, closer to the others: yes",
-        "passed": false,
-        "note": "upright hairpin now reads as one strand, but the round head is twice the stem's area and reads as a bulb at 1x; resizing head and stem, flaring the loop, unevening its bases, basing the whole tail"
+        "passed": true,
+        "note": "solid engraved hairpin: low domed loop with uneven bases on an 8-pair A-form stem, square 3' stub, based tail; polishing"
       }
     },
     "dna": {
