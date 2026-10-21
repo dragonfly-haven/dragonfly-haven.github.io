@@ -2,13 +2,14 @@
 
 The same model and hand as 04 DNA, so 03 reads as one strand and 04 as the double
 helix. A single sugar-phosphate backbone as a solid round tube, its bases as flat
-slabs standing out of it. The strand runs from a 5' stub up a short stem of eight
-base pairs, an A-form helix (eleven pairs a turn: wider and more compact than 04's
-B-form, its pairs tilted), rounds a loop of five unpaired bases over the top pair,
-comes back down the stem and leaves its foot as a loose single-stranded 3' tail,
-its bases turned gently along it. Modelled in 3D and drawn with a depth test; light
-from the upper left, contour hatching along the tube on its shadow side, crossed in
-the broad shadows, parallel strokes on the slabs' dark faces.
+slabs standing out of it. From its 5' end the strand comes as a loose single-stranded
+tail, its bases standing in from its sweep and turning gently along it, into the foot
+of a short stem of eleven base pairs: one turn of A-form helix, wider and more compact
+than 04's B-form, its pairs tilted, the purine of each pair the longer slab. Over the
+top pair it rounds a loop of five unpaired bases pointing in, comes back down the stem
+and is cut square at its 3' end at the foot. Modelled in 3D and drawn with a depth test;
+light from the upper left, contour lines along the tube on its shadow side, a few cross
+strokes under the bends, the slabs' dark faces lined, the cut ends shown as cut.
 """
 
 import math
@@ -243,7 +244,7 @@ def rot(v, axis, a):
 
 # ---------------------------------------------------------------- the stem: A-form
 
-AXA = math.radians(-74)                     # the stem rises up to the right in the picture
+AXA = math.radians(-50)                     # the stem rises up to the right in the picture
 TILT = math.radians(4)                      # its upper end turned a little away from us
 A3 = norm((math.cos(AXA) * math.cos(TILT), math.sin(AXA) * math.cos(TILT), -math.sin(TILT)))
 X3 = norm((-math.sin(AXA), math.cos(AXA), 0.0))
@@ -265,7 +266,7 @@ PHI = math.radians(90) - SEP / 2 - K * U_TOP   # the top pair lies square to our
 O = (-150.0, 170.0, 0.0)                    # the foot of the stem's axis
 LOOP_H, LOOP_TM, LOOP_T = 105.0, 200.0, 70.0  # the loop: height over the top pair, handles
 TAIL_REF = (240, -130, 0)                   # a point the tail sweeps round
-TAIL_PTS = ((50, 105, 40), (190, 150, 30), (345, 115, 10), (465, 30, -10))
+TAIL_PTS = ((50, 105, 40), (195, 150, 30), (360, 120, 10), (490, 10, -10), (545, -150, -20))
 
 
 def hpos(u, th, r=R):
@@ -286,15 +287,15 @@ def dfd(f, u, sg=1):
 
 # ---------------------------------------------------------------- the whole strand, 5' to 3'
 
-E = 26.0                                    # the strand runs on a little past the end pairs
-E3 = 14.0                                   # its 3' end: cut square on the front, before the turn
+E = 16.0                                    # the strand runs on a little past the end pairs
+E3 = 4.0                                    # its 3' end: cut square on the front, before the turn
 ET = 10.0                                   # at the top the loop takes over at once
 # the 5' tail: out of the stem's foot, round to the right in one long easy sweep (built
 # outward from the foot, then turned round to run 5' to 3')
 p5 = s1(-E)
 t5 = mul(dfd(s1, -E), -1)                   # outward, toward the 5' end
 TAIL = [add(p5, q) for q in TAIL_PTS]
-tail = hermite(p5, mul(t5, 150), TAIL[0], mul(norm(sub(TAIL[1], p5)), 200), 30)
+tail = hermite(p5, mul(t5, 110), TAIL[0], mul(norm(sub(TAIL[1], p5)), 200), 30)
 for a, b, c0, c1 in zip(TAIL, TAIL[1:], [None] + TAIL, TAIL[2:] + [None]):
     ma = mul(sub(b, c0 if c0 else a), 0.5 if c0 else 1.0)
     mb = mul(sub(c1 if c1 else b, a), 0.5 if c1 else 1.0)
@@ -352,9 +353,11 @@ def occ(smp, o):
     return (q[0], q[1], proj(p)[2])
 
 
-def cap_dir(smp, sg):
-    n2 = norm(cross(view(smp['c']), smp['m']))
-    return n2 if dot(n2, smp['t']) * sg > 0 else mul(n2, -1)
+def cut_rim(smp, r=RT, n=32):
+    """The rim of the square cut at a tube's end, from one side round the front (j = 0 .. n/2)
+    and on round the back."""
+    return [add(smp['c'], mul(smp['m'], r * math.cos(2 * math.pi * j / n)), mul(smp['w'], r * math.sin(2 * math.pi * j / n)))
+            for j in range(n + 1)]
 
 
 S = tube()
@@ -364,13 +367,11 @@ for i in range(0, NC - 3, 3):
         rails = [[fn(smp, o) for o in (-1.0, -0.5, 0.0, 0.5, 1.0)] for smp in (p, q)]
         for j in range(4):
             depth.quad(rails[0][j], rails[1][j], rails[1][j + 1], rails[0][j + 1], (kind, 'r', i))
-for smp, sg in ((S[0], -1), (S[-1], 1)):
-    e = cap_dir(smp, sg)
-    front = proj(add(smp['c'], mul(smp['w'], RT)))
-    rim = [proj(add(smp['c'], mul(smp['m'], (RT + HALO) * math.cos(math.pi * j / 12)),
-                    mul(e, (RT + HALO) * math.sin(math.pi * j / 12)))) for j in range(13)]
+for smp in (S[0], S[-1]):                   # the cut faces, as discs
+    cen = proj(smp['c'])
+    rim = [proj(p) for p in cut_rim(smp, RT + HALO)]
     for a, b in zip(rim, rim[1:]):
-        depth.add(front, a, b, ('h', 'r', smp['i']))
+        depth.add(cen, a, b, ('h', 'r', smp['i']))
 
 # ---------------------------------------------------------------- the bases
 
@@ -380,7 +381,7 @@ GAP = 2.0
 SEQ1 = 'GGCAUCGCAGC'                         # the stem's 5' side, foot to top
 PAIR = {'G': 'C', 'C': 'G', 'A': 'U', 'U': 'A'}
 LOOP_SEQ = 'GAAAU'
-TAIL_SEQ = 'ACCUAGUCA'
+TAIL_SEQ = 'ACCUAGUCAGAUCG'
 REACH = {True: 92.0, False: 76.0}           # an unpaired purine reaches further than a pyrimidine
 
 
@@ -436,21 +437,21 @@ for j, b in enumerate(LOOP_SEQ):
     c = S[i]['c']
     box(add(c, mul(dd, RT * 0.4)), add(c, mul(dd, REACH[purine(b)] * 0.86)), wv, tv)
 
-# the 5' tail's bases, outward from its sweep, turning gently along it
+# the 5' tail's bases, standing in from its sweep on the lit side, turning gently along it
 i5 = stem_idx[0]
 SP_NT = 64.0
 singles = []
 REF = add(p5, TAIL_REF)
-s = SARC[i5] - SP_NT
+s = SARC[i5] - 1.5 * SP_NT                  # the first clear of the stem's foot
 j = 0
 while s > 30 and j < len(TAIL_SEQ):
     i = min(range(0, i5), key=lambda q: abs(SARC[q] - s))
     t = S[i]['t']
     out = norm(cross(t, (0, 0, 1)))         # across the strand in the picture ...
-    if dot(out, sub(S[i]['c'], REF)) < 0:
-        out = mul(out, -1)                  # ... to the outside of its sweep
-    out = rot(out, t, math.radians(38 * math.sin(0.9 * j + 0.3)))
-    singles.append((i, TAIL_SEQ[::-1][j], out, math.radians(30 * math.cos(0.8 * j))))
+    if dot(out, sub(S[i]['c'], REF)) > 0:
+        out = mul(out, -1)                  # ... to the inside of its sweep, the lit side
+    out = rot(out, t, math.radians(-10 + 50 * math.sin(0.75 * j + 0.3)))   # tipped to and from us
+    singles.append((i, TAIL_SEQ[::-1][j], out, math.radians(40 * math.cos(0.6 * j))))
     s -= SP_NT
     j += 1
 for i, b, direction, roll in singles:
@@ -497,56 +498,104 @@ def own_tube(t, q):
         (t[0] == 'h' and abs(t[2] - q) <= 60) or (t[0] == 't' and abs(t[2] - q) <= 9))
 
 
-ids = [s['i'] for s in S]
-for o in (-1.0, 1.0):
-    draw([proj(surf(s, o)[0]) for s in S], tz(1.8, 2.7), own_tube, ids=ids)
-for smp, sg in ((S[0], -1), (S[-1], 1)):
-    e = cap_dir(smp, sg)
-    pts = [proj(add(smp['c'], mul(smp['m'], RT * math.cos(math.pi * j / 16)), mul(e, RT * math.sin(math.pi * j / 16))))
-           for j in range(17)]
-    draw(pts, tz(1.8, 2.6), own_tube, ids=[smp['i']] * len(pts))
-ease = int(RT * 0.9 / 1.4)
-for o in (-0.7, -0.35, 0.0, 0.35, 0.7):
-    run, rid = [], []
-    for s in S[ease // 2:-(ease // 2)] + [None]:
-        dark = 0.0
-        if s is not None:
+RAILS = (-0.725, -0.435, -0.145, 0.145, 0.435, 0.725)   # 0.29 x RT apart: over 5 on the page
+BEND_R = 46.0                               # a bend: the tube's path in the picture turns tighter than this
+RING = 7.5                                  # cross strokes this far apart along a bend
+
+
+def bend_radius(S, i, k=8):
+    a, b, c = proj(S[max(0, i - k)]['c']), proj(S[i]['c']), proj(S[min(len(S) - 1, i + k)]['c'])
+    area = abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2
+    if area < 1e-6:
+        return 1e9
+    return dist(a[:2], b[:2]) * dist(b[:2], c[:2]) * dist(a[:2], c[:2]) / (4 * area)
+
+
+def draw_tube(S, own, tzf):
+    """A backbone tube: its two silhouettes, the square cuts at its ends, contour lines along
+    it on the shadow side, and a few cross strokes in the core shadow under each bend."""
+    ids = [s['i'] for s in S]
+    for o in (-1.0, 1.0):
+        draw([proj(surf(s, o)[0]) for s in S], tzf(1.8, 2.7), own, ids=ids)
+    # the cuts: the rim round the front; where the cut face is turned to us the whole rim,
+    # and the face hatched straight across if it is turned from the light
+    for smp, sg in ((S[0], -1), (S[-1], 1)):
+        fn = mul(smp['t'], sg)
+        facing = dot(fn, view(smp['c']))
+        rim = cut_rim(smp)
+        pts = rim if facing > 0.03 else rim[:17]
+        draw([proj(p) for p in pts], tzf(1.6, 2.4), own, ids=[smp['i']] * len(pts), hand=0.1)
+        dark = 1 - lit(fn)
+        if facing > 0.03 and dark > 0.4:
+            c = smp['c']
+            Lw = dist(proj(add(c, mul(smp['w'], RT)))[:2], proj(c)[:2])
+            nl = min(4, int(2 * Lw / 5.5) - 1)
+            for j in range(1, nl + 1):
+                y = -1 + 2 * j / (nl + 1)
+                h = math.sqrt(1 - y * y) * 0.8
+                a = add(c, mul(smp['w'], RT * y), mul(smp['m'], -RT * h))
+                b = add(c, mul(smp['w'], RT * y), mul(smp['m'], RT * h))
+                draw([proj(a), proj(b)], 0.75 + 0.4 * (dark - 0.4), own, ids=[smp['i']] * 2, hand=0.05)
+    # contour lines along the tube at fixed places across it, each drawn where the surface
+    # there is dark enough, heavier in the core shadow, eased at the rim (reflected light)
+    for o in RAILS:
+        run, rid = [], []
+        for s in S + [None]:
+            dark = 0.0
+            if s is not None:
+                p, n = surf(s, o)
+                dark = 1 - lit(n)
+            if dark > 0.44:
+                wt = 0.85 + 1.5 * min(1.0, (dark - 0.44) / 0.48) ** 1.5
+                wt = 0.85 + (wt - 0.85) * (0.55 if abs(o) > 0.7 else 1.0)
+                run.append(proj(p) + (wt,))
+                rid.append(s['i'])
+            else:
+                if len(run) > 3:
+                    draw(run, None, own, ids=rid, hand=0.15)
+                run, rid = [], []
+    # cross strokes round the tube in the core shadow on the underside of each bend:
+    # three to five, centred on the bend's tightest point, none near the ends
+    cands = []
+    run_len, last = 0.0, None
+    for s in S[40:-40]:
+        cp = proj(s['c'])
+        if last is not None:
+            run_len += dist(cp[:2], last[:2])
+        last = cp
+        if run_len < RING:
+            continue
+        rb = bend_radius(S, s['i'])
+        if rb > BEND_R:
+            continue
+        arc, aid = [], []
+        for j in range(25):
+            o = -1 + 2 * j / 24
             p, n = surf(s, o)
             dark = 1 - lit(n)
-        if dark > 0.52:
-            wt = 0.85 + 1.5 * min(1.0, (dark - 0.52) / 0.4) ** 1.5
-            wt = 0.85 + (wt - 0.85) * (0.55 if abs(o) > 0.7 else 1.0)
-            fade = min(s['i'], NC - 1 - s['i']) / ease
-            if fade < 1:
-                wt = 0.7 + (wt - 0.7) * max(0.0, fade)
-            run.append(proj(p) + (wt,))
-            rid.append(s['i'])
+            if dark > 0.86 and abs(o) < 0.88:
+                arc.append(proj(p) + (0.7 + 0.35 * min(1.0, (dark - 0.86) / 0.2),))
+                aid.append(s['i'])
+            elif len(arc) > 2:
+                break
+        if len(arc) > 2 and length([q[:2] for q in arc]) > 11:
+            cands.append((s['i'], rb, arc, aid))
+            run_len = 0.0
+    groups = []
+    for cnd in cands:
+        if groups and cnd[0] - groups[-1][-1][0] < 30:
+            groups[-1].append(cnd)
         else:
-            if len(run) > 3:
-                draw(run, None, own_tube, ids=rid, hand=0.15)
-            run, rid = [], []
-RING = 7.5
-run_len, last = 0.0, None
-for s in S[ease:-ease]:
-    cp = proj(s['c'])
-    if last is not None:
-        run_len += dist(cp[:2], last[:2])
-    last = cp
-    if run_len < RING:
-        continue
-    arc, aid = [], []
-    for j in range(25):
-        o = -1 + 2 * j / 24
-        p, n = surf(s, o)
-        dark = 1 - lit(n)
-        if dark > 0.86 and abs(o) < 0.88:
-            arc.append(proj(p) + (0.7 + 0.35 * min(1.0, (dark - 0.86) / 0.2),))
-            aid.append(s['i'])
-        elif len(arc) > 2:
-            break
-    if len(arc) > 2 and length([q[:2] for q in arc]) > 11:
-        draw(arc, None, own_tube, ids=aid, hand=0.08)
-        run_len = 0.0
+            groups.append([cnd])
+    for g in groups:
+        if len(g) < 3:
+            continue
+        core = min(g, key=lambda q: q[1])[0]
+        for i, rb, arc, aid in sorted(g, key=lambda q: abs(q[0] - core))[:5]:
+            draw(arc, None, own, ids=aid, hand=0.08)
+
+
+draw_tube(S, own_tube, tz)
 
 # ---------------------------------------------------------------- drawing: the bases
 
@@ -555,6 +604,26 @@ SIDES = {'t-': ((0, 4), (2, 6)), 't+': ((1, 5), (3, 7)), 'w-': ((0, 4), (1, 5)),
 
 def own_slab(k):
     return lambda t: t is not None and t[0] in 'sg' and t[1] == k
+
+
+def face_strokes(cs, name, dark, far, own):
+    """Even strokes along a slab's dark side face: two or three that stay parallel and at
+    least 5 apart, else one heavier line down its middle; fewer on the far side."""
+    (p0, p1), (q0, q1) = SIDES[name]
+    spa = dist(proj(cs[p0])[:2], proj(cs[q0])[:2])
+    spb = dist(proj(cs[p1])[:2], proj(cs[q1])[:2])
+    lo, hi = min(spa, spb), max(spa, spb)
+    nl = min(3, int(lo / 5.5) - 1)
+    if not far and nl >= 2 and hi <= 1.3 * lo:
+        fr, wt = [j / (nl + 1) for j in range(1, nl + 1)], 0.9 + 0.5 * (dark - 0.45)
+    elif lo >= 3.5 and dark > (0.8 if far else 0.6):
+        fr, wt = [0.5], (1.0 if far else 1.35)
+    else:
+        return
+    for f in fr:
+        a, b = lerp3(cs[p0], cs[q0], f), lerp3(cs[p1], cs[q1], f)
+        a, b = lerp3(a, b, 0.06), lerp3(a, b, 0.94)
+        draw([proj(a), proj(b)], wt, own, hand=0.1, eps=0.8)
 
 
 for k, cs, dd, wv, tv in slabs:
@@ -570,15 +639,7 @@ for k, cs, dd, wv, tv in slabs:
             edges[e] = edges.get(e, 0) + 1
         dark = 1 - lit(n)
         if dark > 0.45 and name in SIDES:
-            (p0, p1), (q0, q1) = SIDES[name]
-            sp = 5.5 if dark > 0.7 else 8.0
-            span = dist(proj(cs[p0])[:2], proj(cs[q0])[:2])
-            nl = int(span / sp)
-            for j in range(1, nl + 1):
-                f = j / (nl + 1)
-                a, b = lerp3(cs[p0], cs[q0], f), lerp3(cs[p1], cs[q1], f)
-                a, b = lerp3(a, b, 0.06), lerp3(a, b, 0.94)
-                draw([proj(a), proj(b)], 0.9 + 0.8 * (dark - 0.45), own_slab(k), hand=0.1, eps=0.8)
+            face_strokes(cs, name, dark, lerp3(cs[0], cs[7], 0.5)[2] < O[2] - 0.3 * R, own_slab(k))
     for (i, j), cnt in edges.items():
         draw([P[i], P[j]], tz(1.2, 1.9), own_slab(k), hand=0.1, eps=0.8)
 
@@ -587,7 +648,7 @@ for k, cs, dd, wv, tv in slabs:
 xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
-SCALE = 1.12                                # as 04: the same tube on the page
+SCALE = 1.15                                # the backbone tube about 19 wide on the page in 03 and 04
 NUDGE = (0.0, 0.0)
 pen.strokes = [([((x - cx) * SCALE + 500 + NUDGE[0], (y - cy) * SCALE + 500 + NUDGE[1]) for x, y in p], w)
                for p, w in pen.strokes]

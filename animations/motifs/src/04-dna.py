@@ -7,9 +7,11 @@ cylinder, offset round it so a narrow (minor) and a wide (major) groove
 repeat every turn. The bases are flat slabs, two to a pair, meeting near the
 middle; the pair planes lie square across the axis, so as the helix turns a
 slab is seen as a bar, or tipped to show its face. Modelled in 3D and drawn
-with a depth test, near parts over far ones. Shading as in 05 and 07: light
-from the upper left, contour hatching along each tube on its shadow side,
-heavier in the core of the shadow, parallel strokes on the slabs' dark faces.
+with a depth test, near parts over far ones, a hair of white where they cross.
+Shading as in 05 and 07: light from the upper left, contour lines along each
+tube on its shadow side, heavier in the core of the shadow, a few cross strokes
+under each bend, the slabs' dark faces lined. Both strands are cut square, away
+from the turns, like a cut length of a model.
 """
 
 import math
@@ -222,15 +224,18 @@ def u_at(tag, deg, near):
     return (math.radians(deg) - base + 2 * math.pi * n) / K
 
 
-# Both strands are cut square across the helix, each clear of the edge where it turns
-# round (0 and 180 degrees): at the foot strand b on the front (45) and a at the back
-# (265); at the top a on the front (135), b at the back (275). The two front ends turn
-# their cut faces to us.
-U_LO = u_at('b', 45, -420)
-U_HI = u_at('a', 135, U_LO + 845)
+# The strands are cut away from the edges where they turn round (0 and 180 degrees), so
+# no end hooks round a turn. Strand a, in front at both ends, starts on the front a little
+# before the axis (112) and ends on the front a little past it (70), each cut turned
+# nearly square to us. Strand b starts square with a, straight behind it (252), and ends
+# at the back, behind the pairs (250).
+U_LO = u_at('a', 112, -380)
+U_HI = u_at('a', 70, U_LO + 760)
+RANGE = {'a': (U_LO, U_HI), 'b': (U_LO, u_at('b', 250, U_HI - 40))}
 MARGIN = 13.0                               # the end pairs sit this far inside the cuts
-NBP = int((U_HI - U_LO - 2 * MARGIN) / RISE) + 1
-U0 = (U_HI + U_LO) / 2 - RISE * (NBP - 1) / 2   # the pairs sit centred along the length
+P_LO, P_HI = RANGE['b'][0] + MARGIN, RANGE['b'][1] - 2.4 * MARGIN   # b's top cut is oblique to the pairs
+NBP = int((P_HI - P_LO) / RISE) + 1
+U0 = (P_HI + P_LO) / 2 - RISE * (NBP - 1) / 2   # the pairs sit centred along the length
 
 
 def pos(u, th, r=R):
@@ -247,9 +252,10 @@ def theta(tag, u):
 def tube(tag):
     """Samples along a backbone: centre, tangent, and the frame of its visible half."""
     out = []
-    n = int(round((U_HI - U_LO) / 0.7))
+    lo, hi = RANGE[tag]
+    n = int(round((hi - lo) / 0.7))
     for j in range(n + 1):
-        u = U_LO + (U_HI - U_LO) * j / n
+        u = lo + (hi - lo) * j / n
         c = pos(u, theta(tag, u))
         t = norm(sub(pos(u + 0.5, theta(tag, u + 0.5)), pos(u - 0.5, theta(tag, u - 0.5))))
         v = view(c)
@@ -408,8 +414,8 @@ def draw_tube(S, own, tzf):
             if s is not None:
                 p, n = surf(s, o)
                 dark = 1 - lit(n)
-            if dark > 0.5:
-                wt = 0.85 + 1.5 * min(1.0, (dark - 0.5) / 0.42) ** 1.5
+            if dark > 0.44:
+                wt = 0.85 + 1.5 * min(1.0, (dark - 0.44) / 0.48) ** 1.5
                 wt = 0.85 + (wt - 0.85) * (0.55 if abs(o) > 0.7 else 1.0)
                 run.append(proj(p) + (wt,))
                 rid.append(s['i'])
@@ -516,7 +522,7 @@ for k, h, cs, dd, wv in slabs:
 xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
-SCALE = 1.09
+SCALE = 1.18                                # the backbone tube about 19 wide on the page in 03 and 04
 pen.strokes = [([((x - cx) * SCALE + 500, (y - cy) * SCALE + 500) for x, y in p], w) for p, w in pen.strokes]
 print('pairs', NBP)
 pen.save('../04-dna.svg', mirror=False)
