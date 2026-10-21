@@ -22,15 +22,15 @@
       "maxim": "more chemistry like; just the six ring: yes",
       "note": "rework after Maxim's notes: a single Kekule benzene ring with a cast shadow; polished: all bonds at one weight, shadow set off the lines",
       "rework2": {
-        "round": "s1",
+        "round": "s2",
         "scores": [
-          8,
           9,
-          7
+          9,
+          8
         ],
         "maxim": "keep the ring, several swimming in an Ursuppe: yes",
-        "passed": false,
-        "note": "setting drawn as a diagram: water panel reads as ruled paper, volcano and plume outlined; being engraved"
+        "passed": true,
+        "note": "six rings in an engraved early sea with a volcano; polish asked: steam wisps, merged plume billows, staggered right edge, fewer grit dots"
       }
     },
     "rna": {
