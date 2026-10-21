@@ -230,12 +230,16 @@ def theta(tag, u):
 # ---------------------------------------------------------------- backbone tubes
 
 
+TRIM = {'a': (24.0, 0.0), 'b': (0.0, 0.0)}   # strand a starts a little short: staggered ends
+
+
 def tube(tag):
     """Samples along a backbone: centre, tangent, and the frame of its visible half."""
     out = []
-    u = U_LO
+    lo, hi = TRIM[tag]
+    u = U_LO + lo
     du = 0.7
-    while u <= U_HI + 1e-6:
+    while u <= U_HI - hi + 1e-6:
         c = pos(u, theta(tag, u))
         t = norm(sub(pos(u + 0.5, theta(tag, u + 0.5)), pos(u - 0.5, theta(tag, u - 0.5))))
         v = view(c)
@@ -388,7 +392,7 @@ for tag, S in tubes.items():
 
     # in the core of the shadow, short contour strokes round the tube, crossing the lines
     # along it (as in the darkest band of 05), every RING units along its middle
-    RING = 6.5
+    RING = 7.5
     run_len, last = 0.0, None
     for s in S[ease:-ease]:
         cp = proj(s['c'])
@@ -403,7 +407,7 @@ for tag, S in tubes.items():
             p, n = surf(s, o)
             dark = 1 - lit(n)
             if dark > 0.86 and abs(o) < 0.88:
-                arc.append(proj(p) + (0.75 + 0.5 * min(1.0, (dark - 0.86) / 0.2),))
+                arc.append(proj(p) + (0.7 + 0.35 * min(1.0, (dark - 0.86) / 0.2),))
                 aid.append(s['i'])
             elif len(arc) > 2:
                 break
