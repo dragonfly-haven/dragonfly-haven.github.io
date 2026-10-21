@@ -42,7 +42,18 @@
         9
       ],
       "maxim": "more sleek: yes",
-      "note": "rework after Maxim's notes: one smooth even strand; polished: bases continue round the stem foot, the 3' tail sweeps out to balance"
+      "note": "rework after Maxim's notes: one smooth even strand; polished: bases continue round the stem foot, the 3' tail sweeps out to balance",
+      "rework2": {
+        "round": "s1",
+        "scores": [
+          6,
+          8,
+          7
+        ],
+        "maxim": "a different direction, closer to the others: yes",
+        "passed": false,
+        "note": "does not read as one strand folded into a hairpin at 1x (stem echoes 04, tail reads as a comb); being redrawn"
+      }
     },
     "dna": {
       "passed": true,
@@ -55,15 +66,15 @@
       "maxim": "more sleek and regular: yes",
       "note": "rework after Maxim's notes: exact B-DNA geometry; polished: far bars stop short of the ribbon edge, far strand tucks behind at the foot",
       "rework2": {
-        "round": "s1",
+        "round": "s2",
         "scores": [
-          8,
-          8,
+          9,
+          9,
           8
         ],
-        "maxim": "a different direction, closer to the others: clear yes",
+        "maxim": "a different direction, closer to the others: yes",
         "passed": true,
-        "note": "solid engraved model; fixes asked: re-cut both ends (no hook, flat cut faces), ease dark slab faces, calm the ribbing"
+        "note": "solid engraved model; ends re-cut square with flat faces, eased slab faces, calmer ribbing"
       }
     },
     "prokaryotic-cell": {
