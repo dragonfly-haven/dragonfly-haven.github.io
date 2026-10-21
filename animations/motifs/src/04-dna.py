@@ -199,7 +199,7 @@ def draw(pts, w, skip=None, eps=1.0, hand=0.25, minlen=3.0, ids=None):
 # ---------------------------------------------------------------- the helix
 
 AXA = math.radians(-44)                     # the axis runs up to the right in the picture
-TILT = math.radians(18)                     # and its upper end turns away from us
+TILT = math.radians(5)                      # and its upper end turns away from us
 A3 = norm((math.cos(AXA) * math.cos(TILT), math.sin(AXA) * math.cos(TILT), -math.sin(TILT)))
 X3 = norm((-math.sin(AXA), math.cos(AXA), 0.0))        # across the axis, down to the right
 Y3 = norm(cross(A3, X3))
@@ -209,7 +209,7 @@ R = 100.0                                   # backbone radius (about 10 A)
 PITCH = 357.0                               # one turn (about 36 A)
 BP_PER_TURN = 10.5
 TURNS = 2.25
-RT = 18.0                                   # radius of a backbone tube
+RT = 16.0                                   # radius of a backbone tube
 DELTA = math.radians(140)                   # strand b round from strand a across the minor groove
 K = -2 * math.pi / PITCH                    # right-handed (checked: the near strands rise to the right)
 U_LO, U_HI = -TURNS * PITCH / 2, TURNS * PITCH / 2
@@ -364,7 +364,7 @@ for tag, S in tubes.items():
     # contour hatching along the tube on its shadow side: lines at fixed places across
     # it, each drawn where the surface there is dark enough, heavier in the core shadow
     ease = int(RT * 0.9 / 1.4)              # samples over which the hatching thins out at an end
-    for o in (-0.72, -0.42, -0.12, 0.18, 0.48, 0.78):
+    for o in (-0.7, -0.35, 0.0, 0.35, 0.7):     # 0.35 x RT apart: at least 5.6 in the picture
         run, rid = [], []
         for s in S[ease // 2:-(ease // 2)] + [None]:
             dark = 0.0
@@ -383,6 +383,31 @@ for tag, S in tubes.items():
                 if len(run) > 3:
                     draw(run, None, own_tube(tag), ids=rid, hand=0.15)
                 run, rid = [], []
+
+    # in the core of the shadow, short contour strokes round the tube, crossing the lines
+    # along it (as in the darkest band of 05), every RING units along its middle
+    RING = 6.5
+    run_len, last = 0.0, None
+    for s in S[ease:-ease]:
+        cp = proj(s['c'])
+        if last is not None:
+            run_len += dist(cp[:2], last[:2])
+        last = cp
+        if run_len < RING:
+            continue
+        arc, aid = [], []
+        for j in range(25):
+            o = -1 + 2 * j / 24
+            p, n = surf(s, o)
+            dark = 1 - lit(n)
+            if dark > 0.86 and abs(o) < 0.88:
+                arc.append(proj(p) + (0.75 + 0.5 * min(1.0, (dark - 0.86) / 0.2),))
+                aid.append(s['i'])
+            elif len(arc) > 2:
+                break
+        if len(arc) > 2 and length([q[:2] for q in arc]) > 11:      # only where the shadow is broad
+            draw(arc, None, own_tube(tag), ids=aid, hand=0.08)
+            run_len = 0.0
 
 # ---------------------------------------------------------------- drawing: the slabs
 
