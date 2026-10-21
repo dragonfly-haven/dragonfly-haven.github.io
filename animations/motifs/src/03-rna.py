@@ -243,7 +243,7 @@ def rot(v, axis, a):
 
 # ---------------------------------------------------------------- the stem: A-form
 
-AXA = math.radians(-55)                     # the stem rises up to the right in the picture
+AXA = math.radians(-74)                     # the stem rises up to the right in the picture
 TILT = math.radians(4)                      # its upper end turned a little away from us
 A3 = norm((math.cos(AXA) * math.cos(TILT), math.sin(AXA) * math.cos(TILT), -math.sin(TILT)))
 X3 = norm((-math.sin(AXA), math.cos(AXA), 0.0))
@@ -257,12 +257,15 @@ RISE = PITCH / BP_PER_TURN
 K = -2 * math.pi / PITCH                    # right-handed, as 04
 RT = 16.0                                   # the backbone tube, as 04
 NSTEM = 11                                  # base pairs in the stem
-DZ = 34.0                                   # a pair's partner on strand 2 sits this much higher: tilted pairs
+DZ = 20.0                                   # a pair's partner on strand 2 sits this much higher: tilted pairs
 DELTA = math.radians(155)                   # strand 2 round from strand 1 at one height
 SEP = DELTA + K * DZ                        # the angle a pair spans round the axis
 U_TOP = (NSTEM - 1) * RISE
 PHI = math.radians(90) - SEP / 2 - K * U_TOP   # the top pair lies square to our view, the loop above it
 O = (-150.0, 170.0, 0.0)                    # the foot of the stem's axis
+LOOP_H, LOOP_TM, LOOP_T = 105.0, 200.0, 70.0  # the loop: height over the top pair, handles
+TAIL_REF = (240, -130, 0)                   # a point the tail sweeps round
+TAIL_PTS = ((50, 105, 40), (190, 150, 30), (345, 115, 10), (465, 30, -10))
 
 
 def hpos(u, th, r=R):
@@ -284,30 +287,30 @@ def dfd(f, u, sg=1):
 # ---------------------------------------------------------------- the whole strand, 5' to 3'
 
 E = 26.0                                    # the strand runs on a little past the end pairs
-# 5' end: one unpaired nucleotide below the stem
+E3 = 14.0                                   # its 3' end: cut square on the front, before the turn
+ET = 10.0                                   # at the top the loop takes over at once
+# the 5' tail: out of the stem's foot, round to the right in one long easy sweep (built
+# outward from the foot, then turned round to run 5' to 3')
 p5 = s1(-E)
-t5 = dfd(s1, -E)
-stub = hermite(add(p5, mul(t5, -40), mul(A3, -40), mul(X3, -12)), mul(norm(add(t5, mul(A3, 0.4))), 70), p5, mul(t5, 70), 20)
-up = [s1(u) for u in [(-E) + j * 2.0 for j in range(int((U_TOP + 2 * E) / 2.0) + 1)]]
-# the loop over the top pair
-P1, T1 = s1(U_TOP + E), dfd(s1, U_TOP + E)
-P2, T2 = s2(U_TOP + DZ + E), dfd(s2, U_TOP + DZ + E, -1)
-mid_top = lerp3(P1, P2, 0.5)
-LOOP_H = 105.0
-PM = add(mid_top, mul(A3, LOOP_H), mul(Y3, 10))
-TM = mul(norm(sub(P2, P1)), 200)
-loop = hermite(P1, mul(T1, 70), PM, TM, 40)[1:] + hermite(PM, TM, P2, mul(T2, 70), 40)[1:]
-down = [s2(u) for u in [U_TOP + DZ + E - j * 2.0 for j in range(int((U_TOP + 2 * E) / 2.0) + 1)]]
-# the 3' tail: out of the stem's foot, round to the right in one long easy sweep
-pe = down[-1]
-te = dfd(s2, DZ - E, -1)
-TAIL = [add(pe, q) for q in ((70, 140, 40), (230, 190, 30), (400, 150, 10), (560, 70, -10))]
-tail = hermite(pe, mul(te, 160), TAIL[0], mul(norm(sub(TAIL[1], pe)), 220), 30)[1:]
+t5 = mul(dfd(s1, -E), -1)                   # outward, toward the 5' end
+TAIL = [add(p5, q) for q in TAIL_PTS]
+tail = hermite(p5, mul(t5, 150), TAIL[0], mul(norm(sub(TAIL[1], p5)), 200), 30)
 for a, b, c0, c1 in zip(TAIL, TAIL[1:], [None] + TAIL, TAIL[2:] + [None]):
     ma = mul(sub(b, c0 if c0 else a), 0.5 if c0 else 1.0)
     mb = mul(sub(c1 if c1 else b, a), 0.5 if c1 else 1.0)
     tail += hermite(a, ma, b, mb, 30)[1:]
-rough = stub + up[1:] + loop + down[1:] + tail
+tail = tail[::-1]
+up = [s1(u) for u in [(-E) + j * 2.0 for j in range(int((U_TOP + E + ET) / 2.0) + 1)]]
+# the loop over the top pair: a round arch
+P1, T1 = s1(U_TOP + ET), dfd(s1, U_TOP + ET)
+P2, T2 = s2(U_TOP + DZ + ET), dfd(s2, U_TOP + DZ + ET, -1)
+mid_top = lerp3(P1, P2, 0.5)
+PM = add(mid_top, mul(A3, LOOP_H), mul(Y3, 10))
+TM = mul(norm(sub(P2, P1)), LOOP_TM)
+loop = hermite(P1, mul(T1, LOOP_T), PM, TM, 40)[1:] + hermite(PM, TM, P2, mul(T2, LOOP_T), 40)[1:]
+down = [s2(u) for u in [U_TOP + DZ + ET - j * 2.0 for j in range(int((U_TOP + ET + E3) / 2.0) + 1)]]
+pe = down[-1]
+rough = tail + up[1:] + loop + down[1:]
 C = smooth3(resample3(rough, 1.4), 6)
 NC = len(C)
 
@@ -433,22 +436,22 @@ for j, b in enumerate(LOOP_SEQ):
     c = S[i]['c']
     box(add(c, mul(dd, RT * 0.4)), add(c, mul(dd, REACH[purine(b)] * 0.86)), wv, tv)
 
-# the 5' nucleotide on its stub, and the 3' tail's bases, outward, turning gently along it
+# the 5' tail's bases, outward from its sweep, turning gently along it
 i5 = stem_idx[0]
-i_end2 = stem_idx[1]
 SP_NT = 64.0
 singles = []
-s = SARC[i_end2] + SP_NT
+REF = add(p5, TAIL_REF)
+s = SARC[i5] - SP_NT
 j = 0
-while s < SARC[-1] - 30 and j < len(TAIL_SEQ):
-    i = min(range(i_end2, NC), key=lambda q: abs(SARC[q] - s))
+while s > 30 and j < len(TAIL_SEQ):
+    i = min(range(0, i5), key=lambda q: abs(SARC[q] - s))
     t = S[i]['t']
     out = norm(cross(t, (0, 0, 1)))         # across the strand in the picture ...
-    if dot(out, sub(S[i]['c'], add(O, (330, 0, 0)))) < 0:
+    if dot(out, sub(S[i]['c'], REF)) < 0:
         out = mul(out, -1)                  # ... to the outside of its sweep
     out = rot(out, t, math.radians(38 * math.sin(0.9 * j + 0.3)))
-    singles.append((i, TAIL_SEQ[j], out, math.radians(30 * math.cos(0.8 * j))))
-    s += SP_NT
+    singles.append((i, TAIL_SEQ[::-1][j], out, math.radians(30 * math.cos(0.8 * j))))
+    s -= SP_NT
     j += 1
 for i, b, direction, roll in singles:
     dd, wv, tv = single(i, direction, roll)

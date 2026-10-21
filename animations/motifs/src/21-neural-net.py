@@ -311,6 +311,7 @@ def tube(ctrl, widths, cap0=True, cap1=True):
     # which rail is lit: the one toward the light
     ma = sum((p[0] - q[0]) * LIGHT[0] + (p[1] - q[1]) * LIGHT[1] for p, q in zip(ra, sp))
     lit, shd = (ra, rb) if ma > 0 else (rb, ra)
+    tube.last = dict(a=ra, b=rb, end=end)
     return lit, shd, outline
 
 
@@ -378,25 +379,67 @@ def outline_of(left, bottom, right_up, top=None):
     return pts
 
 
-def sleeve(fig, S, E, W, widths, w=1.8):
-    """An arm in a sleeve, shoulder to wrist (page points); a cuff band at the wrist."""
-    lit, shd, out = tube([S, E, W], widths, cap0=True, cap1=False)
-    pen.line(out, w=w, hand=0.45, lift=0.06)
+def sleeve(fig, S, E, W, widths, w=1.8, body_cx=None, t_in=0.24):
+    """An arm in a sleeve, shoulder to wrist (page points), with a cuff band.
+    Its outer edge runs on from the shoulder; its inner edge only shows from
+    the armpit down, where it parts from the body."""
+    lit, shd, out = tube([S, E, W], widths, cap0=False, cap1=False)
+    T = tube.last
+    ra, rb, end = T['a'], T['b'], T['end']
+    if body_cx is None:
+        body_cx = fig.P((0, 0))[0]
+
+    def score(r):
+        return abs(r[0][0] - body_cx) - 0.6 * (r[0][1] - S[1])
+    if score(ra) >= score(rb):
+        outer, inner, cap = ra, rb, end
+    else:
+        outer, inner, cap = rb, ra, list(reversed(end))
+    k_in = int(len(inner) * t_in)
+    pen.line(outer + cap + list(reversed(inner[k_in:])), w=w, hand=0.45, lift=0.05)
     # the cuff: a band a little up from the wrist
     k = max(2, int(len(lit) * 0.9))
     a, b = lit[k], shd[k]
     m = lerp(a, b, 0.5)
     fine(C([a, (m[0], m[1] + 1.2), b], step=1), w=0.9)
-    lengthwise(lit[:k], shd[:k], 0.62, 0.96, spacing=5.4, t0=0.06, t1=0.98, clip=out, w=0.7)
-    # creases at the elbow, on the inner (shade) side
+    lengthwise(lit[:k], shd[:k], 0.6, 0.96, spacing=5.3, t0=0.1, t1=0.98, clip=out, w=0.7)
+    # creases at the elbow, on the inner side
     ke = len(lit) // 2
-    for j in (-6, 0, 6):
-        i = clamp(ke + j, 1, len(lit) - 2)
-        p, q = shd[i], lit[i]
-        fine(C([lerp(p, q, 0.05), (lerp(p, q, 0.3)[0], lerp(p, q, 0.3)[1] + 1.5), lerp(p, q, 0.45)], step=1),
+    for j in (-5, 0, 5):
+        i = int(clamp(ke + j, 1, len(inner) - 2))
+        p, q = inner[i], outer[i]
+        fine(C([lerp(p, q, 0.04), (lerp(p, q, 0.25)[0], lerp(p, q, 0.25)[1] + 1.4), lerp(p, q, 0.42)], step=1),
              w=0.7, hand=0.2)
     pen.occlude(out)
     return out
+
+
+def hair_short(hc, rx, ry, crown, n, u, tousle=0.0, seed_side=1):
+    """Short hair on the back of a head: strands sweeping from the crown whorl
+    down and round to the nape and sides, of varied length, clumped, and more
+    of them on the shade (right) side."""
+    head = ellipse_pts(hc[0], hc[1], rx, ry, 0, 0, 2 * math.pi, step=1.0)
+    for k in range(n):
+        f = (k + R(0.2, 0.8)) / n
+        a = math.pi * (0.04 + 0.92 * f)            # 0 = right side ... pi = left side, through the bottom
+        r0 = R(0.08, 0.45)
+        st = (crown[0] + math.cos(a) * rx * r0 * 0.6, crown[1] + R(0.0, 0.35) * ry * r0)
+        reach = R(0.72, 0.98) if R() < 0.75 else R(0.45, 0.7)
+        en = (hc[0] + math.cos(a) * rx * reach, hc[1] + math.sin(a) * ry * reach * 0.9 + ry * 0.05)
+        tw = 0.18 * rx * (1 if k % 2 else -0.6)            # the sweep round the whorl
+        m = lerp(st, en, 0.5)
+        m = (m[0] - math.sin(a) * tw + G(0.5), m[1] + math.cos(a) * tw * 0.3)
+        pts = [st, m, en]
+        if tousle:
+            pts.append((en[0] + math.cos(a + 1.2) * tousle * rx, en[1] + math.sin(a + 1.2) * tousle * ry))
+        wv = 0.75 if math.cos(a) > -0.2 else 0.68
+        for run in clip_in(C(pts, step=1.0), head):
+            if length(run) > 3:
+                fine(run, w=wv * R(0.9, 1.1), hand=0.25)
+    # the whorl itself: two small curls
+    for r in (0.12, 0.22):
+        arc = ellipse_pts(crown[0], crown[1] + ry * 0.04, rx * r, ry * r * 0.8, 0, R(0, 1), R(3.5, 4.8), step=0.6)
+        fine(arc, w=0.65, hand=0.1)
 
 
 def family(ox, oy, H):
@@ -413,13 +456,13 @@ def family(ox, oy, H):
     GL, GR = gp((-0.272, -0.405)), gp((0.274, -0.415))     # where the hands meet
 
     # -- the parents' hands that hold the child's (they are nearest the eye there)
-    wS = Wf.P((0.112, -0.795))
+    wS = Wf.P((0.106, -0.788))
     wW = (GL[0] + 0.006 * H, GL[1] - 0.052 * H)
     wE, wW = ik(wS, wW, 0.175 * Wf.u, 0.16 * Wf.u, (1, 0))
     d = (GL[0] - wW[0] - 0.004 * H, GL[1] + 0.03 * H - wW[1])
     dl = math.hypot(*d)
     hand(wW, (d[0] / dl, d[1] / dl), 0.085 * Wf.u, 0.05 * Wf.u)
-    mS = Mf.P((-0.122, -0.802))
+    mS = Mf.P((-0.116, -0.794))
     mW = (GR[0] - 0.006 * H, GR[1] - 0.054 * H)
     mE, mW = ik(mS, mW, 0.18 * H, 0.17 * H, (-1, 0))
     d = (GR[0] - mW[0] + 0.004 * H, GR[1] + 0.03 * H - mW[1])
@@ -440,23 +483,15 @@ def family(ox, oy, H):
     nape = C(f.Ps([(-0.082, -0.858), (-0.06, -0.836), (-0.03, -0.826), (0, -0.822), (0.03, -0.829), (0.058, -0.838),
                    (0.082, -0.858)]), step=1)
     fine(nape, w=1.1, hand=0.3)
-    # tousled short hair: strands from the crown, curling at the ends
-    crown = f.P((0.012, -0.975))
-    for k in range(11):
-        a = math.pi * (0.08 + 0.84 * k / 10)
-        end = f.P((-math.cos(a) * 0.082, -0.885 + math.sin(a) * 0.0 + 0.055 * math.sin(a) ** 0.5))
-        mid = lerp(crown, end, 0.55)
-        mid = (mid[0] + G(1.0) - math.cos(a) * 0.012 * u, mid[1])
-        tipc = (end[0] + (1 if k % 2 else -1) * 0.015 * u, end[1] + 0.01 * u)
-        for run in clip_in(C([lerp(crown, end, 0.12), mid, end, tipc], step=1), head):
-            fine(run, w=0.72, hand=0.3)
+    # tousled short hair, from a whorl at the crown
+    hair_short(hc, 0.088 * u, 0.102 * u, f.P((0.014, -0.968)), 17, u, tousle=0.14)
     pen.occlude(head)
     # neck
     fine(C(f.Ps([(-0.033, -0.826), (-0.035, -0.8)]), step=1), w=1.0)
     fine(C(f.Ps([(0.033, -0.826), (0.035, -0.8)]), step=1), w=1.0)
     # arms raised a little to the parents' hands
     for sgn, G_ in ((-1, GL), (1, GR)):
-        S = f.P((sgn * 0.118, -0.745))
+        S = f.P((sgn * 0.112, -0.742))
         dd = (G_[0] - S[0], G_[1] - S[1])
         dl = math.hypot(*dd)
         Wt = (G_[0] - dd[0] / dl * 0.05 * u, G_[1] - dd[1] / dl * 0.05 * u)
@@ -464,7 +499,7 @@ def family(ox, oy, H):
         hd = (G_[0] - Wt[0], G_[1] - Wt[1])
         hl = math.hypot(*hd)
         hand(Wt, (hd[0] / hl, hd[1] / hl), 0.075 * u, 0.055 * u, fingers=False, w=1.2)
-        sleeve(f, S, E, Wt, [0.078 * u, 0.064 * u, 0.056 * u], w=1.7)
+        sleeve(f, S, E, Wt, [0.068 * u, 0.058 * u, 0.05 * u], w=1.7, t_in=0.16)
     # tunic
     tl = [(-0.048, -0.796), (-0.098, -0.778), (-0.133, -0.752), (-0.13, -0.69), (-0.121, -0.6), (-0.124, -0.51),
           (-0.142, -0.408)]
@@ -539,12 +574,12 @@ def family(ox, oy, H):
         fine([p0, (p0[0] + R(-2, 2), p0[1] + 0.05 * u)], w=0.65)
     pen.occlude(hair)
     # her free left arm, hanging, and the right reaching to the child
-    S = f.P((-0.112, -0.795))
-    E = f.P((-0.14, -0.625))
-    Wl = f.P((-0.13, -0.475))
+    S = f.P((-0.106, -0.788))
+    E = f.P((-0.135, -0.625))
+    Wl = f.P((-0.127, -0.475))
     hand(Wl, (0.12, 0.99), 0.085 * u, 0.05 * u)
-    sleeve(f, S, E, Wl, [0.064 * u, 0.055 * u, 0.05 * u], w=1.7)
-    sleeve(f, wS, wE, wW, [0.064 * u, 0.055 * u, 0.05 * u], w=1.7)
+    sleeve(f, S, E, Wl, [0.058 * u, 0.051 * u, 0.045 * u], w=1.7)
+    sleeve(f, wS, wE, wW, [0.058 * u, 0.051 * u, 0.045 * u], w=1.7)
     # the dress: a fitted bodice with a sash, a long skirt falling in folds
     dl_ = [(-0.05, -0.86), (-0.088, -0.84), (-0.117, -0.818), (-0.127, -0.792), (-0.114, -0.725), (-0.097, -0.66),
            (-0.089, -0.605), (-0.099, -0.545), (-0.122, -0.43), (-0.148, -0.27), (-0.166, -0.14), (-0.178, -0.046)]
@@ -593,24 +628,17 @@ def family(ox, oy, H):
     nape = C(f.Ps([(-0.054, -0.905), (-0.036, -0.887), (-0.012, -0.881), (0.012, -0.882), (0.036, -0.888),
                    (0.054, -0.905)]), step=1)
     fine(nape, w=1.1)
-    crown = f.P((0.008, -0.99))
-    for k in range(10):
-        a = math.pi * (0.06 + 0.88 * k / 9)
-        end = f.P((-math.cos(a) * 0.05, -0.931 + 0.05 * math.sin(a) ** 0.6))
-        mid = lerp(crown, end, 0.5)
-        mid = (mid[0] - math.cos(a) * 0.01 * u + G(0.6), mid[1])
-        for run in clip_in(C([lerp(crown, end, 0.1), mid, end], step=1), head):
-            fine(run, w=0.72, hand=0.25)
+    hair_short(hc, 0.057 * u, 0.067 * u, f.P((0.01, -0.985)), 16, u)
     pen.occlude(head)
     fine(C(f.Ps([(-0.03, -0.884), (-0.033, -0.866)]), step=1), w=1.0)
     fine(C(f.Ps([(0.03, -0.884), (0.033, -0.866)]), step=1), w=1.0)
     # his free right arm, and the left to the child
-    S = f.P((0.122, -0.802))
-    E = f.P((0.15, -0.63))
-    Wr = f.P((0.142, -0.478))
+    S = f.P((0.116, -0.794))
+    E = f.P((0.143, -0.63))
+    Wr = f.P((0.137, -0.478))
     hand(Wr, (-0.1, 0.995), 0.088 * u, 0.052 * u)
-    sleeve(f, S, E, Wr, [0.076 * u, 0.064 * u, 0.055 * u], w=1.8)
-    sleeve(f, mS, mE, mW, [0.076 * u, 0.064 * u, 0.055 * u], w=1.8)
+    sleeve(f, S, E, Wr, [0.068 * u, 0.059 * u, 0.051 * u], w=1.8)
+    sleeve(f, mS, mE, mW, [0.068 * u, 0.059 * u, 0.051 * u], w=1.8)
     # the coat: a stand collar, a yoke, a back seam and vent, a waist seam
     cl_ = [(-0.052, -0.868), (-0.094, -0.849), (-0.128, -0.828), (-0.141, -0.80), (-0.13, -0.745), (-0.113, -0.70),
            (-0.105, -0.605), (-0.111, -0.50), (-0.12, -0.40), (-0.127, -0.335)]
@@ -829,10 +857,10 @@ def skyway(ctrl, W, elev, pylon_every=60.0, min_sep=34.0):
         if not (0 < bot[0] < 1000):
             continue
         last = bot
-        ht_w, mid_w, foot_w = F * 3.4 / Z, F * 1.0 / Z, F * 1.35 / Z
-        lpts = C([(top[0] - ht_w, top[1]), (top[0] - mid_w * 1.6, top[1] + ht * 0.2), (bot[0] - mid_w, top[1] + ht * 0.55),
+        ht_w, mid_w, foot_w = F * 2.3 / Z, F * 0.95 / Z, F * 1.3 / Z
+        lpts = C([(top[0] - ht_w, top[1]), (top[0] - mid_w * 1.25, top[1] + ht * 0.16), (bot[0] - mid_w, top[1] + ht * 0.55),
                   (bot[0] - foot_w, bot[1])], step=1.5)
-        rpts = C([(top[0] + ht_w, top[1]), (top[0] + mid_w * 1.6, top[1] + ht * 0.2), (bot[0] + mid_w, top[1] + ht * 0.55),
+        rpts = C([(top[0] + ht_w, top[1]), (top[0] + mid_w * 1.25, top[1] + ht * 0.16), (bot[0] + mid_w, top[1] + ht * 0.55),
                   (bot[0] + foot_w, bot[1])], step=1.5)
         wp = clamp(F * 0.03 / Z * 30, 0.75, 1.9)
         pen.line(lpts, w=wp * 0.9, hand=0.1, lift=0)
