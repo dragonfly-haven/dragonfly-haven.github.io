@@ -292,11 +292,13 @@ for tag, S in tubes.items():
 SLAB_T = 6.0                                # half thickness, along the axis
 SLAB_W = 17.0                               # half width, across the pair's length
 GAP = 2.0                                   # half the gap where the two bases of a pair meet
+SEQ = 'ATGCGTACCATGGCTAGCATTGC'               # strand a, 5' to 3' up the helix (any fixed sequence)
 slabs = []                                  # (k, h, corners 8 x 3D)
 for k in range(NBP):
     u = U0 + RISE * k
     pa, pb = pos(u, theta('a', u)), pos(u, theta('b', u))
-    m = lerp3(pa, pb, 0.5)
+    # a purine (A, G: two rings) reaches further across than its pyrimidine partner
+    m = lerp3(pa, pb, 0.5 + (0.08 if SEQ[k % len(SEQ)] in 'AG' else -0.08))
     d = norm(sub(pb, pa))
     wv = norm(cross(A3, d))
     for h, (s0, e0, dd) in enumerate(((pa, m, d), (pb, m, mul(d, -1)))):
@@ -452,7 +454,7 @@ for k, h, cs, dd, wv in slabs:
 xs = [x for p, _ in pen.strokes for x, _ in p]
 ys = [y for p, _ in pen.strokes for _, y in p]
 cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
-SCALE = 1.0
+SCALE = 1.12
 pen.strokes = [([((x - cx) * SCALE + 500, (y - cy) * SCALE + 500) for x, y in p], w) for p, w in pen.strokes]
 print('pairs', NBP)
 pen.save('../04-dna.svg', mirror=False)
