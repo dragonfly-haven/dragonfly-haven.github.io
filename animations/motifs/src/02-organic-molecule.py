@@ -61,19 +61,19 @@ def smooth(e0, e1, x):
     return t * t * (3 - 2 * t)
 
 
-def edges(y):
-    """Where the water's lines end, left and right, at height y: a soft, uneven vignette."""
+XC = 500.0                            # the plate's centre line
+
+
+def half_width(y):
+    """Half the width of the water's mass at height y: a soft, slightly oval outline."""
     u = (y - SURF_Y) / (FLOOR_Y - SURF_Y)
-    inset = 10.0 + 170.0 * (u - 0.35) ** 2
-    l = X0 + inset + 22.0 * math.sin(y * 0.017 + 1.3) + 10.0 * math.sin(y * 0.061)
-    r = X1 - inset - 22.0 * math.sin(y * 0.015 + 4.1) - 10.0 * math.sin(y * 0.053 + 2.0)
-    return l, r
+    return 412.0 * math.sqrt(max(0.0, 1 - ((u - 0.45) / 1.05) ** 2)) * (1 + 0.03 * math.sin(y * 0.043 + 0.7))
 
 
-def fade(x, y):
-    """1 well inside the water, falling to 0 at its left and right edges."""
-    l, r = edges(y)
-    return smooth(l, l + 220.0, x) * smooth(r, r - 220.0, x)
+def fade(x, y, edge=0.80):
+    """1 well inside the water, falling to 0 over its outer fifth at either side."""
+    d = abs(x - XC) / half_width(y)
+    return smooth(1.0, edge, d)
 
 
 # ---------------------------------------------------------------- the rings
@@ -166,6 +166,14 @@ class Ring:
             return (p[0] + LU[0] * d, p[1] + LU[1] * d)
         swept = [[mv(a, self.sh_from), mv(b, self.sh_from), mv(b, self.sh_len), mv(a, self.sh_len)] for a, b in srcs]
         self.segs, self.swept = srcs, [[mv(a, 0.0), mv(b, 0.0), mv(b, self.sh_len), mv(a, self.sh_len)] for a, b in srcs]
+        # the band between each double bond's two lines
+        self.bands = []
+        for k, (qa, qb) in zip((0, 2, 4), inners):
+            a, b = self.corner(k), self.corner(k + 1)
+            self.bands.append([a, b, qb, qa])
+        xs = [x for q in self.swept for x, _ in q]
+        ys = [y for q in self.swept for _, y in q]
+        self.bbox = (min(xs), min(ys), max(xs), max(ys))
         guard = 1.5 + 0.4 * self.w
 
         def in_shadow(p):
@@ -191,9 +199,12 @@ class Ring:
             t += self.sh_gap
 
     def near_lines(self, p, m):
-        """Is p within m of one of the ring's lines or in (or within m of) its shadow?
-        (The water shows through a ring, but keeps clear of its lines.)"""
-        if any(inside(p, q) for q in self.swept):
+        """Is p within m of one of the ring's lines, in (or within m of) its shadow, or between
+        the two lines of a double bond? (The water shows through a ring, but keeps clear of its lines.)"""
+        x0, y0, x1, y1 = self.bbox
+        if p[0] < x0 - m or p[0] > x1 + m or p[1] < y0 - m or p[1] > y1 + m:
+            return False
+        if any(inside(p, q) for q in self.swept) or any(inside(p, q) for q in self.bands):
             return True
         for poly in [list(sg) for sg in self.segs] + self.swept:
             n = len(poly)
@@ -208,6 +219,10 @@ class Ring:
 
     def keeps_out(self, p, m):
         """Is p within m of the ring or its shadow, inside included?"""
+        xs = [x for x, _ in self.body]
+        ys = [y for _, y in self.body]
+        if p[0] < min(xs) - m or p[0] > max(xs) + m or p[1] < min(ys) - m or p[1] > max(ys) + m:
+            return False
         if inside(p, self.body):
             return True
         n = len(self.body)
@@ -235,17 +250,28 @@ RINGS = [
     Ring((168.0, 700.0), 42.0, 22.0, 0.2, tilt=55.0, tilt_axis=10.0),
     Ring((548.0, 330.0), 32.0, 40.0, 0.0, tilt=38.0, tilt_axis=100.0),
 ]
-VEILED = {5}            # deep enough that the water's lines pass in front of it
 
 
 def clear_of_rings(p, m=12.0):
     """For bubbles and particles: outside every ring, with a margin."""
-    return not any(r.keeps_out(p, m * (0.4 + 0.6 * r.near)) for i, r in enumerate(RINGS) if i not in VEILED)
+    return not any(r.keeps_out(p, m * (0.4 + 0.6 * r.near)) for r in RINGS)
 
 
-def clear_of_lines(p, m=9.0):
-    """For the water's lines: anywhere but on or close to a ring's lines and shadow."""
-    return not any(r.near_lines(p, m * (0.45 + 0.55 * r.near)) for i, r in enumerate(RINGS) if i not in VEILED)
+HALO = 7.0              # the water's lines stop this far short of a ring's lines and shadow
+
+
+def clear_of_lines(p):
+    """For the water's lines: clear of every ring's lines, shadow and double-bond gaps; the water
+    shows through the two large rings, the small ones are kept clean inside."""
+    for r in RINGS:
+        if r.R >= 90:
+            if r.near_lines(p, HALO):
+                return False
+        elif r.keeps_out(p, HALO):
+            return False
+    return True
+
+
 
 
 # ---------------------------------------------------------------- draw: rings first (front), then the soup
@@ -254,99 +280,143 @@ for r in RINGS:
     r.draw()
 
 
-def wline(pts, w, hand=0.25):
-    pen.line(pts, w=w, hand=hand, lift=0.0, piece=(60, 160), occlude=False)
+def wline(pts, w, hand=0.25, lift=0.0):
+    pen.line(pts, w=w, hand=hand, lift=lift, piece=(60, 160), occlude=False)
 
 
-# the surface: one sure line across, breaking up at either end
-xs = [X0 + 8 + k * 3.0 for k in range(int((X1 - X0 - 16) / 3.0))]
-pts = [(x, surface_y(x)) for x in xs]
-n = len(pts)
-a, b = int(n * 0.08), int(n * 0.92)
-wline(pts[a:b], 1.7)
-for lo, hi in ((0, a), (b, n)):
-    k = lo
-    while k < hi - 2:
-        ln = rng.randint(3, 8)
-        seg = pts[k:min(hi, k + ln)]
-        if len(seg) > 1:
-            wline(seg, 1.2, 0.15)
-        k += ln + rng.randint(2, 4)
-# a fine broken line just under it, the surface seen a little from above
-x = X0 + 70
-while x < X1 - 70:
-    L = rng.uniform(30, 90)
+def broken_line(fn, xa, xb, solid, w_solid, w_broken):
+    """A line y = fn(x) from xa to xb: solid over the middle, then breaking up into ever
+    shorter, sparser strokes before it reaches either side."""
+    sa, sb = solid
+    pts = [(x, fn(x)) for x in [sa + (sb - sa) * i / int((sb - sa) / 3) for i in range(int((sb - sa) / 3) + 1)]]
+    wline(pts, w_solid)
+    for direction, x_from, x_to in ((-1, sa, xa), (1, sb, xb)):
+        x = x_from + direction * rng.uniform(3, 7)
+        while (x - x_to) * direction < 0:
+            t = abs(x - x_from) / abs(x_to - x_from)          # 0 at the solid end, 1 at the side
+            L = (34 - 26 * t) * rng.uniform(0.7, 1.3)
+            xe = x + direction * L
+            seg = [(xx, fn(xx)) for xx in [x + (xe - x) * i / 6 for i in range(7)]]
+            wline(seg, w_broken - 0.35 * t, 0.15)
+            x = xe + direction * (5 + 22 * t) * rng.uniform(0.7, 1.4)
+
+
+# ---- the surface, a fine broken line under it, and a few glints and wavelets
+broken_line(surface_y, XC - 415.0, XC + 412.0, (215.0, 790.0), 1.7, 1.3)
+x = XC - 0.72 * half_width(SURF_Y)
+while x < XC + 0.72 * half_width(SURF_Y):
+    L = rng.uniform(30, 90) * (0.4 + 0.6 * fade(x, SURF_Y, 0.55))
     seg = [(xx, surface_y(xx) + 7.5) for xx in [x + L * i / 10 for i in range(11)]]
-    if fade(x + L / 2, SURF_Y + 30) > 0.35:
-        wline(seg, 0.8, 0.15)
+    wline(seg, 0.8, 0.15)
     x += L + rng.uniform(25, 70)
+for gx, gl in ((268.0, 22.0), (300.0, 12.0), (352.0, 26.0), (395.0, 14.0), (448.0, 20.0), (602.0, 16.0), (640.0, 24.0)):
+    gy = surface_y(gx) + rng.uniform(13, 19)
+    wline([(gx, gy), (gx + gl * 0.5, gy - 0.4), (gx + gl, gy)], 0.75, 0.1)
+for wx, ww in ((180.0, 16.0), (330.0, 20.0), (520.0, 18.0), (585.0, 13.0), (655.0, 15.0)):
+    pen.line(ellipse_pts(wx, surface_y(wx) + 2.0, ww, 4.5, 0.0, math.pi * 1.15, math.pi * 1.85, step=1.0),
+             w=0.85, hand=0, lift=0, occlude=False)
 
-# the water: rows of broken, gently waving lines, opening up near the surface and closing with depth
-y = SURF_Y + 22.0
-while y < FLOOR_Y - 10:
-    u = (y - SURF_Y) / (FLOOR_Y - SURF_Y)
-    l, r = edges(y)
-    x = l + rng.uniform(0, 40)
+# ---- the water: rows of broken, gently waving lines, open under the surface and closing with
+# depth to about 5.6 apart, longer near the floor; shorter, sparser and ragged over the outer fifth
+y = SURF_Y + 20.0
+while y < FLOOR_Y + 14:
+    u = min(1.0, (y - SURF_Y) / (FLOOR_Y - SURF_Y))
+    hw = half_width(y)
+    x = XC - hw + rng.uniform(0, 30)
     ph = rng.uniform(0, 6.3)
-    while x < r:
+    amp = 0.5 + 1.5 * (1 - u)
+    while x < XC + hw:
         f = fade(x, y)
-        L = rng.uniform(22, 90) * (0.45 + 0.55 * f) * (1.15 - 0.3 * u)
-        xe = min(r, x + L)
-        if rng.random() < (0.25 + 0.75 * f) * (0.6 + 0.4 * smooth(0.0, 0.55, u)):
-            seg = [(xx, y + 2.0 * math.sin(xx * 0.065 + ph)) for xx in [x + (xe - x) * i / 16 for i in range(17)]]
-            for run in clip_segments(seg, lambda p: clear_of_lines(p) and p[1] < floor_y(p[0]) - 10):
-                if math.dist(run[0], run[-1]) > 7:
-                    wline(run, 0.7 + 0.16 * u, 0.2)
-        x = xe + rng.uniform(14, 46) * (1.25 - 0.55 * u) * (1.6 - 0.6 * f)
-    y += 30.0 - 16.0 * u + rng.uniform(-1.0, 1.0)
+        L = (26 + 120 * u ** 1.3) * rng.uniform(0.6, 1.4) * (0.3 + 0.7 * f)
+        xe = min(XC + hw, x + L)
+        if rng.random() < 0.15 + 0.85 * f ** 0.8:
+            seg = [(xx, y + amp * math.sin(xx * 0.06 + ph)) for xx in [x + (xe - x) * i / max(2, int((xe - x) / 6)) for i in range(max(2, int((xe - x) / 6)) + 1)]]
+            for run in clip_segments(seg, lambda p: p[1] < floor_y(p[0]) - 6 and clear_of_lines(p)):
+                if math.dist(run[0], run[-1]) > 6:
+                    wline(run, 0.66 + 0.2 * u, 0.15)
+        x = xe + (38 - 26 * u) * rng.uniform(0.5, 1.5) * (1 + 1.8 * (1 - f))
+    y += 5.6 + 21.0 * (1 - u) ** 1.7 + rng.uniform(-0.4, 0.4)
 
-# the floor: a sediment line, breaking up at its ends
-fx = [X0 + 40 + k * 3.0 for k in range(int((X1 - X0 - 80) / 3.0))]
-fpts = [(x, floor_y(x)) for x in fx]
-n = len(fpts)
-a, b = int(n * 0.07), int(n * 0.93)
-pen.line(fpts[a:b], w=1.5, hand=0.35, lift=0.06, piece=(50, 120), occlude=False)
-for lo, hi in ((0, a), (b, n)):
-    k = lo
-    while k < hi - 2:
-        ln = rng.randint(3, 7)
-        seg = fpts[k:min(hi, k + ln)]
-        if len(seg) > 1:
-            wline(seg, 1.0, 0.2)
-        k += ln + rng.randint(2, 5)
-# the vent: a mouth at the top of the mound
+# ---- the floor in section: the sediment's surface, strata below fading down and to the sides
+broken_line(floor_y, XC - 0.97 * half_width(FLOOR_Y), XC + 0.97 * half_width(FLOOR_Y), (225.0, 780.0), 1.5, 1.2)
+
+
+def stratum(depth, y):
+    return floor_y(y) + depth
+
+
+# stratum lines
+for depth, reach, w in ((17.0, 0.72, 0.95), (38.0, 0.6, 0.85), (60.0, 0.45, 0.75)):
+    hw = half_width(FLOOR_Y) * reach
+    x = XC - hw + rng.uniform(0, 20)
+    while x < XC + hw:
+        f = smooth(1.0, 0.7, abs(x - XC) / hw)
+        L = rng.uniform(40, 120) * (0.4 + 0.6 * f)
+        xe = min(XC + hw, x + L)
+        if rng.random() < 0.3 + 0.7 * f:
+            seg = [(xx, floor_y(xx) * 0.6 + FLOOR_Y * 0.4 + depth) for xx in [x + (xe - x) * i / 8 for i in range(9)]]
+            wline(seg, w, 0.25)
+        x = xe + rng.uniform(8, 30) * (1 + 1.5 * (1 - f))
+# between the floor and the first stratum: fine sediment, short level dashes
+for depth in (6.0, 11.5):
+    hw = half_width(FLOOR_Y) * 0.78
+    x = XC - hw + rng.uniform(0, 20)
+    while x < XC + hw:
+        f = smooth(1.0, 0.7, abs(x - XC) / hw)
+        L = rng.uniform(8, 22)
+        if rng.random() < 0.2 + 0.7 * f:
+            seg = [(xx, floor_y(xx) + depth) for xx in [x, x + L / 2, x + L]]
+            wline(seg, 0.65, 0.1)
+        x += L + rng.uniform(6, 16) * (1 + 2 * (1 - f))
+# between the first and second: diagonal hatching
+hw = half_width(FLOOR_Y) * 0.62
+x = XC - hw
+while x < XC + hw:
+    f = smooth(1.0, 0.65, abs(x - XC) / hw)
+    if rng.random() < 0.15 + 0.85 * f:
+        top = floor_y(x) * 0.6 + FLOOR_Y * 0.4 + 17.0 + 2.5
+        bot = floor_y(x) * 0.6 + FLOOR_Y * 0.4 + 38.0 - 2.5
+        wline([(x, top), (x + (bot - top) * 0.55, bot)], 0.65, 0.1)
+    x += 6.5
+# between the second and third: a scatter of grit
+for k in range(60):
+    xx = XC + rng.uniform(-1, 1) * half_width(FLOOR_Y) * 0.5
+    yy = floor_y(xx) * 0.6 + FLOOR_Y * 0.4 + rng.uniform(43, 56)
+    if rng.random() < smooth(1.0, 0.6, abs(xx - XC) / (half_width(FLOOR_Y) * 0.5)):
+        pen.dot(xx, yy, r=rng.uniform(0.8, 1.4), w=0.9)
+
+# ---- the vent: a mouth on the mound's top, the mound shaded on its lower right
 vx, vy = VENT, floor_y(VENT)
-pen.line(ellipse_pts(vx, vy + 2.5, 13, 3.5, 0.0, math.pi * 0.0, math.pi * 1.0), w=1.2, hand=0, lift=0, occlude=False)
-pen.line(ellipse_pts(vx, vy + 2.5, 13, 3.5, 0.0, math.pi * 1.0, math.pi * 2.0), w=1.0, hand=0, lift=0, occlude=False)
-# the mound's shaded right flank
-for k in range(7):
-    x = vx + 12 + k * 7.0
-    y0 = floor_y(x) + 3
-    wline([(x, y0), (x + 6, y0 + 16 - k * 1.5)], 0.7, 0.1)
-# pebbles, a few, resting on the floor
-for x, rx, ry in ((148, 12, 6), (172, 7, 4), (318, 9, 5), (338, 5, 3), (512, 14, 6.5), (612, 8, 4.5),
-                  (790, 11, 5.5), (812, 6, 3.5), (872, 9, 4.5)):
+pen.line(ellipse_pts(vx, vy + 2.5, 13, 3.5, 0.0, 0.0, math.pi), w=1.2, hand=0, lift=0, occlude=False)
+pen.line(ellipse_pts(vx, vy + 2.5, 13, 3.5, 0.0, math.pi, 2 * math.pi), w=1.0, hand=0, lift=0, occlude=False)
+for k in range(9):
+    x0 = vx + 10 + k * 6.5
+    y0 = floor_y(x0) + 2.5
+    L = 26 - 2.0 * k
+    wline([(x0, y0), (x0 + 0.3 * L, y0 + 0.5 * L), (x0 + 0.5 * L, y0 + L)], 0.7, 0.1)
+
+# ---- pebbles on the floor: each with its shaded underside and a short cast shadow
+for x, rx, ry in ((232, 12, 6), (254, 7, 4), (330, 9, 5), (512, 14, 6.5), (612, 8, 4.5),
+                  (790, 11, 5.5), (808, 6, 3.5)):
     cy = floor_y(x) - ry + 1.5
     pen.line(ellipse_pts(x, cy, rx, ry, 0.0, math.pi * 1.0, math.pi * 2.0), w=1.1, hand=0, lift=0, occlude=False)
-    pen.line(ellipse_pts(x, cy, rx * 0.7, ry * 0.55, 0.0, math.radians(15), math.radians(75)), w=0.7, hand=0, lift=0, occlude=False)
-# the sediment in section: short strokes under the floor, thinning downward
-for j in range(3):
-    off = 10.0 + j * 10.0
-    x = X0 + 80 + rng.uniform(0, 40) + j * 40
-    while x < X1 - 80 - j * 40:
-        L = rng.uniform(14, 40) * (1 - 0.2 * j)
-        seg = [(xx, floor_y(xx) + off) for xx in [x + L * i / 6 for i in range(7)]]
-        wline(seg, 0.7, 0.2)
-        x += L + rng.uniform(16, 44) * (1 + 0.7 * j)
+    for j in range(2):
+        rr = 0.75 - 0.3 * j
+        pen.line(ellipse_pts(x, cy, rx * rr, ry * rr, 0.0, math.radians(-30), math.radians(70)), w=0.7, hand=0, lift=0, occlude=False)
+    fy = floor_y(x + rx + 6)
+    wline([(x + rx * 0.6, fy + 1.5), (x + rx + 12, fy + 1.5)], 0.75, 0.05)
 
 
-# bubbles: rising from the vent and from a crack, growing as they rise
+# ---- bubbles: rising from the vent and from a crack, growing as they rise
 def bubble(x, y, r):
     if r < 3.0:
         pen.dot(x, y, r=max(1.0, r * 0.7), w=0.9)
         return
     pen.line(ellipse_pts(x, y, r, r * 0.96, 0, 0, 2 * math.pi + 0.15, step=1.2), w=0.9 + 0.03 * r, hand=0, lift=0, occlude=False)
     pen.line(ellipse_pts(x, y, r * 0.55, r * 0.55, 0, math.radians(195), math.radians(250), step=0.8), w=0.7, hand=0, lift=0, occlude=False)
+
+
+bubbles = []
 
 
 def bubble_column(x0, y0, y1, n, r0, r1, sway, ph):
@@ -356,12 +426,14 @@ def bubble_column(x0, y0, y1, n, r0, r1, sway, ph):
         x = x0 + sway * math.sin(u * 6.5 + ph) + rng.uniform(-3, 3)
         r = r0 + (r1 - r0) * u + rng.uniform(-0.5, 0.5)
         if clear_of_rings((x, y), 5 + r):
-            bubble(x, y, r)
+            bubbles.append((x, y, r))
 
 
 bubble_column(vx, vy - 16, SURF_Y + 20, 17, 2.4, 9.0, 11.0, 0.4)
 bubble_column(vx + 22, vy - 50, SURF_Y + 70, 7, 2.0, 6.0, 8.0, 2.1)
 bubble_column(318.0, floor_y(318.0) - 16, SURF_Y + 26, 11, 2.0, 7.5, 10.0, 4.0)
+for b in bubbles:
+    bubble(*b)
 
 # where bubbles break: a small dome on the surface and ripples running off either side
 for bx, sc in ((vx + 4, 1.0), (322.0, 0.85)):
@@ -373,10 +445,29 @@ for bx, sc in ((vx + 4, 1.0), (322.0, 0.85)):
             pen.line(ellipse_pts(cx, surface_y(cx) - 0.5, 5.5 * sc, 2.6 * sc, 0, math.pi * 1.1, math.pi * 1.9, step=0.8),
                      w=0.85 - 0.1 * j, hand=0, lift=0, occlude=False)
 
-# beyond the water: a far volcanic shore on the horizon, smoking (light: it is far off)
+
+# ---- warm vapour: two faint columns of small soft billows lifting off the water and leaning
+# with the wind, drawn like the plume but paler: only their shaded sides, open to the light
+def vapour(x0, puffs, ph):
+    y0 = surface_y(x0) - 4.0
+    occ0 = len(pen.occluders)
+    for k, (dx, dy, r) in enumerate(puffs):
+        cx, cy = x0 + dx, y0 + dy - r
+        pen.line(ellipse_pts(cx, cy, r, r * 0.9, 0, math.radians(-40 + 8 * math.sin(k + ph)), math.radians(150), step=1.2),
+                 w=0.75, hand=0.1, lift=0.15, piece=(12, 30))
+        if r > 8:
+            pen.line(ellipse_pts(cx, cy, r * 0.62, r * 0.56, 0, math.radians(10), math.radians(95), step=1.0),
+                     w=0.62, hand=0.05, lift=0)
+        pen.occlude(ellipse_pts(cx, cy, r + 0.8, (r + 0.8) * 0.9, 0, step=2.0))
+    del pen.occluders[occ0:]
+
+
+vapour(262.0, [(0, 0, 8), (-6, -16, 12), (-20, -38, 16), (-42, -58, 15)], 0.4)
+vapour(472.0, [(0, 0, 7), (-5, -14, 10), (-17, -32, 13)], 1.9)
+
+
+# ---- beyond the water: a far volcano on the horizon, its plume rolling off to the left
 def volcano(xl, xr, xc, top, crater, w):
-    """A cone from xl to xr on the horizon, its crater (half width `crater`) at xc, `top` above
-    the surface; the slopes concave, steep under the rim and spreading at the foot."""
     yt = SURF_Y - top
 
     def left_at(t):                       # t 0 at the foot, 1 at the rim
@@ -389,57 +480,62 @@ def volcano(xl, xr, xc, top, crater, w):
     left = [left_at(i / 30) for i in range(31)]
     rim = [(xc - crater + 2 * crater * t, yt + 4.0 * math.sin(math.pi * t)) for t in [i / 8 for i in range(1, 8)]]
     right = [right_at(i / 30) for i in range(31)]
-    pen.line(left + rim + right, w=w, hand=0.3, lift=0.04, piece=(40, 110), occlude=False)
-    # the shadowed right flank: form lines of the cone, running from under the rim to the foot
-    apex = (xc + crater * 0.5, yt + 2)
-    for k in range(5):
-        t = 0.30 + 0.15 * k                               # where along the right slope's foot it lands
+    pen.line(left + rim + right, w=w, hand=0.25, lift=0.03, piece=(40, 110), occlude=False)
+    # the shadowed right flank: form lines of the cone, from under the rim to the foot, closer
+    # together toward the dark edge, each stopping a little above the horizon
+    apex = (xc + crater * 0.4, yt + 3)
+    k = 0
+    for t in [0.22 + 0.78 * (1 - (1 - i / 7) ** 1.5) for i in range(8)]:
         foot = right_at(t)
-        foot = (foot[0] - 6, foot[1] + (surface_y(foot[0]) - foot[1]) * 0.9 - 2)
-        a = lerp(apex, foot, 0.22 + 0.04 * k)
-        pen.line([a, lerp(a, foot, 0.5), foot], w=0.65, hand=0.2, lift=0, occlude=False)
+        foot = (foot[0] - 4.0, surface_y(foot[0]) - 3.0 - 6.0 * (1 - t))
+        foot = (foot[0], min(foot[1], right_at(t)[1] + (surface_y(foot[0]) - right_at(t)[1]) * 0.98))
+        start = 0.34 + 0.16 * ((k * 7) % 3) / 2
+        a = lerp(apex, foot, start)
+        m = lerp(a, foot, 0.5)
+        m = (m[0] - 2.0, m[1] + 2.0)
+        pen.line(catmull([a, m, foot], step=3.0), w=0.7, hand=0.15, lift=0, occlude=False)
+        k += 1
+    # ridges on the lit left flank
+    for t0, t1, dx in ((0.93, 0.45, -10.0), (0.85, 0.3, -26.0), (0.9, 0.6, 8.0)):
+        a, b = left_at(t0), left_at(t1)
+        a = (a[0] + 8 + dx * 0.1, a[1] + 4)
+        b = (b[0] + 16 + dx, b[1] + 10)
+        pen.line(catmull([a, lerp(a, b, 0.5), b], step=3.0), w=0.7, hand=0.25, lift=0, occlude=False)
     return (xc, yt + 2)
 
 
-def plume(x, y, w):
-    """Smoke from the crater: billows climbing and drifting to the left, drawn as
-    the outline of their union, with a little shade along their undersides."""
-    puffs = [(0, -6, 8), (-5, -22, 11), (-15, -40, 14), (-30, -58, 16), (-50, -72, 18), (-76, -80, 19),
-             (-104, -84, 17), (-130, -84, 14), (-152, -82, 10),
-             (-22, -50, 10), (-44, -62, 12), (-70, -66, 13), (-98, -70, 12), (-124, -72, 10)]
-    circles = [(x + dx, y + dy, r) for dx, dy, r in puffs]
-
-    def in_other(p, i, grow=0.0):
-        return any(math.dist(p, (cx, cy)) < r + grow for j, (cx, cy, r) in enumerate(circles) if j != i)
-    for i, (cx, cy, r) in enumerate(circles):
-        ring_pts = ellipse_pts(cx, cy, r, r, 0, 0, 2 * math.pi, step=1.2)
-        for run in clip_segments(ring_pts, lambda p: not in_other(p, i)):
-            if math.dist(run[0], run[-1]) > 2 or len(run) > 3:
-                pen.line(run, w=w, hand=0.15, lift=0, occlude=False)
-        # shade: an inner arc along the billow's underside
-        arc = ellipse_pts(cx, cy, r * 0.72, r * 0.72, 0, math.radians(25), math.radians(120), step=1.0)
-        for run in clip_segments(arc, lambda p: not in_other(p, i, 2.0)):
-            if len(run) > 3:
-                pen.line(run, w=0.65, hand=0.1, lift=0, occlude=False)
+def plume(x, y):
+    """Rolling billows climbing from the crater and drifting left: each shaded on its lower
+    right with curved parallel hatching, open on the lit upper left; nearer billows hide those behind."""
+    path = [(0, -10, 11), (-10, -36, 18), (-34, -64, 25), (-74, -84, 30), (-122, -90, 28), (-164, -86, 21)]
+    occ0 = len(pen.occluders)
+    for dx, dy, r in path:
+        cx, cy = x + dx, y + dy - r * 0.5
+        # the outline on the shaded side only
+        pen.line(ellipse_pts(cx, cy, r, r * 0.86, 0, math.radians(-50), math.radians(165), step=1.5),
+                 w=0.9, hand=0.1, lift=0.05, piece=(30, 80))
+        # curved hatching along the lower right, shorter toward the centre
+        for j, (fr, a0, a1) in enumerate(((0.8, -20, 125), (0.62, 0, 105), (0.44, 20, 85))):
+            if r * fr < 4:
+                break
+            pen.line(ellipse_pts(cx, cy, r * fr, r * fr * 0.86, 0, math.radians(a0), math.radians(a1), step=1.2),
+                     w=0.65, hand=0.05, lift=0)
+        pen.occlude(ellipse_pts(cx, cy, r + 1.0, (r + 1.0) * 0.86, 0, step=2.0))
+    del pen.occluders[occ0:]
 
 
-tip = volcano(748.0, 940.0, 852.0, 84.0, 11.0, 1.15)
-plume(tip[0], tip[1] - 2, 0.85)
-# a low far island on the left
-il = [(x, surface_y(x) - 26.0 * math.sin(math.pi * (x - 92.0) / 150.0) ** 0.7) for x in [92.0 + 150.0 * i / 30 for i in range(31)]]
-pen.line(il, w=0.95, hand=0.3, lift=0.04, piece=(40, 110), occlude=False)
-for k in range(4):
-    x = 168.0 + k * 13.0
-    yy = surface_y(x) - 26.0 * math.sin(math.pi * (x - 92.0) / 150.0) ** 0.7
-    pen.line([(x, yy + 4), (x + 5, surface_y(x) - 3)], w=0.65, hand=0.15, lift=0, occlude=False)
+tip = volcano(742.0, 910.0, 834.0, 82.0, 10.0, 1.2)
+plume(tip[0], tip[1] - 2)
 
-# fine particles suspended in the water
+# ---- fine particles suspended in the water
 placed = 0
 tries = 0
-while placed < 85 and tries < 6000:
+while placed < 90 and tries < 6000:
     tries += 1
-    x, y = rng.uniform(X0 + 40, X1 - 40), rng.uniform(SURF_Y + 25, FLOOR_Y - 25)
+    x, y = rng.uniform(XC - 430, XC + 430), rng.uniform(SURF_Y + 25, FLOOR_Y - 25)
     if rng.random() > fade(x, y) or y > floor_y(x) - 14 or not clear_of_rings((x, y), 16):
+        continue
+    if any(math.dist((x, y), (bx, by)) < br + 5 for bx, by, br in bubbles):
         continue
     pen.dot(x, y, r=rng.uniform(0.9, 1.6), w=1.0)
     placed += 1
