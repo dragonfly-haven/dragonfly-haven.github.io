@@ -1,20 +1,19 @@
 """21 - the future: people in nature looking at a far metropolis, under a sky
 whose stars form neural networks.
 
-COMPOSITION DRAFT (stage 1 of the design worked out with Maxim): main masses,
-people, roads, city silhouette, horizon and the neural-net constellations
-roughly in place, with a little tone. Detail comes after his notes.
+STAGE 2 (draft A, "big sky", chosen by Maxim): a family stands on a knoll at
+the left, seen from behind, hand in hand, an old tree framing them at the edge.
+Below them a meadow plain falls away, with belts of woodland and single trees,
+to a calm lake; the metropolis rises from its far shore in three ranks (low
+domes and terraces, towers with saucers, skybridges and a great arch, then the
+tallest spires), with low hills behind it. Three ways lead to it: the main
+road sweeping up from the lower right, a second road coming out from behind
+the knoll, and a skyway on slender piers from the right. Above, a faint band
+of the Milky Way and plain stars, among which five small neural networks are
+made of stars.
 
-Two compositions are drafted from the same parts:
-    python3 21-neural-net.py            draft A -> ../21-neural-net.svg
-    python3 21-neural-net.py B <path>   draft B -> <path>
-A: low horizon, big sky; the people stand on a knoll at the left, the city
-   rises right of centre, a road sweeps up from the lower right and a skyway
-   on pylons comes in from the right.
-B: high horizon, long road; the people stand near the bottom, a long road
-   winds from their feet up to a wide city across the middle, a skyway curves
-   in from the left, a smaller sky above.
-Groves of round park trees stand out on the plain in both.
+    python3 21-neural-net.py            -> ../21-neural-net.svg
+    python3 21-neural-net.py <path>     -> <path>
 
 The ground and roads are drawn in a true perspective (a camera at height HC
 over a flat plain, horizon at YH), so the roads narrow as they should. Things
@@ -29,10 +28,9 @@ import math
 import sys
 from collections import defaultdict
 
-from pen import Pen, catmull, ellipse_pts, resample, lerp, dist, inside, length, clip_segments, scanlines
+from pen import Pen, catmull, ellipse_pts, resample, lerp, dist, inside, length, clip_segments, scanlines, offset
 
-VARIANT = sys.argv[1] if len(sys.argv) > 1 else 'A'
-OUT = sys.argv[2] if len(sys.argv) > 2 else '../21-neural-net.svg'
+OUT = sys.argv[1] if len(sys.argv) > 1 else '../21-neural-net.svg'
 
 
 class ScenePen(Pen):
@@ -43,6 +41,7 @@ class ScenePen(Pen):
         self.cell = 25
         self.grid = defaultdict(list)
         self.polys = []
+        self.halos = []
 
     def occlude(self, poly):
         poly = list(poly)
@@ -57,6 +56,9 @@ class ScenePen(Pen):
                 self.grid[(i, j)].append(k)
 
     def hidden(self, p):
+        for x0, y0, st, cells in self.halos:
+            if (int(round((p[0] - x0) / st)), int(round((p[1] - y0) / st))) in cells:
+                return True
         c = self.cell
         for k in self.grid.get((int(p[0] // c), int(p[1] // c)), ()):
             poly, bb = self.polys[k]
@@ -64,13 +66,28 @@ class ScenePen(Pen):
                 return True
         return False
 
+    def add_halo(self, box, r=4.0, step=2.0):
+        """A thin margin of clear paper round everything already drawn inside
+        box: lines drawn later stop just short of those outlines."""
+        x0, y0, x1, y1 = box
+        nx, ny = int((x1 - x0) / step) + 1, int((y1 - y0) / step) + 1
+        k = int(math.ceil(r / step))
+        disc = [(i, j) for i in range(-k, k + 1) for j in range(-k, k + 1) if i * i + j * j <= k * k]
+        cells = set()
+        for i in range(nx):
+            for j in range(ny):
+                if self.hidden((x0 + i * step, y0 + j * step)):
+                    for di, dj in disc:
+                        cells.add((i + di, j + dj))
+        self.halos.append((x0, y0, step, cells))
+
     def visible(self, pts):
         if not self.polys:
             return [list(pts)]
         return clip_segments(pts, lambda p: not self.hidden(p))
 
 
-pen = ScenePen(seed=2101 if VARIANT == 'A' else 2102)
+pen = ScenePen(seed=2101)
 R = pen.r
 G = pen.g
 
@@ -91,12 +108,8 @@ def place(pts, x0, y0, s):
 
 # ---------------------------------------------------------------- the scene's set-up
 
-if VARIANT == 'A':
-    YH = 600.0         # horizon
-    HC = 20.0          # camera height over the plain (m)
-else:
-    YH = 435.0
-    HC = 34.0
+YH = 600.0             # horizon
+HC = 20.0              # camera height over the plain (m)
 F = 700.0              # focal length (units)
 CXP = 500.0
 
@@ -827,19 +840,41 @@ def depth_w(near, far):
 
 
 def ground_road(ctrl, W):
-    left, right, mid, _ = road_edges(ctrl, W)
+    """A road on the plain: its edges, heavier near; a dashed lane marking down
+    the middle (dashes 3 m long every 8 m); and lines along the inside of the
+    left kerb, which is in its own shadow (only where they lie 5 apart)."""
+    left, right, mid, foot = road_edges(ctrl, W)
     wf = depth_w(2.0, 0.8)
     weighted(left, wf)
     weighted(right, wf)
-    # the centre line, fine, and two lane lines
-    wc = depth_w(1.0, 0.6)
-    weighted(mid, wc)
-    # tone: fine lines along the road near the edges, to give it a surface
-    for f in (0.18, 0.82):
-        lane = [lerp(a, b, f) for a, b in zip(left, right)]
-        cut = [p for p in lane if p[1] > YH + 6]
-        if len(cut) > 2:
-            weighted(cut, depth_w(0.8, 0.6))
+    cum = 0.0
+    run = []
+    marks = []
+    for i, ((X, Z, _), p) in enumerate(zip(foot, mid)):
+        if i:
+            cum += math.hypot(X - foot[i - 1][0], Z - foot[i - 1][1])
+        if cum % 8.0 < 3.0 and p[1] > YH + 5:
+            run.append(p)
+        elif run:
+            marks.append(run)
+            run = []
+    if run:
+        marks.append(run)
+    for rn in marks:
+        if len(rn) > 1 and length(rn) > 1.2:
+            pen.line(rn, w=depth_w(1.1, 0.62)(rn[0][1]), hand=0, lift=0)
+    for k in (1, 2, 3):
+        d = 5.0 * k
+        line = []
+        for a, b in zip(left, right):
+            L = dist(a, b)
+            if L > 3.4 * d + 14:
+                line.append(lerp(a, b, d / L))
+            elif line:
+                break
+        if len(line) > 3:
+            for pc in pieces(line, on=(30, 110), off=(6, 26), start_off=False):
+                pen.line(pc, w=0.66, hand=0.2, lift=0.1, piece=(20, 60))
     poly = left + list(reversed(right))
     pen.occlude(poly)
     return left, right
@@ -853,6 +888,9 @@ def skyway(ctrl, W, elev, pylon_every=60.0, min_sep=34.0):
     wf = depth_w(2.0, 0.8)
     weighted(near, wf)
     weighted(far, depth_w(1.4, 0.7))
+    rail = [(p[0], p[1] - F * 0.9 / Z) for (X, Z, Y), p in zip(foot, near) if F * 0.9 / Z > 2.2]
+    if len(rail) > 3:
+        weighted(rail, depth_w(1.0, 0.62))
     under = []
     for (X, Z, Y), p in zip(foot, near):
         under.append((p[0], p[1] + F * 1.6 / Z))
@@ -876,6 +914,7 @@ def skyway(ctrl, W, elev, pylon_every=60.0, min_sep=34.0):
         if not (0 < bot[0] < 1000):
             continue
         last = bot
+        LAKE_PIERS.append((bot[0], bot[1], ht))
         ht_w, mid_w, foot_w = F * 2.8 / Z, F * 1.35 / Z, F * 1.7 / Z
         lpts = C([(top[0] - ht_w, top[1]), (top[0] - mid_w * 1.25, top[1] + ht * 0.16), (bot[0] - mid_w, top[1] + ht * 0.55),
                   (bot[0] - foot_w, bot[1])], step=1.5)
@@ -943,110 +982,11 @@ def tower_detail(poly, kind, x, b, w, h, depth):
         while y > b - h * g1:
             sp = span_at(poly, y)
             if sp:
-                x0, x1 = sp[0] + 1.6, min(sp[1] - 1.0, x + (sp[1] - sp[0]) * 0.08)
+                xc = (sp[0] + sp[1]) / 2
+                x0, x1 = sp[0] + 1.6, min(sp[1] - 1.0, xc + (sp[1] - sp[0]) * 0.08)
                 if x1 - x0 > 3:
                     pen.line([(x0, y), (x1, y)], w=0.6, hand=0, lift=0.5, piece=(2.2, 4.5))
             y -= 5.5
-
-
-def city(cx, base, s, wline=1.1):
-    """The metropolis on the horizon, s = scale. Returns its outline polygons."""
-    towers = []
-
-    def T(kind, dx, w, h, depth, **kw):
-        towers.append(dict(kind=kind, x=cx + dx * s, w=w * s, h=h * s, depth=depth, kw=kw))
-
-    # landmark: a very tall needle with rings round it
-    T('ring', 0, 30, 340, 1.0)
-    T('needle', -96, 24, 255, 1.5)
-    T('needle', 92, 22, 280, 1.2)
-    T('needle', 178, 16, 175, 2.4)
-    T('needle', -180, 18, 168, 2.1)
-    T('disc', -44, 13, 210, 0.8)
-    T('disc', 50, 12, 228, 2.6)
-    T('disc', 240, 10, 120, 2.0)
-    T('arch', -140, 56, 112, 0.5)
-    T('slab', 132, 36, 122, 0.6)
-    T('slab', -232, 28, 84, 1.0)
-    T('slab', 226, 30, 96, 1.3)
-    T('dome', -118, 62, 40, 0.15)
-    T('dome', 205, 38, 25, 0.3)
-    T('dome', 18, 44, 28, 0.1)
-    for k in range(16):
-        dx = -270 + k * 36 + R(-10, 10)
-        T('shaft', dx, R(10, 18), R(40, 120), 3.0 + R(0, 0.5))
-    towers.sort(key=lambda t: t['depth'])
-    outlines = []
-    for t in towers:
-        x, w, h = t['x'], t['w'], t['h']
-        b = base + (3.2 - t['depth']) * 1.2 * s
-        wl = wline * (1.0 if t['depth'] < 2 else 0.85)
-        kind = t['kind']
-        if kind in ('needle', 'ring'):
-            poly = tower_needle(x, b, w, h)
-        elif kind in ('shaft', 'slab'):
-            poly = tower_shaft(x, b, w, h, top_taper=0.85 if kind == 'slab' else 0.6)
-        elif kind == 'disc':
-            poly = tower_shaft(x, b, w, h * 0.78, top_taper=0.8)
-        elif kind == 'arch':
-            outer = ellipse_pts(x, b, w / 2, h, 0, math.pi, 2 * math.pi, step=2)
-            poly = outer
-        elif kind == 'dome':
-            poly = ellipse_pts(x, b, w, h, 0, math.pi, 2 * math.pi, step=2)
-        # decorations drawn first (they are in front of the body)
-        if kind == 'ring':
-            for f, rr in ((0.5, 1.9), (0.64, 1.6), (0.78, 1.3)):
-                yy = b - h * f
-                half_w = w * 0.5 * (1 - f) ** 0.9 + 2
-                ring = ellipse_pts(x, yy, half_w * rr + 4 * s, 4.5 * s, 0, 0, math.pi, step=1.5)
-                pen.line(ring, w=wl, hand=0.1, lift=0)
-                back = ellipse_pts(x, yy, half_w * rr + 4 * s, 4.5 * s, 0, math.pi, 2 * math.pi, step=1.5)
-                band = ring + back
-                pen.occlude([(p[0], p[1] + 0.6) for p in ellipse_pts(x, yy, half_w * rr + 4 * s, 4.5 * s, 0, 0, math.pi, step=2)]
-                            + [(x - half_w * rr - 4 * s, yy - 0.5), (x + half_w * rr + 4 * s, yy - 0.5)])
-                pen.line(back, w=wl * 0.8, hand=0.1, lift=0)
-            sparkle(x, b - h - 4 * s, 9 * s, w=1.0)
-        if kind == 'disc':
-            yy = b - h * 0.78
-            rx = w * 2.1
-            disc = ellipse_pts(x, yy, rx, rx * 0.22, 0, 0, 2 * math.pi, step=1.5)
-            pen.line(disc, w=wl, hand=0.1, lift=0)
-            cap = ellipse_pts(x, yy - rx * 0.12, w * 0.7, w * 0.55, 0, math.pi, 2 * math.pi, step=1.5)
-            pen.line(cap, w=wl, hand=0.1, lift=0)
-            pen.line([(x, yy - rx * 0.12 - w * 0.55), (x, b - h)], w=wl * 0.9, hand=0, lift=0)
-            pen.occlude(disc)
-            pen.occlude(cap + [cap[0]])
-            if t['depth'] < 2.2:
-                sparkle(x - rx * 0.86, yy - 0.5, 4.0 * s, w=0.85, diag=0.0)
-        if kind == 'arch':
-            inner = ellipse_pts(x, b, w / 2 - 7 * s, h - 10 * s, 0, math.pi, 2 * math.pi, step=2)
-            pen.line(inner, w=wl, hand=0.1, lift=0)
-            pen.line(outer, w=wl, hand=0.1, lift=0)
-            band = outer + list(reversed(inner))
-            shade(band, 90, 5.0, w=0.65, keep=lambda p, x=x: p[0] > x, hand=0.1)
-            pen.occlude(band)
-            outlines.append(band)
-            continue
-        pen.line(poly, w=wl, hand=0.12, lift=0)
-        if kind == 'dome':
-            for f in (-0.5, 0.0, 0.5):
-                mer = ellipse_pts(x, b, w * abs(f) + 0.01, h, 0, math.pi * (1.5 if f >= 0 else 1.0),
-                                  math.pi * (2.0 if f >= 0 else 1.5), step=1.5)
-                if f != 0:
-                    pen.line(mer, w=0.65, hand=0, lift=0)
-            pen.line([(x, b - h), (x, b)], w=0.65, hand=0, lift=0)
-            lat = ellipse_pts(x, b - h * 0.55, w * 0.83, h * 0.1, 0, 0, math.pi, step=1.5)
-            pen.line(lat, w=0.65, hand=0, lift=0)
-        else:
-            # shade side: fine vertical lines on the right
-            shade(poly, 90, 5.0 if w > 14 else 6.0, w=0.65, keep=lambda p, x=x, w=w: p[0] > x + w * 0.12, hand=0.1,
-                  shrink=(0.0, 0.05))
-            tower_detail(poly, kind, x, b, w, h * (0.78 if kind == 'disc' else 1.0), t['depth'])
-        if kind in ('needle', 'ring') and h > 150 * s:
-            sparkle(x, b - h - 3 * s, 7 * s, w=0.9, diag=0.0)
-        pen.occlude(poly)
-        outlines.append(poly)
-    return outlines
 
 
 def skybridge(x0, x1, y, sag, w=0.9):
@@ -1057,74 +997,7 @@ def skybridge(x0, x1, y, sag, w=0.9):
 
 # ---------------------------------------------------------------- the sky
 
-def constellation(cx, cy, sizes, W, H, rot=0.0, node=2.2, link=0.6, gap=6.0):
-    """A neural network as a constellation: stars as nodes, fine links between
-    the layers (each node of one layer to every node of the next)."""
-    c, s_ = math.cos(rot), math.sin(rot)
-    layers = []
-    for li, n in enumerate(sizes):
-        u = (li / (len(sizes) - 1) - 0.5) * W
-        col = []
-        for k in range(n):
-            v = ((k - (n - 1) / 2) / max(1, max(sizes) - 1)) * H
-            px, py = u + G(1.2), v + G(1.2)
-            col.append((cx + px * c - py * s_, cy + px * s_ + py * c))
-        layers.append(col)
-    for li in range(len(layers) - 1):
-        for a in layers[li]:
-            for b in layers[li + 1]:
-                d = dist(a, b)
-                if d < 2 * gap + 4:
-                    continue
-                pen.line([lerp(a, b, gap / d), lerp(a, b, 1 - gap / d)], w=link, hand=0, lift=0, piece=(300, 500))
-    nodes = [p for col in layers for p in col]
-    for li, col in enumerate(layers):
-        for p in col:
-            if li in (0, len(layers) - 1) and R() < 0.5:
-                sparkle(p[0], p[1], node * 3.2, w=1.1, rot=R(-0.2, 0.2), diag=0.0)
-            else:
-                dot(p[0], p[1], r=node, w=1.4)
-    return nodes
-
-
-def starfield(n, region, avoid, minsep=20):
-    """Plain stars: dots of a few sizes, a handful of sparkles."""
-    placed = []
-    tries = 0
-    x0, y0, x1, y1 = region
-    while len(placed) < n and tries < n * 40:
-        tries += 1
-        p = (R(x0, x1), R(y0, y1))
-        if any(dist(p, q) < minsep for q in placed) or any(f(p) for f in avoid):
-            continue
-        placed.append(p)
-    for i, p in enumerate(placed):
-        if pen.hidden(p):
-            continue
-        u = R()
-        if u < 0.06:
-            sparkle(p[0], p[1], R(7, 12), w=1.15, rot=R(-0.1, 0.1))
-        elif u < 0.35:
-            dot(p[0], p[1], r=R(1.3, 1.8), w=1.25)
-        else:
-            dot(p[0], p[1], r=R(0.8, 1.2), w=1.0)
-
-
 # ---------------------------------------------------------------- ground
-
-def plain_marks(n, x_range, y_far=4.0):
-    """Short level strokes on the plain, shorter and closer toward the horizon."""
-    for _ in range(n):
-        sy = YH + y_far + (1000 - YH - y_far) * R() ** 1.8
-        sx = R(*x_range)
-        X, Z = ground_of(sx, sy)
-        L = R(6, 16)
-        p0, p1 = P(X - L / 2, 0, Z), P(X + L / 2, 0, Z)
-        if p1[0] - p0[0] < 3:
-            continue
-        pen.line([p0, p1], w=0.7, hand=0.2, lift=0.1)
-
-
 
 def region_hatch(poly, angle, spacing, pred, w=0.68, minlen=3.0, hand=0.2, broken=False):
     """Parallel strokes across a shape, kept only where pred(point) holds."""
@@ -1186,7 +1059,7 @@ def scallop_arc(c, r, a0, a1, per, amp):
     return out
 
 
-def tree(bx, by, h, w=None):
+def tree(bx, by, h, w=None, allow_hidden=False):
     """A round-crowned broadleaf tree, its foot at (bx, by), h tall on the page,
     in the engraver's shorthand: a crown of leafy clumps, lit from the upper
     left; each clump's lower edge scalloped where it lies over the clumps
@@ -1194,22 +1067,23 @@ def tree(bx, by, h, w=None):
     Skipped (False) where it would run into something already drawn in front."""
     if h < 5:
         return False
-    R0 = h * R(0.34, 0.4)
+    R0 = h * R(0.32, 0.38)
     cx, cy = bx + G(h * 0.02), by - h + R0 * 0.95
-    m = 8 if h > 30 else 6
+    m = int(R(5, 8)) if h > 20 else 5
+    tall = R(0.95, 1.3)
     lobes = [(cx + G(R0 * 0.05), cy + R0 * 0.1, R0 * 0.5)]
     for k in range(m):
-        a = -math.pi / 2 + 2 * math.pi * (k + R(-0.2, 0.2)) / m
-        lr = R0 * R(0.32, 0.48)
-        d = (R0 - lr) * R(1.0, 1.12)
-        lobes.append((cx + math.cos(a) * d * 1.1, cy + math.sin(a) * d * 0.84, lr))
+        a = -math.pi / 2 + 2 * math.pi * (k + R(-0.3, 0.3)) / m
+        lr = R0 * R(0.36, 0.54)
+        d = (R0 - lr) * R(0.8, 1.05)
+        lobes.append((cx + math.cos(a) * d * 1.05, cy + math.sin(a) * d * 0.9 * tall, lr))
     crown = crown_shape(cx, cy, R0, lobes, scallop=min(1.8, R0 * 0.06) if h > 12 else 0.0)
     tb = cy + R0 * 0.55
     tw0, tw1 = max(1.2, h * 0.05), max(0.9, h * 0.032)
     lean = G(h * 0.015)
     trunk = [(bx - tw0, by), (bx - tw1 + lean, tb), (bx + tw1 + lean, tb), (bx + tw0, by)]
     probe = crown[::3] + trunk + [(bx - h * 0.3, by), (bx + h * 0.4, by)]
-    if any(pen.hidden(q) for q in probe) or not all(14 < q[0] < 986 for q in probe):
+    if not allow_hidden and (any(pen.hidden(q) for q in probe) or not all(14 < q[0] < 986 for q in probe)):
         return False
     if w is None:
         w = clamp(0.7 + h / 55, 0.75, 1.6)
@@ -1272,142 +1146,1028 @@ def horizon_line(x0, x1, y):
     pen.line([(x0, y), (x1, y)], w=1.0, hand=0.4, lift=0.35, piece=(30, 90))
 
 
-def hills(pts, w=0.9, hatch=True):
+# =============================================================== stage 2 parts
+
+def wavefn(amp, freqs=(0.01, 0.03)):
+    """A gentle random wave along a coordinate, for hand-drawn edges."""
+    ph = [R(0, 6.28) for _ in range(3)]
+    fs = [R(*freqs) for _ in range(3)]
+    return lambda v: amp * sum(math.sin(v * f + p) for f, p in zip(fs, ph)) / 2
+
+
+def tangents(pts):
+    out = []
+    n = len(pts)
+    for i in range(n):
+        a, b = pts[max(0, i - 1)], pts[min(n - 1, i + 1)]
+        tx, ty = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(tx, ty) or 1
+        out.append((tx / L, ty / L))
+    return out
+
+
+def var_offset(pts, rads, side):
+    """A polyline moved sideways by a different distance at each point."""
+    return [(p[0] - t[1] * r * side, p[1] + t[0] * r * side) for p, t, r in zip(pts, tangents(pts), rads)]
+
+
+def pieces(pts, on=(25, 90), off=(12, 45), start_off=True):
+    """A polyline broken into runs with gaps between (lengths in units)."""
+    out = []
+    pts = resample(pts, 1.5)
+    s_at = [0.0]
+    for k in range(1, len(pts)):
+        s_at.append(s_at[-1] + dist(pts[k - 1], pts[k]))
+    s = R(0, off[1]) if start_off else 0.0
+    while s < s_at[-1]:
+        e = s + R(*on)
+        run = [p for p, sa in zip(pts, s_at) if s <= sa <= e]
+        if len(run) > 1:
+            out.append(run)
+        s = e + R(*off)
+    return out
+
+
+# ---------------------------------------------------------------- the old tree at the left edge
+
+class Limb:
+    def __init__(self, ctrl, r0, r1, power=0.9):
+        self.pts = catmull(ctrl, step=2.0)
+        n = len(self.pts)
+        self.rads = [r0 + (r1 - r0) * (i / max(1, n - 1)) ** power for i in range(n)]
+
+    def poly(self):
+        a = var_offset(self.pts, self.rads, 1)
+        b = var_offset(self.pts, self.rads, -1)
+        return a + b[::-1]
+
+
+def leaf_poly(B, a, L, Wd, bend=0.0):
+    """A pointed oval leaf from its base B along angle a."""
+    ca, sa = math.cos(a), math.sin(a)
+    side = []
+    for k in range(10):
+        u = k / 9
+        hw = Wd / 2 * math.sin(math.pi * u ** 0.85) ** 0.75
+        side.append((u, hw))
+    loc = [(u * L, hw + bend * L * u * (1 - u)) for u, hw in side]
+    loc += [(u * L, -hw + bend * L * u * (1 - u)) for u, hw in reversed(side[1:-1])]
+    return [(B[0] + x * ca - y * sa, B[1] + x * sa + y * ca) for x, y in loc]
+
+
+def frame_tree(GY=852.0):
+    """The old broadleaf tree at the left edge that frames the people, in the
+    hand of 14 ginkgo: a crown of leaf clumps (fine leaves inside, bolder at
+    the edges, shade between the leaves on each clump's lower right), its
+    limbs and trunk outlined, with lines along their shadow side and bark
+    fissures; the knoll's grass stands in front of its foot."""
+    # the trunk: centre line and half widths, flaring at the foot
+    tc = catmull([(58, GY + 2), (62, 770), (70, 690), (80, 615), (93, 548)], step=2.0)
+    n = len(tc)
+    tr = []
+    for i, p in enumerate(tc):
+        u = i / (n - 1)
+        flare = 20 * max(0.0, 1 - (GY - p[1]) / 70) ** 2.0
+        tr.append(27 - 9 * u + flare)
+    wl, wr = wavefn(1.6), wavefn(1.6)
+    t_left = [(p[0] - r + wl(p[1]), p[1]) for p, r in zip(tc, tr)]
+    t_right = [(p[0] + r + wr(p[1]), p[1]) for p, r in zip(tc, tr)]
+    trunk_poly = t_left + t_right[::-1]
+
+    limbs = [
+        Limb([(84, 575), (118, 532), (150, 512), (196, 470), (226, 446), (256, 414)], 14, 3),   # low, out to the right
+        Limb([(92, 556), (124, 488), (166, 430), (178, 380), (214, 318), (240, 266)], 13, 3),   # up to the right
+        Limb([(95, 552), (112, 470), (108, 400), (124, 320), (112, 236), (116, 160), (98, 84)], 16, 3.5),  # leader
+        Limb([(84, 566), (66, 500), (54, 452), (30, 400), (24, 340), (10, 300)], 11, 3),         # up the left edge
+        Limb([(118, 360), (150, 318), (172, 262), (198, 214), (206, 160), (230, 104)], 8.5, 2),
+        Limb([(114, 262), (88, 224), (70, 176), (34, 132)], 7.5, 2),
+        Limb([(110, 170), (140, 120), (152, 82), (186, 40)], 6.5, 2),
+        Limb([(110, 420), (82, 380), (70, 330), (52, 290)], 6.5, 2),
+    ]
+    # the clumps of leaves, front first: centre, radii, and the limb they hang on
+    clumps = [
+        (252, 404, 44, 30, 0),
+        (190, 446, 40, 25, 0),
+        (236, 262, 48, 38, 1),
+        (182, 336, 46, 36, 1),
+        (226, 124, 44, 36, 4),
+        (166, 196, 48, 38, 4),
+        (100, 76, 58, 40, 2),
+        (40, 152, 44, 36, 5),
+        (28, 306, 40, 40, 3),
+        (118, 284, 42, 38, 2),
+        (72, 226, 40, 34, 5),
+        (154, 34, 48, 28, 6),
+        (58, 396, 36, 30, 3),
+        (126, 396, 36, 28, 0),
+        (60, 300, 38, 32, 7),
+        (200, 390, 36, 30, 1),
+        (160, 110, 40, 32, 6),
+        (36, 40, 40, 32, 2),
+        (260, 182, 34, 30, 4),
+    ]
+
+    def in_clump(p, pad=1.0):
+        for cx, cy, rx, ry, _ in clumps:
+            if ((p[0] - cx) / (rx * pad)) ** 2 + ((p[1] - cy) / (ry * pad)) ** 2 < 1:
+                return True
+        return False
+
+    def tone(p):
+        best = -2.0
+        for cx, cy, rx, ry, _ in clumps:
+            dx, dy = (p[0] - cx) / rx, (p[1] - cy) / ry
+            if dx * dx + dy * dy < 1:
+                best = max(best, dx * SHADE[0] + dy * SHADE[1])
+        return best
+
+    # leaves
+    leaves = []
+    grid = defaultdict(list)
+    Lf = 11.0
+    for ci, (cx, cy, rx, ry, _) in enumerate(clumps):
+        for _ in range(int(math.pi * rx * ry / 9)):
+            a = R(0, 2 * math.pi)
+            rr = math.sqrt(R())
+            c = (cx + math.cos(a) * rx * rr, cy + math.sin(a) * ry * rr)
+            if rr > 0.8 and R() < 0.45:
+                continue  # a ragged clump edge
+            gx, gy = int(c[0] // 10), int(c[1] // 10)
+            if any(dist(c, q) < Lf * 0.74 for i in range(gx - 1, gx + 2) for j in range(gy - 1, gy + 2)
+                   for q in grid[(i, j)]):
+                continue
+            grid[(gx, gy)].append(c)
+            ox, oy = (c[0] - cx) / rx, (c[1] - cy) / ry
+            vx, vy = ox * 0.8 + G(0.45), oy * 0.8 + 0.45 + G(0.45)
+            ang = math.atan2(vy, vx)
+            L = Lf * R(0.8, 1.15)
+            B = (c[0] - math.cos(ang) * L / 2, c[1] - math.sin(ang) * L / 2)
+            poly = leaf_poly(B, ang, L, L * R(0.42, 0.56), bend=G(0.12))
+            t = ox * SHADE[0] + oy * SHADE[1]
+            edge = rr > 0.72 and not any(
+                ((c[0] - qx) / (qrx * 0.85)) ** 2 + ((c[1] - qy) / (qry * 0.85)) ** 2 < 1
+                for k2, (qx, qy, qrx, qry, _) in enumerate(clumps) if k2 != ci)
+            if edge:
+                w = 1.25 if t > 0.1 else 1.05
+            else:
+                w = 0.92 if t > 0.1 else 0.78
+            leaves.append(dict(poly=poly, c=c, B=B, ang=ang, L=L, w=w, t=t))
+    for lf in leaves:
+        pen.line(lf['poly'] + [lf['poly'][0]], w=lf['w'], hand=0.2, lift=0.03, piece=(30, 90))
+        if lf['t'] < 0.0 and lf['L'] > 11 and R() < 0.25:
+            B, a, L = lf['B'], lf['ang'], lf['L']
+            pen.line([(B[0] + math.cos(a) * L * 0.12, B[1] + math.sin(a) * L * 0.12),
+                      (B[0] + math.cos(a) * L * 0.72, B[1] + math.sin(a) * L * 0.72)], w=0.62, hand=0, lift=0)
+        pen.occlude(lf['poly'])
+    # shade between the leaves on the shadow side of each clump (the sky gaps stay white)
+    cover = set()
+    for lf in leaves:
+        gx, gy = int(lf['c'][0] // 6), int(lf['c'][1] // 6)
+        for i in range(gx - 1, gx + 2):
+            for j in range(gy - 1, gy + 2):
+                cover.add((i, j))
+    box = [(0, 0), (310, 0), (310, 480), (0, 480)]
+    for p0, p1 in scanlines(box, -52, 5.0, R()):
+        run, runs = [], []
+        for p in resample([p0, p1], 1.5):
+            ok = (int(p[0] // 6), int(p[1] // 6)) in cover and in_clump(p) and tone(p) + G(0.07) > 0.22
+            if ok:
+                run.append(p)
+            elif run:
+                runs.append(run)
+                run = []
+        if run:
+            runs.append(run)
+        for rn in runs:
+            if length(rn) > 3:
+                pen.line(rn, w=R(0.66, 0.74), hand=0.2, lift=0.1, piece=(12, 40))
+    # twigs into the clumps
+    for cx, cy, rx, ry, li in clumps:
+        lb = limbs[li]
+        k = min(range(len(lb.pts)), key=lambda i: dist(lb.pts[i], (cx, cy)))
+        k = max(0, min(len(lb.pts) - 1, k - 3))
+        q = lb.pts[k]
+        mid = ((q[0] + cx) / 2 + G(4), (q[1] + cy) / 2 + G(4))
+        pen.line(catmull([q, mid, (cx, cy)], step=2), w=1.15, hand=0.3, lift=0, taper=0.35)
+        for _ in range(3):
+            a = R(0, 2 * math.pi)
+            e = (cx + math.cos(a) * rx * 0.7, cy + math.sin(a) * ry * 0.7)
+            pen.line(catmull([(cx, cy), ((cx + e[0]) / 2 + G(3), (cy + e[1]) / 2 + G(3)), e], step=2), w=0.85,
+                     hand=0.3, lift=0, taper=0.4)
+    # limbs: outlined, heavier on the shadow side; their foot runs into the trunk
+    for lb in limbs:
+        poly = lb.poly()
+        ts = tangents(lb.pts)
+        for side in (1, -1):
+            edge = var_offset(lb.pts, lb.rads, side)
+            tg = ts[len(ts) // 3]
+            nrm = (-tg[1] * side, tg[0] * side)
+            shadow = (nrm[0] * LIGHT[0] + nrm[1] * LIGHT[1]) < 0
+            w = min(2.1, 1.1 + 0.05 * lb.rads[0]) + (0.25 if shadow else 0.0)
+            for run in clip_segments(edge, lambda p: not inside(p, trunk_poly)):
+                pen.line(run, w=w, hand=0.45, lift=0.04, taper=0.25)
+        n = len(lb.pts)
+        sides = []
+        for i in range(n):
+            nrm = (-ts[i][1], ts[i][0])
+            sides.append(1 if (nrm[0] * LIGHT[0] + nrm[1] * LIGHT[1]) < 0 else -1)
+        for k in (1, 2):
+            run = []
+            for i in range(n):
+                r = lb.rads[i]
+                if r < 5 * k + 1.5:
+                    continue
+                off = (r - 4.6 * k) * sides[i]
+                run.append((lb.pts[i][0] - ts[i][1] * off, lb.pts[i][1] + ts[i][0] * off))
+            if len(run) > 3:
+                for rn in clip_segments(run, lambda p: not inside(p, trunk_poly)):
+                    pen.line(rn, w=0.8 - 0.05 * k, hand=0.3, lift=0.3, piece=(10, 34))
+        for f in range(int(lb.rads[0] / 3.5)):
+            u = R(-0.55, 0.55)
+            s0 = R(0.0, 0.55)
+            s1 = min(1.0, s0 + R(0.08, 0.2))
+            i0, i1 = int(s0 * (n - 1)), int(s1 * (n - 1))
+            if i1 - i0 < 4 or lb.rads[i1] < 4.5:
+                continue
+            seg = [(lb.pts[i][0] - ts[i][1] * lb.rads[i] * u, lb.pts[i][1] + ts[i][0] * lb.rads[i] * u)
+                   for i in range(i0, i1)]
+            for rn in clip_segments(seg, lambda p: not inside(p, trunk_poly)):
+                pen.line(rn, w=R(0.72, 0.86), hand=0.4, lift=0.25)
+        pen.occlude(poly)
+    # the trunk
+    pen.line(t_left, w=2.2, hand=0.7, lift=0.03)
+    pen.line(t_right, w=2.6, hand=0.7, lift=0.03)
+    # lines along the shadow side, counted in from the right edge
+    for k in (1, 2, 3, 4):
+        run = [(p[0] - 4.8 * k, p[1]) for p, r in zip(t_right, tr) if 2 * r - 4.8 * k > 6 and p[1] > 540]
+        if len(run) > 3:
+            pen.line(run, w=0.84 - 0.04 * k, hand=0.4, lift=0.3, piece=(10, 40))
+    # bark fissures, more toward the shadow
+    for f in range(24):
+        u = R(-0.75, 0.6) if R() < 0.4 else R(-0.1, 0.75)
+        y0 = R(560, GY - 6)
+        L = R(30, 110)
+        seg = []
+        for p, r in zip(tc, tr):
+            if y0 - L < p[1] < y0:
+                seg.append((p[0] + r * u + G(0.4), p[1]))
+        if len(seg) > 3:
+            pen.line(seg, w=R(0.72, 0.9), hand=0.6, lift=0.3, piece=(8, 30))
+    pen.occlude(trunk_poly)
+    # its roots into the ground, and its shadow across the knoll to the lower right
+    for sx, dx, dy in ((-1, -16, 9), (1, 22, 7), (1, 8, 15)):
+        b = t_left[0] if sx < 0 else t_right[0]
+        pen.line(catmull([(b[0] - sx * 2, b[1] - 12), (b[0] + dx * 0.4, b[1] + dy * 0.4), (b[0] + dx, b[1] + dy)],
+                         step=2), w=1.6, hand=0.4, lift=0, taper=0.4)
+    return trunk_poly
+
+
+# ---------------------------------------------------------------- more plants
+
+def dandelion(x, y, h, r, lean=0.0):
+    """A seed clock: a stem and a ball of fine rays."""
+    head = (x + lean * h, y - h)
+    pen.line(catmull([(x, y), (x + lean * h * 0.4 + G(1), y - h * 0.5), head], step=2), w=0.85, hand=0.2, lift=0)
+    for k in range(16):
+        a = 2 * math.pi * k / 16 + R(-0.1, 0.1)
+        p0 = (head[0] + math.cos(a) * r * 0.22, head[1] + math.sin(a) * r * 0.22)
+        p1 = (head[0] + math.cos(a) * r, head[1] + math.sin(a) * r)
+        pen.line([p0, p1], w=0.62, hand=0, lift=0)
+    dot(head[0], head[1], r=1.1, w=1.0)
+
+
+def bellflower(x, y, h, lean=0.15, n=3):
+    """A harebell: a thin bowed stem with bells hanging from it."""
+    top = (x + lean * h, y - h)
+    stem = catmull([(x, y), (x + lean * h * 0.3, y - h * 0.55), top, (top[0] + h * 0.12, top[1] + h * 0.06)],
+                   step=1.5)
+    pen.line(stem, w=0.85, hand=0.15, lift=0)
+    for k in range(n):
+        q = stem[int(len(stem) * (0.55 + 0.42 * k / max(1, n - 1))) - 1]
+        bw, bh = R(5.5, 7.5), R(7, 9)
+        a = R(-0.25, 0.25)
+        tip = (q[0] + math.sin(a) * 3, q[1] + 3)
+        body = [(tip[0] - bw * 0.62, tip[1] + bh), (tip[0] - bw * 0.42, tip[1] + bh * 0.7),
+                (tip[0] - bw * 0.3, tip[1] + bh * 0.15), tip, (tip[0] + bw * 0.3, tip[1] + bh * 0.15),
+                (tip[0] + bw * 0.42, tip[1] + bh * 0.7), (tip[0] + bw * 0.62, tip[1] + bh)]
+        pen.line([q, tip], w=0.7, hand=0, lift=0)
+        pen.line(catmull(body, step=1), w=0.95, hand=0.1, lift=0)
+        mouth = ellipse_pts(tip[0], tip[1] + bh, bw * 0.62, 1.3, 0, 0, math.pi, step=0.8)
+        pen.line(mouth, w=0.8, hand=0, lift=0)
+        pen.occlude(body + [(tip[0] + bw * 0.62, tip[1] + bh + 1.3), (tip[0] - bw * 0.62, tip[1] + bh + 1.3)])
+
+
+def seed_grass(x, y, h, lean=0.1):
+    """A tall grass with a nodding head of spikelets."""
+    pts = catmull([(x, y), (x + lean * h * 0.35, y - h * 0.5), (x + lean * h, y - h)], step=1.5)
+    pen.line(pts, w=0.85, hand=0.15, lift=0, taper=0.4)
+    top = pts[int(len(pts) * 0.62):]
+    for i in range(1, len(top), 3):
+        q = top[i]
+        a, b = top[i - 1], top[min(len(top) - 1, i + 1)]
+        tx, ty = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(tx, ty) or 1
+        tx, ty = tx / L, ty / L
+        s = 1 if (i // 3) % 2 else -1
+        ln = 4.5 * (1 - i / len(top) * 0.5)
+        tip = (q[0] + (tx * 0.7 - ty * s * 0.7) * ln, q[1] + (ty * 0.7 + tx * s * 0.7) * ln)
+        pen.line([q, tip], w=0.8, hand=0, lift=0, taper=0.3)
+
+
+# ---------------------------------------------------------------- the knoll's form
+
+def knoll_hatch(top, x_max=660, cx=300.0):
+    """Contour hatching on the knoll: level lines across its face, bowing
+    toward us as they go round it, lit from the upper left, so they are kept
+    only on the shaded right flank and low down, broken."""
+    lefts = [p for p in top if p[0] < cx]
+    rights = [p for p in top if p[0] >= cx]
+    y = top_min = min(p[1] for p in top) + 10
+    while y < 1000:
+        xr = min(rights, key=lambda p: abs(p[1] - y))[0]
+        if y <= lefts[0][1]:
+            xl = min(lefts, key=lambda p: abs(p[1] - y))[0]
+        else:
+            xl = lefts[0][0] - (y - lefts[0][1]) * 1.6
+        if xr - xl < 30:
+            y += 7.5
+            continue
+        sag = min(26.0, (xr - xl) * 0.07) * (0.5 + (y - top_min) / 300)
+        arc = catmull([(xl, y), (xl + (xr - xl) * 0.3, y + sag * 0.84), ((xl + xr) / 2, y + sag),
+                       (xl + (xr - xl) * 0.75, y + sag * 0.75), (xr - 2, y + 1)], step=2)
+        ph = R(0, 6.28)
+        run, runs = [], []
+        for p in arc:
+            u = (p[0] - xl) / (xr - xl)
+            t = 1.0 * u ** 1.5 + 0.1 * clamp((y - 900) / 100, 0, 1) + 0.1 * math.sin(p[0] * 0.05 + ph) + G(0.04)
+            if t > 0.66 and 8 < p[0] < x_max and p[1] < 994:
+                run.append(p)
+            elif run:
+                runs.append(run)
+                run = []
+        if run:
+            runs.append(run)
+        for rn in runs:
+            for pc in pieces(rn, on=(10, 34), off=(6, 22), start_off=True):
+                if length(pc) > 5:
+                    pen.line(pc, w=R(0.64, 0.74), hand=0.35, lift=0.12, piece=(12, 40))
+        y += 7.5
+
+
+# ---------------------------------------------------------------- the middle ground
+
+def fold(sx0, sx1, sy, rise=0.10, shade=True, w=None):
+    """A fold of the meadow: a gentle swell across the plain at page height sy,
+    from page x sx0 to sx1, its crest drawn broken; below it on the right a
+    few short strokes of its shadow (lit from the upper left)."""
+    Z = Z_of(sy)
+    X0, X1 = (sx0 - CXP) * Z / F, (sx1 - CXP) * Z / F
+    ph = R(0, 6.28)
+    crest = []
+    n = 60
+    for k in range(n + 1):
+        u = k / n
+        X = X0 + (X1 - X0) * u
+        bump = math.sin(math.pi * u) ** 1.3 * (1 + 0.25 * math.sin(u * 9 + ph))
+        z = Z * (1 + rise * bump)
+        crest.append(P(X, 0, z))
+    near = clamp((sy - YH) / 300, 0, 1)
+    if w is None:
+        w = 0.66 + 0.3 * near
+    for pc in pieces(crest, on=(30 + 80 * near, 80 + 160 * near), off=(6, 16 + 20 * near), start_off=False):
+        pen.line(pc, w=w, hand=0.3, lift=0.1, piece=(15, 50))
+    if shade:
+        k = 1
+        while True:
+            d = 5.0 * k
+            sub = [(p[0], p[1] + d) for p in crest]
+            i0 = int(len(sub) * (0.42 + 0.1 * k))
+            i1 = int(len(sub) * (0.9 - 0.04 * k))
+            if i1 - i0 < 4 or d > 4 + 22 * near:
+                break
+            seg = [q for q in sub[i0:i1] if q[1] < sy + 2]
+            if len(seg) > 3:
+                pen.line(seg, w=0.64, hand=0.2, lift=0.25, piece=(8, 24))
+            k += 1
+    return crest
+
+
+def grass_ticks(n, x_range, y0, y1, keep=None):
+    """Small tufts scattered over the meadow, smaller with distance."""
+    for _ in range(n):
+        y = y0 + (y1 - y0) * R() ** 0.8
+        x = R(*x_range)
+        if keep and not keep((x, y)):
+            continue
+        Z = Z_of(y)
+        h = F * R(0.5, 0.9) / Z
+        if h < 2.2 or pen.hidden((x, y)):
+            continue
+        if h > 7:
+            tuft(x, y, h, n=int(R(3, 5)), w=0.8, lean=R(-0.2, 0.2))
+        else:
+            for k in range(3):
+                pen.line([(x + (k - 1) * h * 0.35, y), (x + (k - 1) * h * 0.55 + G(0.3), y - h * R(0.7, 1.0))],
+                         w=0.65, hand=0, lift=0)
+
+
+def belt(x0, x1, y, Hm=13.0, rr=(3.5, 5.5), w=None, shade_from=0.45):
+    """A belt of woodland across the plain at page height y: a scalloped
+    canopy edge, the lower part in shadow (fine upright strokes), each
+    crown's lower right side hatched; it hides what lies behind."""
+    Z = Z_of(y)
+    s = F / Z
+    crowns = []
+    x = x0
+    while x < x1:
+        r = s * R(*rr)
+        h = s * Hm * R(0.75, 1.15)
+        crowns.append((x, y - h + r, r))
+        x += r * R(1.0, 1.5)
+    top = []
+    xs = [x0 + k * 0.8 for k in range(int((x1 - x0) / 0.8) + 1)]
+    for xx in xs:
+        yt = None
+        for cx, cy, r in crowns:
+            if abs(xx - cx) < r:
+                v = cy - math.sqrt(r * r - (xx - cx) ** 2)
+                yt = v if yt is None else min(yt, v)
+        if yt is None:
+            yt = y - 2
+        top.append((xx, yt))
+    # small leafy bumps along the canopy edge
+    per = max(3.0, s * 1.6)
+    amp = min(1.4, s * 0.35)
+    tb = [(p[0], p[1] - amp * abs(math.sin(math.pi * p[0] / per)) ** 0.6) for p in top]
+    poly = tb + [(x1, y + 0.5), (x0, y + 0.5)]
+    if w is None:
+        w = clamp(0.62 + s * 0.12, 0.62, 1.2)
+    pen.line(tb, w=w, hand=0.2, lift=0.05)
+    # the lower edges of the nearer crowns, where they lie over the ones behind
+    if s > 1.2:
+        for cx, cy, r in crowns[::2]:
+            arc = scallop_arc((cx, cy), r, math.radians(15), math.radians(150), max(3.5, r / 2.2), min(1.2, r * 0.08))
+            runs = clip_segments(arc, lambda p: inside(p, poly) and p[1] < y - 1)
+            for rn in runs:
+                if length(rn) > 3:
+                    pen.line(rn, w=w * 0.65, hand=0.15, lift=0.05)
+    # the shade: each crown's lower right, at the angle of the trees' hatching,
+    # and the dark foot of the wood
+    hgt = max(1.0, y - min(p[1] for p in tb))
+
+    def dark(p):
+        if not inside(p, poly):
+            return False
+        best = -2
+        for cx, cy, r in crowns:
+            dd = math.hypot(p[0] - cx, p[1] - cy)
+            if dd < r * 1.05:
+                best = max(best, ((p[0] - cx) * SHADE[0] + (p[1] - cy) * SHADE[1]) / r)
+        return best > 0.3 or p[1] > y - hgt * 0.22
+    region_hatch(poly, -52, 5.0 if s > 1.5 else 5.5, dark, w=0.64, minlen=1.5, hand=0.1)
+    pen.line([(x0, y + 0.6), (x1, y + 0.6)], w=0.7, hand=0.3, lift=0.3, piece=(8, 30))
+    pen.occlude(poly)
+    return poly
+
+
+# ---------------------------------------------------------------- water
+
+LAKE_PIERS = []
+
+
+def lake(poly, towers, shore_y):
+    """A calm lake: its near shore, rows of fine level strokes (closer toward
+    the far shore), broken, and drawn thicker in the columns under the towers
+    and piers, which are their reflections."""
+    near = [p for p in poly if p[1] > shore_y + 3]
+    cols = []
+    for t in towers:
+        if t['depth'] > 2.0 and t['kind'] not in ('ring',):
+            continue
+        x, w, h = t['x'], t['w'], t['h']
+        if t['kind'] == 'dome':
+            cols.append((x - w * 0.85, x + w * 0.85, h))
+        elif t['kind'] == 'arch':
+            cols.append((x - w / 2 + 1, x - w / 2 + 10, h))
+            cols.append((x + w / 2 - 10, x + w / 2 - 1, h))
+        elif t['kind'] == 'terrace':
+            cols.append((x - w / 2 + 2, x + w / 2 - 2, h))
+        else:
+            cols.append((x - w * 0.42, x + w * 0.42, h))
+    for px, py, ph in LAKE_PIERS:
+        if inside((px, py + 1), poly):
+            cols.append((px - 1.5, px + 1.5, ph + (py - shore_y)))
+    y = shore_y + 3.5
+    gap = 5.0
+    while True:
+        sp = span_at(poly, y)
+        if not sp:
+            break
+        xa, xb = sp[0] + 3, sp[1] - 3
+        if xb - xa < 6:
+            break
+        dy = y - shore_y
+        # the reflections
+        segs = []
+        for c0, c1, h in cols:
+            if dy < h and c1 > xa and c0 < xb:
+                segs.append((max(xa, c0 + G(0.6)), min(xb, c1 + G(0.6))))
+        segs.sort()
+        merged = []
+        for a, b in segs:
+            if merged and a <= merged[-1][1] + 2:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+            else:
+                merged.append((a, b))
+        for a, b in merged:
+            if b - a > 1.5:
+                pen.line([(a, y), (b, y + 0.2)], w=0.66, hand=0.05, lift=0.3, piece=(4, 14))
+        # open water: a few short strokes
+        x = xa + R(0, 30)
+        while x < xb:
+            L = R(8, 26)
+            if not any(a - 3 < x < b + 3 or a - 3 < x + L < b + 3 for a, b in merged) and R() < 0.55:
+                pen.line([(x, y), (min(xb, x + L), y)], w=0.62, hand=0.1, lift=0)
+            x += L + R(14, 40)
+        y += gap
+        gap *= 1.18
+    return near
+
+
+# ---------------------------------------------------------------- the city, stage 2
+
+def tower_curve(x, base, w, h, bend):
+    """A tower that tapers to a point and curves gently to one side."""
+    n = 30
+    left, right = [], []
+    for k in range(n + 1):
+        t = k / n
+        ax = x + bend * math.sin(t * math.pi / 2) ** 1.6
+        hw = w / 2 * (1 - t) ** 0.55 * (1 - 0.12 * t) + 0.3 * (1 - t)
+        left.append((ax - hw, base - h * t))
+        right.append((ax + hw, base - h * t))
+    return left + right[::-1], right
+
+
+def terrace_poly(x, b, w, h, tiers):
+    """A low stepped building with rounded steps (terraces with gardens)."""
+    th = h / tiers
+    half = []
+    for k in range(tiers):
+        hw = w / 2 * (1 - 0.22 * k)
+        y0, y1 = b - k * th, b - (k + 1) * th
+        half += [(hw, y0), (hw, y1 + 1.6), (hw - 1.6, y1)]
+    half.append((0.0, b - h))
+    right = [(x + px, py) for px, py in half]
+    left = [(x - px, py) for px, py in reversed(half[:-1])]
+    return right + left, th
+
+
+def city(cx, base, s=1.0, wline=1.1):
+    """The metropolis in three ranks: the tallest spires at the back, a middle
+    rank of towers (curving and tapering, saucer-topped, slabs and the great
+    arch), and a front rank of low domes and terraces along the far shore.
+    Returns the towers drawn (for reflections and skybridges)."""
+    towers = []
+
+    def T(kind, dx, w, h, depth, **kw):
+        towers.append(dict(kind=kind, x=cx + dx * s, w=w * s, h=h * s, depth=depth, kw=kw))
+
+    # the back rank: the tallest spires
+    T('ring', 0, 30, 372, 2.3)
+    T('needle', -112, 22, 300, 2.5)
+    T('needle', 126, 22, 322, 2.6)
+    T('needle', -222, 15, 222, 2.8)
+    T('needle', 222, 15, 205, 2.9)
+    for k in range(18):
+        dx = -300 + k * 35 + R(-10, 10)
+        T('shaft', dx, R(10, 17), R(50, 140), 3.0 + R(0, 0.4))
+    # the middle rank: towers
+    T('curve', -50, 22, 232, 1.4, bend=-16)
+    T('curve', 58, 22, 250, 1.5, bend=16)
+    T('disc', -152, 15, 206, 1.2)
+    T('disc2', 176, 14, 222, 1.3)
+    T('disc', 300, 11, 150, 1.6)
+    T('arch', -205, 150, 182, 1.0)
+    T('slab', 248, 34, 126, 1.0)
+    T('slab', -302, 30, 104, 1.1)
+    T('slab', -100, 24, 118, 1.25)
+    T('curve', 100, 15, 150, 1.7, bend=-8)
+    # the front rank: low domes and terraces on the shore
+    T('dome', -30, 64, 42, 0.3)
+    T('terrace', 112, 86, 40, 0.25, tiers=4)
+    T('terrace', -262, 70, 32, 0.3, tiers=3)
+    T('dome', 232, 44, 28, 0.35)
+    T('dome', -148, 38, 25, 0.4)
+    T('terrace', 312, 52, 26, 0.4, tiers=3)
+
+    towers.sort(key=lambda t: t['depth'])
+    for t in towers:
+        x, w, h = t['x'], t['w'], t['h']
+        b = base + (3.2 - t['depth']) * 1.2 * s
+        t['b'] = b
+        wl = wline * (1.0 if t['depth'] < 1.0 else (0.9 if t['depth'] < 2 else 0.8))
+        kind = t['kind']
+        right_edge = None
+        if kind in ('needle', 'ring'):
+            poly = tower_needle(x, b, w, h)
+        elif kind in ('shaft', 'slab'):
+            poly = tower_shaft(x, b, w, h, top_taper=0.85 if kind == 'slab' else 0.6)
+        elif kind in ('disc', 'disc2'):
+            poly = tower_shaft(x, b, w, h * 0.78, top_taper=0.8)
+        elif kind == 'curve':
+            poly, right_edge = tower_curve(x, b, w, h, t['kw']['bend'])
+        elif kind == 'arch':
+            poly = ellipse_pts(x, b, w / 2, h, 0, math.pi, 2 * math.pi, step=2)
+        elif kind == 'dome':
+            poly = ellipse_pts(x, b, w, h, 0, math.pi, 2 * math.pi, step=2)
+        elif kind == 'terrace':
+            poly, th = terrace_poly(x, b, w, h, t['kw']['tiers'])
+        t['poly'] = poly
+        # decorations first (they stand in front of the body)
+        if kind == 'ring':
+            for f, rr in ((0.5, 1.9), (0.64, 1.6), (0.78, 1.3)):
+                yy = b - h * f
+                half_w = w * 0.5 * (1 - f) ** 0.9 + 2
+                ring = ellipse_pts(x, yy, half_w * rr + 4 * s, 4.5 * s, 0, 0, math.pi, step=1.5)
+                pen.line(ring, w=wl, hand=0.1, lift=0)
+                back = ellipse_pts(x, yy, half_w * rr + 4 * s, 4.5 * s, 0, math.pi, 2 * math.pi, step=1.5)
+                pen.occlude([(p[0], p[1] + 0.6) for p in ring]
+                            + [(x - half_w * rr - 4 * s, yy - 0.5), (x + half_w * rr + 4 * s, yy - 0.5)])
+                pen.line(back, w=wl * 0.8, hand=0.1, lift=0)
+            sparkle(x, b - h - 4 * s, 9 * s, w=1.0)
+        if kind in ('disc', 'disc2'):
+            levels = (0.78,) if kind == 'disc' else (0.62, 0.86)
+            for k, f in enumerate(levels):
+                yy = b - h * f
+                rx = w * (2.1 if k == len(levels) - 1 else 1.6)
+                disc = ellipse_pts(x, yy, rx, rx * 0.22, 0, 0, 2 * math.pi, step=1.5)
+                pen.line(disc, w=wl, hand=0.1, lift=0)
+                under = ellipse_pts(x, yy + rx * 0.05, rx * 0.8, rx * 0.2, 0, 0.15, math.pi - 0.15, step=1.5)
+                pen.line(under, w=0.62, hand=0, lift=0)
+                pen.occlude(disc)
+                if t['depth'] < 2.2 and k == len(levels) - 1:
+                    sparkle(x - rx * 0.86, yy - 0.5, 4.0 * s, w=0.85, diag=0.0)
+            yy = b - h * levels[-1]
+            rx = w * 2.1
+            cap = ellipse_pts(x, yy - rx * 0.12, w * 0.7, w * 0.55, 0, math.pi, 2 * math.pi, step=1.5)
+            pen.line(cap, w=wl, hand=0.1, lift=0)
+            pen.line([(x, yy - rx * 0.12 - w * 0.55), (x, b - h)], w=wl * 0.9, hand=0, lift=0)
+            pen.occlude(cap + [cap[0]])
+        if kind == 'arch':
+            outer = poly
+            inner = ellipse_pts(x, b, w / 2 - 9 * s, h - 12 * s, 0, math.pi, 2 * math.pi, step=2)
+            # the band thins toward the crown
+            pen.line(inner, w=wl, hand=0.1, lift=0)
+            pen.line(outer, w=wl * 1.05, hand=0.1, lift=0)
+            band = outer + list(reversed(inner))
+            shade(band, 90, 5.0, w=0.64, keep=lambda p, x=x: p[0] > x + 6, hand=0.1)
+            # ribs across the band
+            for a in [math.pi + math.pi * k / 9 for k in range(1, 9)]:
+                p0 = (x + math.cos(a) * (w / 2 - 9 * s), b + math.sin(a) * (h - 12 * s))
+                p1 = (x + math.cos(a) * w / 2, b + math.sin(a) * h)
+                pen.line([p0, p1], w=0.62, hand=0, lift=0)
+            sparkle(x, b - h - 3, 5 * s, w=0.85, diag=0.0)
+            pen.occlude(band)
+            continue
+        pen.line(poly, w=wl, hand=0.12, lift=0)
+        if kind == 'dome':
+            for f in (-0.5, 0.0, 0.5):
+                mer = ellipse_pts(x, b, w * abs(f) + 0.01, h, 0, math.pi * (1.5 if f >= 0 else 1.0),
+                                  math.pi * (2.0 if f >= 0 else 1.5), step=1.5)
+                if f != 0:
+                    pen.line(mer, w=0.62, hand=0, lift=0)
+            pen.line([(x, b - h), (x, b)], w=0.62, hand=0, lift=0)
+            lat = ellipse_pts(x, b - h * 0.55, w * 0.83, h * 0.1, 0, 0, math.pi, step=1.5)
+            pen.line(lat, w=0.62, hand=0, lift=0)
+            # the shaded right side of the dome
+            shade(poly, 90, 5.0, w=0.62, keep=lambda p, x=x, w=w: p[0] > x + w * 0.55, hand=0.05,
+                  shrink=(0.05, 0.15))
+        elif kind == 'terrace':
+            ntier = t['kw']['tiers']
+            for k in range(ntier):
+                hw = w / 2 * (1 - 0.22 * k)
+                y1 = b - (k + 1) * th
+                # the parapet of each terrace, and its row of openings
+                pen.line([(x - hw + 1, y1 + 2.6), (x + hw - 1, y1 + 2.6)], w=0.62, hand=0, lift=0)
+                xx = x - hw + 4
+                while xx < x + hw * 0.45:
+                    pen.line([(xx, y1 + 4.5), (xx, min(b - k * th - 1, y1 + 4.5 + th * 0.45))], w=0.62, hand=0,
+                             lift=0)
+                    xx += 5.5
+                shade([(x + hw * 0.6, y1 + 1.6), (x + hw, y1 + 1.6), (x + hw, b - k * th), (x + hw * 0.6, b - k * th)],
+                      90, 5.0, w=0.62, hand=0.05, shrink=(0.0, 0.05))
+        elif kind == 'curve':
+            # lines down the shaded side, following the curve
+            for k in (1, 2):
+                run = [(p[0] - 4.6 * k, p[1]) for p in right_edge]
+                run = [q for q, p in zip(run, right_edge) if inside(q, poly)]
+                if len(run) > 3:
+                    pen.line(run, w=0.64, hand=0.05, lift=0.05)
+            tower_detail(poly, 'needle', x, b, w, h, t['depth'])
+        else:
+            shade(poly, 90, 5.0 if w > 14 else 6.0, w=0.64, keep=lambda p, x=x, w=w: p[0] > x + w * 0.12, hand=0.1,
+                  shrink=(0.0, 0.05))
+            tower_detail(poly, 'disc' if kind == 'disc2' else kind, x, b, w,
+                         h * (0.78 if kind in ('disc', 'disc2') else 1.0), t['depth'])
+        if kind in ('needle', 'ring') and h > 150 * s:
+            sparkle(x, b - h - 3 * s, 7 * s, w=0.9, diag=0.0)
+        pen.occlude(poly)
+    # the quay along the shore, in front of everything
+    return towers
+
+
+def craft(x, y, L, d=1, trail=70):
+    """A small flying craft: a long lens with a canopy, and a faint trail."""
+    body = ellipse_pts(x, y, L / 2, L * 0.15, 0, 0, 2 * math.pi, step=0.8)
+    pen.line(body + [body[0]], w=0.95, hand=0, lift=0)
+    can = ellipse_pts(x + d * L * 0.12, y - L * 0.08, L * 0.17, L * 0.13, 0, math.pi, 2 * math.pi, step=0.8)
+    pen.line(can, w=0.85, hand=0, lift=0)
+    pen.line([(x - L * 0.38, y + L * 0.03), (x + L * 0.38, y + L * 0.03)], w=0.62, hand=0, lift=0)
+    pen.occlude(body)
+    pen.occlude(can + [can[0]])
+    tail = x - d * L / 2
+    for dy in (-1.2, 1.2):
+        pts = [(tail - d * 3, y + dy * 0.6), (tail - d * trail, y + dy * 2.2)]
+        pen.line(pts, w=0.62, hand=0, lift=0.5, piece=(4, 10))
+
+
+def glow(x0, x1, y0, n=5):
+    """The city's faint glow: fine level lines over the horizon, shorter as
+    they rise, seen only between the towers."""
+    for k in range(n):
+        y = y0 - 6 * k - 1.2 * k * k
+        f = 1 - k / (n + 0.5)
+        mid = (x0 + x1) / 2
+        half = (x1 - x0) / 2 * f
+        pts = [(mid - half, y), (mid + half, y)]
+        for pc in pieces(pts, on=(20, 70), off=(6, 20), start_off=False):
+            pen.line(pc, w=0.62, hand=0.1, lift=0.2, piece=(10, 30))
+
+
+# ---------------------------------------------------------------- the sky, stage 2
+
+def milky_way(ctrl, half, n_dots=260, minsep=5.5, avoid=()):
+    """A faint band of the Milky Way: a drift of the smallest stars, thicker
+    along its middle, and two long broken strands at its edges (as the arms
+    of 01 galaxy). Returns the band's middle line."""
+    mid = resample(catmull(ctrl, step=2.0), 2.0)
+    ts = tangents(mid)
+    placed = []
+    tries = 0
+    while len(placed) < n_dots and tries < n_dots * 30:
+        tries += 1
+        i = int(R(0, len(mid) - 1))
+        v = G(0.45)
+        if abs(v) > 1.05:
+            continue
+        p = (mid[i][0] - ts[i][1] * v * half + G(2), mid[i][1] + ts[i][0] * v * half + G(2))
+        if not (12 < p[0] < 988 and 12 < p[1] < YH - 20) or any(f(p) for f in avoid):
+            continue
+        if any(dist(p, q) < minsep for q in placed[-150:]):
+            continue
+        placed.append(p)
+    for p in placed:
+        if pen.hidden(p):
+            continue
+        if R() < 0.88:
+            dot(p[0], p[1], r=R(0.4, 0.65), w=0.62)
+        else:
+            dot(p[0], p[1], r=R(0.8, 1.1), w=0.85)
+    return mid
+
+
+def net_of_stars(cx, cy, sizes, W, H, rot=0.0, node=1.7, cross=0.55, gap=8.0):
+    """A neural network made of stars: its nodes are stars of a few sizes
+    (some small crosses), its links the finest broken lines, fully connected
+    from each layer to the next."""
+    c, s_ = math.cos(rot), math.sin(rot)
+    layers = []
+    for li, n in enumerate(sizes):
+        u = (li / (len(sizes) - 1) - 0.5) * W
+        col = []
+        for k in range(n):
+            v = ((k - (n - 1) / 2) / max(1, max(sizes) - 1)) * H
+            px, py = u + G(1.5), v + G(1.5)
+            col.append((cx + px * c - py * s_, cy + px * s_ + py * c))
+        layers.append(col)
+    for li in range(len(layers) - 1):
+        for a in layers[li]:
+            for b in layers[li + 1]:
+                d = dist(a, b)
+                if d < 2 * gap + 4:
+                    continue
+                pen.line([lerp(a, b, gap / d), lerp(a, b, 1 - gap / d)], w=0.6, hand=0, lift=0.42, piece=(4, 10))
+    nodes = [p for col in layers for p in col]
+    for li, col in enumerate(layers):
+        for p in col:
+            u = R()
+            if u < cross:
+                sparkle(p[0], p[1], R(3.6, 5.0) * node / 1.7, w=0.95, rot=R(-0.15, 0.15), diag=0.0)
+            elif u < cross + 0.12:
+                sparkle(p[0], p[1], R(6.5, 8.5) * node / 1.7, w=1.05, rot=R(-0.1, 0.1), diag=0.3)
+            else:
+                dot(p[0], p[1], r=node * R(0.75, 1.15), w=1.15)
+    return nodes
+
+
+def star_sky(n, region, avoid, minsep=16):
+    """Plain stars of many sizes: the smallest dots, small dots, small crosses
+    and a few larger four-pointed stars (as in 01 galaxy)."""
+    placed = []
+    tries = 0
+    x0, y0, x1, y1 = region
+    while len(placed) < n and tries < n * 40:
+        tries += 1
+        p = (R(x0, x1), R(y0, y1))
+        if any(dist(p, q) < minsep for q in placed) or any(f(p) for f in avoid):
+            continue
+        placed.append(p)
+    for p in placed:
+        if pen.hidden(p):
+            continue
+        u = R()
+        if u < 0.04:
+            sparkle(p[0], p[1], R(8, 12), w=1.15, rot=R(-0.1, 0.1))
+        elif u < 0.14:
+            sparkle(p[0], p[1], R(3.5, 5), w=0.9, rot=R(-0.15, 0.15), diag=0.0)
+        elif u < 0.38:
+            dot(p[0], p[1], r=R(1.1, 1.5), w=1.1)
+        else:
+            dot(p[0], p[1], r=R(0.55, 0.9), w=0.85)
+
+
+def far_hills(pts, w=0.8, hatch_right=True):
+    """Low hills far behind the city: a fine broken line and a few strokes on
+    their shaded slopes."""
     line = catmull(pts, step=2)
-    pen.line(line, w=w, hand=0.4, lift=0.15)
+    pen.line(line, w=w, hand=0.3, lift=0.12)
+    if hatch_right:
+        for i in range(2, len(line) - 2, 3):
+            a, b = line[i - 2], line[i + 2]
+            slope = (b[1] - a[1]) / max(0.1, b[0] - a[0])
+            if slope > 0.12 and R() < 0.55:
+                p = line[i]
+                L = R(5, 11)
+                pen.line([(p[0] + 1.5, p[1] + 2.5), (p[0] + 1.5 + L * 0.6, p[1] + 2.5 + L * 0.8)], w=0.62, hand=0,
+                         lift=0)
     return line
 
 
-# =============================================================== draft A
-if VARIANT == 'A':
-    # the knoll the people stand on, at the left
-    knoll_top = catmull([(20, 846), (110, 808), (210, 792), (320, 792), (420, 812), (500, 846), (570, 890),
-                         (630, 940), (660, 1000)], step=2)
-    # people: a man, a child and a woman, looking out to the city
-    front_grass(160, 420, 801, 9, 26)
-    family(286, 800, 220)
-    # foreground plants on the knoll
-    for k in range(40):
-        x = R(30, 600)
-        yk = min(knoll_top, key=lambda p: abs(p[0] - x))[1]
-        y = yk + R(4, 120) * (R() ** 1.5)
-        if y > 960:
-            continue
-        tuft(x, y, R(18, 42) * (1 + (y - 780) / 260), n=int(R(3, 7)), w=1.0, lean=R(-0.15, 0.25))
-    for (x, y, h, r) in [(120, 845, 70, 9), (160, 880, 56, 8), (420, 838, 60, 8), (470, 880, 48, 7), (80, 900, 40, 7)]:
-        daisy(x, y, h, r, lean=R(-0.1, 0.15))
-    for (x, y, h, r) in [(205, 850, 82, 12), (380, 880, 66, 10)]:
-        umbel(x, y, h, r, lean=R(-0.08, 0.08))
-    for (bx, by, a, L) in [(40, 975, -1.25, 150), (75, 985, -0.7, 170)]:
-        frond((bx, by), a, L, curl=0.35)
-    pen.line(knoll_top, w=2.0, hand=0.7, lift=0.15)
-    # a little tone on the knoll's face, following the slope
-    for k in range(40):
-        x = R(60, 640)
-        yk = min(knoll_top, key=lambda p: abs(p[0] - x))[1]
-        y = yk + R(10, 150)
-        if y > 990:
-            continue
-        L = R(14, 34)
-        slope = 0.35 if x > 380 else 0.05
-        pen.line([(x - L / 2, y - slope * L / 2), (x + L / 2, y + slope * L / 2)], w=0.72, hand=0.3, lift=0.1)
-    pen.occlude(knoll_top + [(1000, 1000), (0, 1000), (0, 828)])
+def woods(x0, x1, y_far, y_near, n, Hm=(8.0, 12.0)):
+    """A wood of separate trees in a patch of the plain, nearest first, so the
+    nearer crowns hide the farther ones."""
+    cand = []
+    for _ in range(n):
+        X, Z = ground_of(R(x0, x1), y_far + (y_near - y_far) * R())
+        cand.append((Z, X))
+    cand.sort()
+    for Z, X in cand:
+        b = P(X, 0, Z)
+        tree(b[0], b[1], F * R(*Hm) / Z, allow_hidden=True)
 
-    # grass on the near verge at the lower right
-    for k in range(12):
-        x = R(780, 970)
-        y = R(930, 990)
-        tuft(x, y, R(24, 46), n=int(R(3, 6)), w=1.05, lean=R(-0.2, 0.1))
 
-    # the road: sweeps up from the lower right into the valley and on to the city
-    ground_road([(860, 1010), (760, 880), (640, 760), (590, 690), (612, 648), (648, 622), (654, 608), (650, 603.5)], 9.0)
-    # the skyway: comes in on pylons from the right
-    skyway([(1010, 700), (900, 672), (820, 640), (775, 620), (740, 608), (705, 603)], 7.0,
-           elev=lambda t: 26 + 50 * t ** 1.5, pylon_every=70.0, min_sep=38.0)
+# =============================================================== the scene
 
-    groves([(470, 640, 4), (540, 625, 3), (720, 640, 5), (860, 618, 3), (420, 612, 3), (585, 607, 3), (940, 660, 3)])
+knoll_top = catmull([(20, 846), (110, 808), (210, 792), (320, 792), (420, 812), (500, 846), (570, 890),
+                     (630, 940), (660, 1000)], step=2)
 
-    # the city
-    outlines = city(650, YH + 1.5, 1.0, wline=1.1)
-    skybridge(560, 650, 470, 8)
-    skybridge(650, 742, 430, 7)
-    skybridge(470, 554, 520, 5)
 
-    # the far land: low hills either side, the horizon, marks on the plain
-    hills([(30, 604), (90, 596), (170, 590), (260, 594), (330, 586), (420, 594), (470, 600)])
-    hills([(860, 598), (910, 590), (970, 596)])
-    horizon_line(30, 970, YH + 4)
-    plain_marks(110, (30, 970))
+def knoll_y(x):
+    return min(knoll_top, key=lambda p: abs(p[0] - x))[1]
 
-    # the sky: four neural-net constellations among plain stars
-    nets = [
-        dict(cx=235, cy=215, sizes=[3, 4, 4, 2], W=270, H=165, rot=-0.10),
-        dict(cx=805, cy=125, sizes=[3, 4, 2], W=170, H=110, rot=0.12),
-        dict(cx=110, cy=455, sizes=[2, 3, 1], W=110, H=70, rot=0.05),
-        dict(cx=500, cy=82, sizes=[2, 3, 2], W=120, H=70, rot=-0.18),
-    ]
-    boxes = []
-    for nt in nets:
-        constellation(nt['cx'], nt['cy'], nt['sizes'], nt['W'], nt['H'], nt['rot'])
-        boxes.append((nt['cx'], nt['cy'], nt['W'] / 2 + 22, nt['H'] / 2 + 22))
-    avoid = [lambda p, b=b: abs(p[0] - b[0]) < b[2] and abs(p[1] - b[1]) < b[3] for b in boxes]
-    starfield(120, (25, 25, 975, YH - 12), avoid)
 
-# =============================================================== draft B
-else:
-    # people near the bottom, on the verge left of the road, looking up it to the city
-    front_grass(210, 500, 931, 10, 30)
-    family(356, 930, 244)
-    # foreground nature along the bottom
-    for k in range(30):
-        x = R(30, 970)
-        y = R(890, 990)
-        if 470 < x < 760 and y < 985:
-            continue  # the road
-        tuft(x, y, R(26, 56), n=int(R(3, 7)), w=1.05, lean=R(-0.2, 0.2))
-    for (x, y, h, r) in [(110, 940, 80, 10), (190, 965, 64, 9), (840, 950, 76, 10), (900, 975, 58, 8), (470, 975, 50, 8)]:
-        daisy(x, y, h, r, lean=R(-0.1, 0.15))
-    for (x, y, h, r) in [(230, 960, 96, 13), (800, 970, 88, 12)]:
-        umbel(x, y, h, r, lean=R(-0.08, 0.08))
-    for (bx, by, a, L) in [(45, 990, -1.0, 170), (955, 992, -2.1, 160)]:
-        frond((bx, by), a, L, curl=0.35 if bx < 500 else -0.35)
-    verge = catmull([(20, 900), (150, 884), (300, 880), (440, 888), (520, 900)], step=2)
-    verge2 = catmull([(700, 905), (800, 890), (900, 884), (980, 886)], step=2)
-    pen.line(verge, w=1.6, hand=0.6, lift=0.2)
-    pen.line(verge2, w=1.6, hand=0.6, lift=0.2)
-    pen.occlude(verge + [(520, 1000), (20, 1000)])
-    pen.occlude(verge2 + [(980, 1000), (700, 1000)])
+# ---- the foreground: the old tree, the people on the knoll, flowers and grasses
+for x in (24, 44, 72, 96, 114):
+    tuft(x, 858 + R(-3, 6), R(22, 34), n=int(R(4, 7)), w=1.05, lean=R(-0.2, 0.2), occ=True)
+frame_tree(852)
+front_grass(160, 420, 801, 9, 26)
+family(286, 800, 220)
 
-    # the long road, winding from the foreground up to the city gate
-    ground_road([(640, 1010), (590, 900), (470, 790), (420, 690), (470, 590), (540, 520), (530, 470), (506, 447),
-                 (500, 438.5)], 10.0)
-    # the skyway, curving in from the left on pylons
-    skyway([(-10, 640), (120, 600), (240, 540), (330, 495), (400, 462), (450, 444), (480, 438)], 7.0,
-           elev=lambda t: 22 + 70 * t ** 1.4, pylon_every=70.0, min_sep=40.0)
+plants = []
+for k in range(70):
+    x = R(14, 645)
+    yk = knoll_y(x)
+    y = yk + R(4, 160) * R() ** 1.3
+    if y > 978 or (14 < x < 125 and y < 875):
+        continue
+    plants.append((y, 'tuft', x))
+for spec in [(120, 845, 'daisy'), (162, 882, 'daisy'), (424, 840, 'daisy'), (470, 884, 'daisy'), (84, 902, 'daisy'),
+             (250, 905, 'daisy'), (330, 930, 'daisy'), (520, 930, 'daisy'),
+             (205, 850, 'umbel'), (380, 880, 'umbel'), (560, 960, 'umbel'),
+             (300, 860, 'dandelion'), (140, 930, 'dandelion'), (455, 925, 'dandelion'),
+             (180, 905, 'bell'), (350, 905, 'bell'), (505, 900, 'bell'), (230, 960, 'bell'),
+             (110, 880, 'seed'), (270, 880, 'seed'), (430, 900, 'seed'), (600, 975, 'seed'), (60, 935, 'seed')]:
+    plants.append((spec[1], spec[2], spec[0]))
+plants.sort(reverse=True)  # nearest first
+for y, kind, x in plants:
+    grow = 1 + (y - 780) / 260
+    if kind == 'tuft':
+        tuft(x, y, R(18, 44) * grow, n=int(R(3, 7)), w=1.0, lean=R(-0.15, 0.25), occ=True)
+    elif kind == 'daisy':
+        daisy(x, y, R(46, 64) * grow, R(7, 9) * min(1.3, grow), lean=R(-0.1, 0.15))
+    elif kind == 'umbel':
+        umbel(x, y, R(60, 80) * grow, R(9, 12), lean=R(-0.08, 0.08))
+    elif kind == 'dandelion':
+        dandelion(x, y, R(44, 60) * grow, R(7, 9), lean=R(-0.08, 0.12))
+    elif kind == 'bell':
+        bellflower(x, y, R(42, 58) * grow, lean=R(0.05, 0.25), n=int(R(2, 4)))
+    elif kind == 'seed':
+        seed_grass(x, y, R(70, 100) * grow, lean=R(0.0, 0.25))
+for (bx, by, a, L, cu) in [(40, 975, -1.25, 150, 0.35), (75, 985, -0.7, 170, 0.35), (175, 992, -1.05, 120, 0.3),
+                           (120, 880, -0.55, 95, 0.3), (590, 992, -2.0, 110, -0.3)]:
+    frond((bx, by), a, L, curl=cu)
+knoll_hatch(knoll_top)
+flank = [p for p in knoll_top if p[0] > 440]
+for k in (1, 2, 3):
+    run = offset(flank, -5.0 * k)
+    run = run[int(len(run) * 0.12 * k):]
+    for pc in pieces(run, on=(30, 90), off=(5, 14), start_off=False):
+        pen.line(pc, w=0.74 - 0.03 * k, hand=0.3, lift=0.1, piece=(15, 40))
+pen.line(knoll_top, w=2.0, hand=0.7, lift=0.15)
+pen.occlude(knoll_top + [(1000, 1000), (0, 1000), (0, 828)])
+# a thin margin of clear paper round the people against the land behind
+pen.add_halo((150, 570, 432, 812), r=4.0)
 
-    groves([(300, 520, 4), (640, 520, 5), (760, 480, 4), (880, 545, 4), (200, 470, 3), (420, 458, 3), (600, 452, 3),
-            (900, 455, 3), (130, 600, 3), (720, 600, 4)])
-    outlines = city(500, YH + 1.5, 0.92 * 1.0, wline=1.05)
-    skybridge(412, 500, YH - 140, 8)
-    skybridge(500, 585, YH - 175, 7)
-    skybridge(330, 408, YH - 95, 5)
-    hills([(30, 440), (80, 430), (150, 434), (210, 438)])
-    hills([(790, 437), (860, 428), (930, 432), (975, 438)])
-    horizon_line(30, 970, YH + 3)
-    plain_marks(130, (30, 970))
+# ---- the near verge at the lower right, by the road
+verge = []
+for k in range(18):
+    verge.append((R(925, 992), 'tuft', R(770, 990)))
+verge += [(962, 'daisy', 905), (975, 'dandelion', 822), (984, 'seed', 948), (958, 'bell', 860)]
+verge.sort(reverse=True)
+for y, kind, x in verge:
+    if kind == 'tuft':
+        tuft(x, y, R(24, 50), n=int(R(3, 6)), w=1.05, lean=R(-0.2, 0.1), occ=True)
+    elif kind == 'daisy':
+        daisy(x, y, 62, 8.5, lean=-0.08)
+    elif kind == 'dandelion':
+        dandelion(x, y, 56, 8, lean=-0.05)
+    elif kind == 'seed':
+        seed_grass(x, y, 96, lean=-0.2)
+    elif kind == 'bell':
+        bellflower(x, y, 50, lean=-0.15, n=3)
+frond((990, 994), -2.25, 130, curl=-0.3)
 
-    nets = [
-        dict(cx=170, cy=190, sizes=[3, 4, 3, 2], W=230, H=150, rot=-0.08),
-        dict(cx=830, cy=160, sizes=[2, 4, 2], W=160, H=120, rot=0.1),
-        dict(cx=345, cy=70, sizes=[2, 3, 1], W=110, H=64, rot=0.15),
-        dict(cx=665, cy=58, sizes=[3, 2], W=70, H=60, rot=-0.1),
-    ]
-    boxes = []
-    for nt in nets:
-        constellation(nt['cx'], nt['cy'], nt['sizes'], nt['W'], nt['H'], nt['rot'])
-        boxes.append((nt['cx'], nt['cy'], nt['W'] / 2 + 22, nt['H'] / 2 + 22))
-    avoid = [lambda p, b=b: abs(p[0] - b[0]) < b[2] and abs(p[1] - b[1]) < b[3] for b in boxes]
-    starfield(90, (25, 25, 975, YH - 10), avoid)
+# ---- the nearer trees stand in front of the ways (which lie flat on the plain) and of the skyway's piers
+groves([(752, 716, 1), (566, 742, 1)])
+woods(880, 1010, 694, 752, 9, Hm=(7.0, 10.0))
+groves([(690, 690, 1)])
+
+# ---- the ways to the city
+R1 = [(860, 1010), (760, 880), (640, 760), (590, 690), (612, 648), (648, 622), (654, 608), (650, 603.5)]
+R3 = [(560, 1000), (540, 900), (512, 820), (494, 750), (492, 690), (480, 645), (464, 618), (456, 604.5)]
+ground_road(R1, 9.0)
+ground_road(R3, 5.5)
+skyway([(1010, 700), (900, 672), (820, 640), (775, 620), (740, 608), (705, 603)], 8.0,
+       elev=lambda t: 26 + 50 * t ** 1.5, pylon_every=70.0, min_sep=38.0)
+
+# ---- the middle ground, nearest first: woods, single trees, then the folds of the meadow
+groves([(548, 676, 1), (930, 664, 1)])
+belt(120, 470, 656, Hm=11.0)
+groves([(520, 640, 2), (596, 632, 1), (430, 628, 2)])
+belt(8, 362, 614, Hm=12.0)
+for (x0, x1, y, rise) in [(600, 1000, 860, 0.06), (660, 1000, 790, 0.08), (420, 640, 790, 0.07), (640, 920, 712, 0.1),
+                          (8, 160, 760, 0.08), (500, 640, 712, 0.1), (8, 330, 690, 0.1), (540, 680, 662, 0.12),
+                          (300, 470, 636, 0.12), (8, 200, 628, 0.12)]:
+    fold(x0, x1, y, rise=rise)
+grass_ticks(110, (8, 992), 650, 950)
+
+# ---- the city on the far shore, the lake before it, the hills behind
+towers = city(650, YH + 1.5, 1.0, wline=1.1)
+skybridge(600, 706, 470, 7)
+skybridge(706, 826, 430, 7)
+skybridge(500, 598, 520, 5)
+lake_poly = [(664, 606.5), (1000, 606.5)] + catmull(
+    [(1000, 641), (960, 646), (880, 650), (790, 647), (722, 638), (686, 625), (670, 614), (664, 606.5)], step=2)
+lake(lake_poly, towers, 606.5)
+pen.line(catmull([(1000, 641), (960, 646), (880, 650), (790, 647), (722, 638), (686, 625), (670, 614)], step=2),
+         w=0.9, hand=0.3, lift=0.25, piece=(10, 30))
+for x in (676, 700, 742, 905, 958):
+    yy = span_at(lake_poly, 620) and min(p[1] for p in lake_poly if abs(p[0] - x) < 6 and p[1] > 610) or 640
+    tuft(x, yy + 1, R(6, 9), n=4, w=0.7, lean=R(-0.1, 0.1))
+glow(480, 880, 596, n=3)
+far_hills([(8, 590), (90, 582), (200, 586), (330, 576), (420, 568), (540, 562), (650, 568), (760, 558), (870, 568),
+           (992, 578)])
+horizon_line(8, 664, YH + 4)
+craft(470, 345, 22, d=-1)
+craft(735, 252, 12, d=1, trail=40)
+
+# ---- the sky: the Milky Way, five networks of stars, plain stars
+nets = [
+    dict(cx=410, cy=268, sizes=[3, 4, 3], W=160, H=88, rot=-0.08),
+    dict(cx=830, cy=92, sizes=[2, 3, 2], W=130, H=70, rot=0.1),
+    dict(cx=560, cy=46, sizes=[2, 3, 2], W=96, H=46, rot=-0.15),
+    dict(cx=905, cy=302, sizes=[2, 3, 1], W=90, H=58, rot=0.06),
+    dict(cx=345, cy=442, sizes=[2, 2, 1], W=64, H=36, rot=0.1),
+]
+boxes = []
+for nt in nets:
+    net_of_stars(nt['cx'], nt['cy'], nt['sizes'], nt['W'], nt['H'], nt['rot'])
+    boxes.append((nt['cx'], nt['cy'], nt['W'] / 2 + 18, nt['H'] / 2 + 18))
+avoid = [lambda p, b=b: abs(p[0] - b[0]) < b[2] and abs(p[1] - b[1]) < b[3] for b in boxes]
+milky_way([(320, -10), (450, 60), (600, 130), (760, 185), (900, 215), (1010, 235)], 44, n_dots=300, avoid=avoid)
+star_sky(220, (14, 14, 986, YH - 14), avoid)
+
 
 # keep everything inside the square, a little in from its edges
 M = 8.0
