@@ -14,17 +14,20 @@ section and engraved as in a natural-history plate, lit from the upper left:
   spaced and closing up with depth to about 8 apart, so it darkens toward the
   bottom; each is continuous except where a ring, bubble or pebble parts it
   (a clean break), and the rows end on a smooth oval, easing out, their ends
-  staggered a little, so the mass has a soft, deliberate vignette;
+  staggered a little, so the mass has a soft, deliberate vignette; toward the
+  floor the oval curves in to the floor line's ends, so no row hangs past it;
 - the surface: one sure line easing out at either end, a fine line under it;
 - the floor in section: the sediment's surface and below it a fine line and
   two strata, each a long smooth line, shorter with depth, with a band of
   evenly spaced diagonal hatching between the strata; a vent mound shaded on
-  its lower right, bubbles (clean closed rings) rising from it and from a
+  its lower right, bubbles (clean closed rings, none under about 10 across;
+  seen through the big ring as the water is) rising from it and from a
   crack, breaking at the surface in a small dome and two ripples; pebbles as
   low domes standing on the floor's line, heavier on their shaded right;
-- above: three fine wavering wisps of steam, each in a few long pieces,
-  lifting off the water over the crack, and on the far horizon a volcano (form lines on its shadowed
-  flank, ridges on the lit one) whose plume rolls off to the left as one cloud,
+- above: three fine wavering wisps of steam (the left one a single smooth
+  stroke, the others a few long pieces) lifting off the water over the
+  crack, and on the far horizon a volcano (form lines on its shadowed flank,
+  ridges on the lit one) whose plume rolls off to the left as one cloud,
   small and tight at the vent, broader and flatter downwind and thinning out
   into broken strokes: a sure edge on its shaded underside, a fine broken one
   toward the light, a few fold arcs inside and curved hatching along its
@@ -338,13 +341,29 @@ rng3 = random.Random(2003)
 bubbles = []
 
 
+B_MIN = 5.2            # smallest bubble radius: about 10 units across draws as a closed ring at 1x
+
+
+def clear_for_bubble(p, r):
+    """Bubbles show through the big frontal ring as the water does, clear of its lines, shadow
+    and double-bond gaps; the other rings they pass behind."""
+    for ring in RINGS:
+        if ring.R >= 150:
+            if ring.near_lines(p, r + HALO):
+                return False
+        elif ring.keeps_out(p, (5 + r) * (0.4 + 0.6 * ring.near)):
+            return False
+    return True
+
+
 def bubble_column(x0, y0, y1, n, r0, r1, sway, ph):
     for k in range(n):
         u = (k + 0.5) / n
         y = y0 + (y1 - y0) * u ** 0.85
         x = x0 + sway * math.sin(u * 6.5 + ph) + rng3.uniform(-2.5, 2.5)
-        r = max(3.4, r0 + (r1 - r0) * u + rng3.uniform(-0.4, 0.4))
-        if clear_of_rings((x, y), 5 + r) and all(math.dist((x, y), (bx, by)) > r + br + 6 for bx, by, br in bubbles):
+        r0 = max(r0, B_MIN)                     # none so small that it breaks up into a hook
+        r = max(B_MIN, r0 + (max(r1, r0 + 0.6) - r0) * u + rng3.uniform(-0.3, 0.3))
+        if clear_for_bubble((x, y), r) and all(math.dist((x, y), (bx, by)) > r + br + 6 for bx, by, br in bubbles):
             bubbles.append((x, y, r))
 
 
@@ -371,6 +390,8 @@ engrave(line_fn(lambda x: surface_y(x) + 7.5, XC - 300.0, XC + 296.0), 0.75, tap
 
 # ---- the water: long, smooth, gently waving engraved lines, evenly spaced and closing up with
 # depth; each ends on a smooth oval, easing out, and parts cleanly around rings and bubbles
+FLOOR_L = XC - 0.96 * half_width(FLOOR_Y) + 42.0     # where the floor line's tapered ends have
+FLOOR_R = XC + 0.96 * half_width(FLOOR_Y) - 42.0     # come up to nearly its full weight
 rows = []
 y = SURF_Y + 19.0
 row = 0
@@ -379,6 +400,11 @@ while y < FLOOR_Y + 14:
     hw = half_width(y)
     xl = XC - hw * (1 + 0.028 * math.sin(row * 1.9 + 0.5))
     xr = XC + hw * (1 + 0.028 * math.sin(row * 2.3 + 1.7))
+    # toward the floor the oval curves in to meet the floor line's ends, so the deepest rows
+    # end over the floor and none hangs out beyond it
+    t_in = smooth(FLOOR_Y - 150.0, FLOOR_Y + 10.0, y)
+    xl = lerp((xl, 0), (FLOOR_L, 0), t_in)[0] if FLOOR_L > xl else xl
+    xr = lerp((xr, 0), (FLOOR_R, 0), t_in)[0] if FLOOR_R < xr else xr
     amp = 0.6 + 1.8 * (1 - u)
     ph = 0.011 * y
 
@@ -462,10 +488,12 @@ for bx, sc in ((vx + 4, 1.0), (322.0, 0.85)):
 
 # ---- warm vapour: a few fine wisps wavering up off the water over the crack, each a thin
 # open curve of its own, breaking up and fading as it rises
-def wisp(x0, y0, h, lean, w):
+def wisp(x0, y0, h, lean, w, whole=False):
+    """One wisp; `whole` draws it as a single smooth stroke with a gentler waver, easing out at
+    the top. (Its pieces are still drawn up, unused, so the plume's draws stay as they were.)"""
     f1, f2 = rng2.uniform(0.7, 1.2), rng2.uniform(1.8, 2.6)
     p1, p2 = rng2.uniform(0, 6.3), rng2.uniform(0, 6.3)
-    a1 = rng2.uniform(6.0, 9.0)
+    a1 = rng2.uniform(6.0, 9.0) * (0.55 if whole else 1.0)
     pts = []
     for i in range(61):
         u = i / 60
@@ -485,16 +513,19 @@ def wisp(x0, y0, h, lean, w):
         j = k + 1
         while j < len(fine) - 1 and s_at[j] - s_at[k] < want:
             j += 1
-        pen.line(fine[k:j + 1], w=w * (1 - 0.25 * u), hand=0, lift=0, piece=(400, 800), occlude=False)
+        if not whole:
+            pen.line(fine[k:j + 1], w=w * (1 - 0.25 * u), hand=0, lift=0, piece=(400, 800), occlude=False)
         gap = (3 + 5 * u) * rng2.uniform(0.85, 1.15)
         while j < len(fine) - 1 and s_at[j] - s_at[k] < want + gap:
             j += 1
         k = j
+    if whole:
+        engrave(catmull(pts[::6] + [pts[-1]], step=1.5), w, ends=(False, True), taper=28.0, step=1.5)
 
 
-for x0, dy, h, lean, w in ((313.0, 5.0, 88.0, 16.0, 0.75), (296.0, 13.0, 60.0, 24.0, 0.65),
-                           (339.0, 8.0, 72.0, 2.0, 0.7)):
-    wisp(x0, surface_y(x0) - dy, h, lean, w)
+for x0, dy, h, lean, w, whole in ((313.0, 5.0, 88.0, 16.0, 0.75, False), (296.0, 13.0, 60.0, 24.0, 0.65, True),
+                                  (339.0, 8.0, 72.0, 2.0, 0.7, False)):
+    wisp(x0, surface_y(x0) - dy, h, lean, w, whole)
 
 
 # ---- beyond the water: a far volcano on the horizon, its plume rolling off to the left
