@@ -671,12 +671,12 @@ PROF_F = [
     (-6.8, 4.8), (-8.1, 2.9), (-9.4, 1.15), (-10.6, -0.75), (-11.15, -2.5), (-10.95, -4.25), (-10.1, -5.7),
     (-8.85, -7.1), (-7.1, -8.45), (-4.6, -9.5), (-1.7, -10.1), (1.15, -10.2), (4.0, -9.7), (6.5, -8.55), (8.5, -7.15),
     (9.75, -6.1), (10.4, -5.15), (11.25, -4.7), (12.0, -4.1), (12.4, -3.2), (12.25, -2.45), (11.65, -1.95),
-    (10.9, -1.6), (11.35, -0.6), (12.5, 0.9), (13.8, 2.4), (14.85, 3.5), (15.25, 4.2), (14.95, 4.85), (14.15, 5.2),
-    (13.25, 5.25), (13.4, 6.1), (13.6, 6.95), (13.1, 7.45), (13.3, 7.95), (12.9, 8.7), (12.3, 9.6), (11.7, 10.7),
-    (11.1, 11.8), (10.4, 12.7), (9.4, 13.1)]
+    (10.9, -1.6), (11.45, -0.48), (12.85, 1.2), (14.44, 2.88), (15.72, 4.11), (16.21, 4.9), (15.84, 5.62),
+    (14.87, 6.02), (13.77, 6.07), (13.6, 6.5), (13.7, 7.0), (13.1, 7.45), (13.3, 7.95), (12.9, 8.7), (12.3, 9.6),
+    (11.7, 10.7), (11.15, 11.75), (10.4, 12.45)]
 JAW_M = [(4.4, 12.9), (2.8, 12.2), (1.3, 10.9), (0.4, 9.2), (-1.2, 6.2), (-4.0, 5.3), (-7.2, 5.0)]
-JAW_F = [(9.4, 13.1), (6.6, 12.7), (3.8, 12.0), (1.6, 11.2), (0.7, 10.5), (0.1, 8.8), (-0.5, 6.8), (-2.4, 5.4),
-         (-4.6, 4.9), (-6.8, 4.8)]
+JAW_F = [(10.4, 12.45), (8.0, 11.9), (5.5, 11.3), (3.4, 10.8), (2.1, 10.35), (1.05, 9.65), (0.45, 8.6), (0.1, 7.2),
+         (-0.5, 6.2), (-2.4, 5.2), (-4.6, 4.85), (-6.8, 4.8)]
 
 FEAT = {
     'M': dict(
@@ -691,9 +691,9 @@ FEAT = {
         brow=[(6.8, -1.4), (7.6, -2.2), (8.7, -2.8), (10.0, -3.0), (11.1, -2.8), (12.0, -2.3)],
         sulcus=[(7.8, -4.5), (9.2, -4.95), (10.4, -5.05)],
         eye=(9.3, -0.9), cheek=[(9.0, 1.6), (8.3, 3.0), (7.4, 4.4)],
-        ala=[(14.3, 2.2), (13.0, 2.9), (12.45, 4.1), (12.85, 5.05), (13.8, 5.3)],
-        nostril=[(15.0, 4.85), (14.3, 4.5), (13.4, 4.8)],
-        fold=[(13.0, 5.0), (12.6, 6.1), (12.55, 7.3)],
+        ala=[(15.24, 2.53), (13.41, 2.75), (12.64, 4.29), (13.2, 5.43), (14.54, 5.75)],
+        nostril=[(15.7, 5.5), (14.95, 5.15), (13.95, 5.5)],
+        fold=[(12.75, 5.35), (12.5, 6.3), (12.5, 7.4)],
         mouth=[(13.1, 7.45), (12.3, 7.58), (11.5, 7.72)]),
 }
 
@@ -713,7 +713,8 @@ class Head:
         ol = outline
         if sex == 'F':                      # her jaw's lower edge, back to its angle, is part of the contour
             ol = outline + catmull(self.P(jaw[:6]), step=1.2)[1:]
-        self.part = F.part('head', poly, z, w=2.2, outline=[ol], joins=('neck',))
+        # her jaw is drawn against the throat, so her head does not flow into the neck
+        self.part = F.part('head', poly, z, w=2.2, outline=[ol], joins=('neck',) if sex == 'M' else ())
         self.z = z
         self.F = F
         self.details()
@@ -765,11 +766,11 @@ class Head:
         if self.sex == 'M':
             hd.add(self.C(jaw[:5]), w=1.3, hand=0.1)
         else:                               # the back edge of the jaw, up toward the ear
-            hd.add(self.C([(0.7, 10.5), (0.3, 9.2), (0.1, 7.9)]), w=0.85, hand=0.1)
+            hd.add(self.C([(1.05, 9.65), (0.45, 8.6), (0.15, 7.3)]), w=0.85, hand=0.1)
         # the ear: rim, inner fold, the tragus and the lobe
         ec = self.p(-0.4, -0.6)
         rot = self.tilt - 0.25
-        ek = 0.92 if self.sex == 'M' else 0.86
+        ek = 0.92 if self.sex == 'M' else 0.99
         hd.add(ellipse_pts(ec[0], ec[1], 1.95 * s * ek, 3.3 * s * ek, rot, -2.4, 2.5, step=1.0), w=1.3, hand=0.1)
         hd.add(ellipse_pts(ec[0] - 0.15 * s, ec[1] + 0.1 * s, 1.15 * s * ek, 2.3 * s * ek, rot, -1.8, 1.9, step=1.0),
                w=0.9, hand=0.1)
@@ -1602,15 +1603,23 @@ def woman(cx=830):
     elN = ik(shN, wrN, 28.0, 21.0, (-1.0, -0.3, 0.0))
     uaN, LuaN = limb(F, 'uarmN', V, [shN, vlerp(shN, elN, 0.5), elN],
                      [(0, 5.4), (0.15, 5.9), (0.5, 5.1), (1, 4.1)],
-                     [(0, 5.6), (0.2, 5.9), (0.5, 5.4), (1, 4.3)], z=-30, cap0=0.75, cap1=0.5,
+                     [(0, 5.6), (0.2, 5.9), (0.5, 5.4), (1, 4.3)], z=-31, cap0=0.75, cap1=0.5,
                      joins=('elbowN', 'farmN'))
-    elbN = joint_blob(F, 'elbowN', V, elN, 3.9, z=-35.2, joins=('uarmN', 'farmN'))
+    elbN = joint_blob(F, 'elbowN', V, vadd(elN, (0.0, -1.9, -0.6)), 3.7, z=-35.2, joins=('uarmN', 'farmN'))   # its point stands out
     faN, LfaN = limb(F, 'farmN', V, [elN, vlerp(elN, wrN, 0.5), wrN],
                      [(0, 3.9), (0.25, 4.2), (0.65, 3.3), (1, 2.6)],
                      [(0, 3.8), (0.25, 4.0), (0.7, 3.0), (1, 2.5)], z=-35, cap0=0.5, cap1=0.3,
                      joins=('uarmN', 'elbowN', 'fistN'))
     fist_hammer(F, 'fistN', W, ah, -38, s=SC * 0.95, joins=('farmN',))
     skin(uaN, LuaN, 0.1, 1.0, 'b', depth=0.45, ext=1.4, ang=0.3)
+    # the deltoid rounds over the shoulder in front of the pelt; the point of
+    # the elbow below, the crease inside the bend
+    uaN.inner_w = 1.5
+    lo = 1 if LuaN.pt(0.9, 1)[1] > LuaN.pt(0.9, -1)[1] else -1
+    limb_lines(uaN, LuaN, [[(0.04, -lo * 0.75), (0.2, -lo * 0.55), (0.36, -lo * 0.75)]], w=0.9)
+    elbN.add(catmull([LuaN.pt(0.97, lo * 0.55), LfaN.pt(0.05, lo * 0.7), LfaN.pt(0.1, lo * 0.4)], step=1.0), w=0.85,
+             clip=False, hand=0.05)
+    faN.add(catmull([LfaN.pt(0.04, -lo * 0.95), LfaN.pt(0.07, -lo * 0.5)], step=1.0), w=0.9, clip=False, hand=0.05)
     skin(faN, LfaN, 0.05, 0.95, 'b', depth=0.45, ext=1.4, ang=0.3)
     limb_lines(faN, LfaN, [[(0.06, 0.35), (0.34, 0.18), (0.66, 0.02)]])
 
@@ -1625,7 +1634,7 @@ def woman(cx=830):
     ear = (q[0] - off[0] * hs_, q[1] - off[1] * hs_)
     head = Head(F, ear, hs_, tilt, -34, sex='F')
     hp = head.p
-    neck = F.part('neck', closed([hp(5.6, 12.4), hp(1.4, 10.2), hp(-0.2, 6.4), hp(-3.4, 4.7), hp(-6.6, 4.4),
+    neck = F.part('neck', closed([hp(6.6, 11.5), hp(1.6, 10.0), hp(-0.2, 6.4), hp(-3.4, 4.7), hp(-6.6, 4.4),
                                   hp(-8.4, 2.8), P(T3(47, 0, -5.5)), P(T3(45, -6, 0)), P(T3(46, 0, 6.0)),
                                   P(T3(48, 0, 6.5))]), -1, w=2.2, joins=('head', 'torso'))
     # her hair drawn back close over the long low skull and its bun, gathered
@@ -1693,7 +1702,7 @@ def woman(cx=830):
     cape = F.part('cape', top + rights[::-1] + hem[::-1] + rag(lefts, 0.9, 9), -16.5, w=2.0)
     # the flap over the near shoulder, its edge uneven, a leg of the pelt
     # hanging lower behind the arm
-    fl_ = rag([P(CP(41.5 + 1.8 * math.sin((ph + 2.1) / 1.35 * math.pi) - 7.5 * math.exp(-((ph + 1.3) / 0.12) ** 2)
+    fl_ = rag([P(CP(41.5 + 1.8 * math.sin((ph + 2.1) / 1.35 * math.pi) + 4.6 * smooth((ph + 1.95) / 0.4)
                     - 3.0 * math.exp(-((ph + 1.9) / 0.1) ** 2) + 0.8 * math.sin(5 * ph), ph))
                for ph in frange(-2.1, -0.75, 0.05)], 1.0, 5)
     flap = F.part('flap', [P(CP(48.6, ph)) for ph in frange(-2.1, -0.75, 0.15)] + fl_[::-1], -30.5, w=2.0,
