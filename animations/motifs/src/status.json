@@ -225,7 +225,18 @@
         8
       ],
       "note": "rework after Maxim's notes (round w3): rebuilt skeleton first with Neanderthal skulls, short shins and forearms, barrel trunk, tied hides, Levallois knapping; polished: rib-following trunk rows, far-side swell, lighter cheek strokes",
-      "maxim": "more detailed and anatomically correct: yes"
+      "maxim": "more detailed and anatomically correct: yes",
+      "rework3": {
+        "round": "a1",
+        "scores": [
+          8,
+          8,
+          8
+        ],
+        "maxim": "refine a tiny bit anatomically: yes",
+        "passed": true,
+        "note": "adult head with chinless jaw, barrel chest, sloping neck, far forearm from bone lengths, calves, heels and arches; polishing"
+      }
     },
     "couple-1690s": {
       "passed": true,
