@@ -64,6 +64,17 @@
         "maxim": "a different direction, closer to the others: yes",
         "passed": true,
         "note": "solid engraved hairpin: low domed loop with uneven bases on an 8-pair A-form stem, square 3' stub, based tail; polished: tail bases evenly spaced and fanned, stem middle cleared, dome contour eased"
+      },
+      "rework3": {
+        "round": "f1",
+        "scores": [
+          8,
+          9,
+          8
+        ],
+        "maxim": "still a bit rough looking -> refined: yes",
+        "passed": true,
+        "note": "finish pass: clean slab joins, unbroken contours, lighter far strand, fewer longer strokes; polishing"
       }
     },
     "dna": {
@@ -86,6 +97,17 @@
         "maxim": "a different direction, closer to the others: yes",
         "passed": true,
         "note": "solid engraved model; ends re-cut square with flat faces, eased slab faces, calmer ribbing; s3: dark slab-face tapers removed, spot-check clean at 9/9/8"
+      },
+      "rework3": {
+        "round": "f1",
+        "scores": [
+          9,
+          8,
+          8
+        ],
+        "maxim": "still a bit rough looking -> refined: yes",
+        "passed": true,
+        "note": "finish pass: complete slabs with one junction, unbroken contours, crisp cut ends; polishing"
       }
     },
     "prokaryotic-cell": {
