@@ -419,6 +419,7 @@ def own_tube(tag):
 RAILS = (-0.725, -0.435, -0.145, 0.145, 0.435, 0.725)   # 0.29 x RT apart: over 5 on the page
 BEND_R = 46.0                               # a bend: the tube's path in the picture turns tighter than this
 RING = 7.5                                  # cross strokes this far apart along a bend
+CROSS = 0.4                                 # a cross stroke's reach in from the outline (o, across the tube)
 
 
 def bend_radius(S, i, k=8):
@@ -452,7 +453,8 @@ def unkink(run, rid, k=3, max_turn=0.45):
     return out
 
 
-OPEN = 0.2                                  # a cut face turned to us at least this much shows its whole rim
+OPEN = 0.15                                 # a cut face turned to us at least this much shows its whole rim,
+                                            # as a thin ellipse (strand b's top cut, a little turned to us)
 
 
 def draw_tube(S, own, tzf):
@@ -467,8 +469,11 @@ def draw_tube(S, own, tzf):
         fn = mul(smp['t'], sg)
         facing = dot(fn, view(smp['c']))
         rim = cut_rim(smp)
-        pts = rim if facing > OPEN else rim[:17]
-        draw([proj(p) for p in pts], tzf(1.6, 2.4), own, ids=[smp['i']] * len(pts), hand=0.1)
+        # (the rim runs right up to a base in front of it; its back half, where it shows, finer)
+        for pts, wf in ((rim[:17], tzf(1.6, 2.4)), (rim[16:] if facing > OPEN else [], tzf(1.0, 1.5))):
+            if pts:
+                draw([proj(p) for p in pts], wf, lambda t, q: own(t, q) or (t is not None and t[0] == 'g'),
+                     ids=[smp['i']] * len(pts), hand=0.1)
         dark = 1 - lit(fn)
         if facing > OPEN and dark > 0.4:
             c = smp['c']
@@ -490,7 +495,7 @@ def draw_tube(S, own, tzf):
                 p, n = surf(s, o)
                 dark = 1 - lit(n)
             if dark > 0.44:
-                wt = 0.8 + 1.2 * min(1.0, (dark - 0.44) / 0.48) ** 1.5
+                wt = 0.8 + 1.15 * min(1.0, (dark - 0.44) / 0.48) ** 1.5
                 wt = 0.8 + (wt - 0.8) * (0.55 if abs(o) > 0.7 else 1.0)
                 run.append(proj(p) + (wt * far(p[2]),))
                 rid.append(s['i'])
@@ -499,7 +504,7 @@ def draw_tube(S, own, tzf):
                     draw(piece, None, own, ids=pid, hand=0.15, minlen=8.0)
                 run, rid = [], []
     # cross strokes round the tube in the core shadow on the underside of each bend:
-    # three to five, centred on the bend's tightest point, none near the ends
+    # two short ones, either side of the bend's tightest point, none near the ends
     cands = []
     run_len, last = 0.0, None
     for s in S[40:-40]:
@@ -512,19 +517,25 @@ def draw_tube(S, own, tzf):
         rb = bend_radius(S, s['i'])
         if rb > BEND_R:
             continue
-        arc, aid = [], []
-        for j in range(25):
-            o = -1 + 2 * j / 24
+        arc, ao = [], []
+        for j in range(49):
+            o = -1 + 2 * j / 48
             p, n = surf(s, o)
             dark = 1 - lit(n)
-            if dark > 0.86 and abs(o) < 0.88:
+            if dark > 0.86 and abs(o) < 0.92:
                 arc.append(proj(p) + (0.7 + 0.35 * min(1.0, (dark - 0.86) / 0.2),))
-                aid.append(s['i'])
-            elif len(arc) > 2:
+                ao.append(o)
+            elif len(arc) > 4:
                 break
-        if len(arc) > 2 and length([q[:2] for q in arc]) > 11:
-            cands.append((s['i'], rb, arc, aid))
-            run_len = 0.0
+        if len(arc) > 4 and length([q[:2] for q in arc]) > 11:
+            # kept short: from the shadow's edge at the outline a little way in, so it crosses
+            # a contour line or so and makes no grid with them
+            if abs(ao[-1]) > abs(ao[0]):
+                arc, ao = arc[::-1], ao[::-1]
+            if abs(ao[0]) > 0.8:
+                keep = [q for q, o in zip(arc, ao) if abs(o - ao[0]) <= CROSS]
+                cands.append((s['i'], rb, keep, [s['i']] * len(keep)))
+                run_len = 0.0
     groups = []
     for cnd in cands:
         if groups and cnd[0] - groups[-1][-1][0] < 30:
@@ -535,7 +546,7 @@ def draw_tube(S, own, tzf):
         if len(g) < 3:
             continue
         core = min(g, key=lambda q: q[1])[0]
-        for i, rb, arc, aid in sorted(g, key=lambda q: abs(q[0] - core))[:5]:
+        for i, rb, arc, aid in sorted(g, key=lambda q: abs(q[0] - core))[:3:2]:   # two, one apart
             draw(arc, None, own, ids=aid, hand=0.08)
 
 
@@ -571,7 +582,7 @@ def face_strokes(cs, name, dark, far, own, clip):
     if not far and lo >= 16.5 and hi <= 1.3 * lo:
         fr, wt = [1 / 3, 2 / 3], 0.9 + 0.3 * (dark - 0.45)
     elif lo >= 7.0 and dark > (0.8 if far else 0.6):     # room for it clear of the edges
-        fr, wt = [0.5], (0.95 if far else 1.1)
+        fr, wt = [0.5], (0.95 if far else 1.0)
     else:
         return
     for f in fr:
@@ -586,17 +597,39 @@ def face_width(P, idx):
     return area / (max(dist(q[j], q[(j + 1) % 4]) for j in range(4)) or 1.0)
 
 
-NARROW = 3.5                                # a face seen nearly edge-on is left out: no doubled lines
+NARROW = 3.5                                # a face seen nearly edge-on is left out: no doubled lines ...
+THIN = 2.1                                  # ... but on the pairs turned most toward us of those seen only as
+                                            # bars, a broad face down to this is drawn as one fine line, its far
+                                            # edge, so they read as plates too
+
+
+def broad_width(k, h, cs, dd, wv):
+    """The page width of a slab's broad face (along the axis) where it is turned to us."""
+    P, v = [proj(c) for c in cs], view(lerp3(cs[0], cs[7], 0.5))
+    return max([face_width(P, idx) for idx, name in FACES if name[0] == 't' and len(name) == 2 and
+                dot(face_normal(name, dd, wv), v) > 0.02] + [0.0])
+
+
+PLATE = set()                               # the pairs whose broad faces are drawn as fine lines
+for k in range(NBP):
+    ws = [broad_width(*sl) for sl in slabs if sl[0] == k]
+    if min(ws) >= THIN and min(ws) < NARROW:
+        PLATE.add(k)
 for k, h, cs, dd, wv in slabs:
     P = [proj(c) for c in cs]
     centre = lerp3(cs[0], cs[7], 0.5)
     v = view(centre)
     own, clip = own_slab(k, h), root_clip(k, h)
-    edges, broad = {}, (0.0, None)
+    edges, broad, thin = {}, (0.0, None), []
     for idx, name in FACES:
         n = face_normal(name, dd, wv)
         fw = face_width(P, idx)
-        if name == 'tip' or dot(n, v) <= 0.02 or fw < NARROW:
+        if name == 'tip' or dot(n, v) <= 0.02:
+            continue
+        if k in PLATE and name[0] == 't' and len(name) == 2:
+            thin.append(SIDES[name])        # both halves of the pair alike
+            continue
+        if fw < NARROW:
             continue
         for j in range(4):
             e = tuple(sorted((idx[j], idx[(j + 1) % 4])))
@@ -611,6 +644,10 @@ for k, h, cs, dd, wv in slabs:
         if i >= 4 and j >= 4 and (h == 1 or (i, j) != broad[1]):
             continue                        # the line where the pair meets, drawn once
         draw([P[i], P[j]], tz(1.2, 1.9), own, hand=0.0, eps=0.8, clip=clip)
+    for side in thin:                       # a narrow broad face: only its far long edge, fine
+        for i, j in side:
+            if (i, j) not in edges:
+                draw([P[i], P[j]], lambda z: 0.65 * far(z), own, hand=0.0, eps=0.8, clip=clip)
 
 # ---------------------------------------------------------------- frame it
 

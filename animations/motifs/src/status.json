@@ -74,7 +74,7 @@
         ],
         "maxim": "still a bit rough looking -> refined: yes",
         "passed": true,
-        "note": "finish pass: clean slab joins, unbroken contours, lighter far strand, fewer longer strokes; polishing"
+        "note": "finish pass: clean slab joins, unbroken contours, lighter far strand, fewer longer strokes; polished: smooth stub turn, convex left shoulder, even tail shading, clean crossing"
       }
     },
     "dna": {
@@ -107,7 +107,7 @@
         ],
         "maxim": "still a bit rough looking -> refined: yes",
         "passed": true,
-        "note": "finish pass: complete slabs with one junction, unbroken contours, crisp cut ends; polishing"
+        "note": "finish pass: complete slabs with one junction, unbroken contours, crisp cut ends; polished: closed top stub, two side faces back, no bend grids"
       }
     },
     "prokaryotic-cell": {

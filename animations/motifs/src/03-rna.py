@@ -260,6 +260,20 @@ def rot(v, axis, a):
     return add(mul(v, math.cos(a)), mul(cross(axis, v), math.sin(a)), mul(axis, dot(axis, v) * (1 - math.cos(a))))
 
 
+def bend_on(p0, t0, t1, r, L, step=1.0):
+    """From p0 along t0, turning at radius r onto t1, then straight on along t1 for L."""
+    t0, t1 = norm(t0), norm(t1)
+    ax = norm(cross(t0, t1))
+    ang = math.acos(max(-1.0, min(1.0, dot(t0, t1))))
+    n = max(2, int(r * ang / step))
+    out, p = [p0], p0
+    for j in range(n):
+        p = add(p, mul(rot(t0, ax, ang * (j + 0.5) / n), r * ang / n))
+        out.append(p)
+    m = max(2, int(L / step))
+    return out + [add(p, mul(t1, L * (j + 1) / m)) for j in range(m)]
+
+
 # ---------------------------------------------------------------- the stem: A-form
 
 AXA = math.radians(-88)                     # the stem stands upright, the head at the top
@@ -289,7 +303,7 @@ O = (0.0, 150.0, 0.0)                       # the foot of the stem's axis
 # the head: a low dome straight off the top pair, a little narrower than the stem, its crown
 # set a touch to the left and its right side further from us (coordinates across, up from the
 # top pair, toward us, relative to the stem's axis)
-HEAD_PTS = ((-110, 50, 34), (-94, 104, 18), (-60, 144, 2), (-10, 162, -10), (40, 150, -20), (76, 108, -28), (104, 50, -30))
+HEAD_PTS = ((-110, 52, 34), (-94, 104, 18), (-60, 144, 2), (-10, 162, -10), (40, 150, -20), (76, 108, -28), (104, 50, -30))
 # the 5' tail: drooping off the stem's foot the way the strand leaves the helix, round under
 # the foot and away to the right (offsets from where it leaves the helix: right, down, toward us)
 TAIL_PTS = ((-30, 54, 36), (-10, 112, 26), (52, 156, 12), (146, 172, 0), (234, 184, -8), (304, 200, -14))
@@ -325,7 +339,9 @@ def spline(pts, m0, m1, n=30):
 # ---------------------------------------------------------------- the whole strand, 5' to 3'
 
 E = 18.0                                    # the 5' strand runs on past the foot pair, then leaves
-ET = 6.0                                    # at the top it runs on this little past the top pair
+ET = 6.0                                    # at the top it runs on this little past the top pair ...
+ET1 = -10.0                                 # ... on the 5' side it leaves a little below it, near the stem's
+                                            # edge, so the dome's left side runs on from the helix in one convex curve
 # the 5' tail, built outward from the foot and then turned round to run 5' to 3'
 p5 = s1(-E)
 t5 = mul(dfd(s1, -E), -1)                   # outward, toward the 5' end
@@ -333,10 +349,10 @@ TAIL = [add(p5, q) for q in TAIL_PTS]
 tail = hermite(p5, mul(t5, 70), TAIL[0], mul(norm(sub(TAIL[1], p5)), 90), 30)
 tail += spline(TAIL, mul(norm(sub(TAIL[1], p5)), 90), mul(sub(TAIL[-1], TAIL[-2]), 1.0))[1:]
 tail = tail[::-1]
-up = [s1(u) for u in [(-E) + j * 2.0 for j in range(int((U_TOP + E + ET) / 2.0) + 1)]]
+up = [s1(u) for u in [(-E) + j * 2.0 for j in range(int((U_TOP + E + ET1) / 2.0) + 1)]]
 # the head: the strand leaves the top pair and goes straight on round a low dome and back
 # down into the stem, the dome's foot as wide as the top pair
-P1, T1 = s1(U_TOP + ET), dfd(s1, U_TOP + ET)
+P1, T1 = s1(U_TOP + ET1), dfd(s1, U_TOP + ET1)
 P2, T2 = s2(U_TOP + DZ + ET), dfd(s2, U_TOP + DZ + ET, -1)
 HB = add(O, mul(A3, U_TOP))                 # the head's points are measured from here
 HEAD = [add(HB, mul(X3, x), mul(A3, h), mul(Y3, z)) for x, h, z in HEAD_PTS]
@@ -344,11 +360,11 @@ HEAD = [add(HB, mul(X3, x), mul(A3, h), mul(Y3, z)) for x, h, z in HEAD_PTS]
 # the right side comes down onto the 3' strand nearly in its own line, so the tube there stays
 # one even thickness round into the stem)
 loop = spline([P1] + HEAD + [P2], mul(norm(add(T1, mul(A3, 1.2))), 45), mul(norm(add(T2, mul(A3, -0.4))), 45))[1:]
-down = [s2(u) for u in [U_TOP + DZ + ET - j * 2.0 for j in range(int((U_TOP + ET + 12) / 2.0) + 1)]]
-# the 3' end: a short stub hanging off the foot on the left, cut square
-pe, te = down[-1], dfd(s2, DZ - 12, -1)
-STUB_END = add(pe, mul(A3, -54), mul(X3, -16), mul(Y3, 6))
-stub = hermite(pe, mul(te, 24), STUB_END, mul(norm(add(mul(A3, -1), mul(X3, -0.3))), 50), 20)
+down = [s2(u) for u in [U_TOP + DZ + ET - j * 2.0 for j in range(int((U_TOP + ET) / 2.0) + 1)]]
+# the 3' end: a short stub hanging off the foot on the left, cut square; it leaves the helix in a
+# smooth turn, no tighter than the helix's own turn at the stem's edge, then runs straight
+pe, te = down[-1], dfd(s2, DZ, -1)
+stub = bend_on(pe, te, norm(add(mul(A3, -1), mul(X3, -0.3))), 50.0, 18.0)
 rough = tail + up[1:] + loop + down[1:] + stub[1:]
 C = smooth3(resample3(rough, 1.4), 6)
 NC = len(C)
@@ -504,13 +520,14 @@ for f, b, out, turn in ((0.50, 'U', False, 0), (0.67, 'C', False, 0), (0.84, 'A'
 # right going down, on top going out), evenly spaced as they stand: their middles as far apart
 # round the bend, where they close up like a fan, as along the straight. Their angle to the
 # strand opens out round the bend, then on the straight rises steadily from a lean toward the
-# 5' end to nearly upright at the tip; three of them turned a little toward us
+# 5' end to nearly upright at the tip; all rolled so they are lit alike
 i5 = stem_idx[0]
 PA = [0.0]                                  # arc length along the strand in the picture, from the 5' end
 for a, b in zip(C, C[1:]):
     PA.append(PA[-1] + dist(proj(a)[:2], proj(b)[:2]))
 TAIL_REL = (135, 112, 86, 55, 63, 72, 80)   # each base's angle to the strand toward the 5' end, in the picture
-TAIL_ROLL = (-34, -20, 48, 8, -26, 48, 8)   # the first two edge-on near the foot, three turned toward us
+TAIL_ROLL = (-70, -20, -25, -25, -26, -30, -30)   # each rolled so that it is lit alike: its broad side to us and
+                                            # light, its thin side away from the light dark, with one line
 TIP_GAP = 45.0                              # the last base this far from the 5' end, in the picture
 
 
@@ -561,7 +578,8 @@ def face_normal(name, dd, wv, tv):
 
 # where each base plugs into the backbone: there the backbone is drawn whole over the base's
 # root, and the base's lines stop exactly at the backbone's outline
-NROOT = 45                                  # backbone samples either side of a base's root
+NROOT = 45                                  # backbone samples either side of a base's root ...
+NBAND = 70                                  # ... and further, where a base runs into its backbone at a slant
 ROOT = {k: nearest(lerp3(cs[0], cs[3], 0.5)) for k, cs, dd, wv, tv in slabs}
 
 
@@ -569,7 +587,7 @@ def root_clip(k):
     """True for a picture point inside the backbone near the base's root."""
     i0 = ROOT[k]
     band = []
-    for i in range(max(0, i0 - NROOT), min(NC, i0 + NROOT + 1)):
+    for i in range(max(0, i0 - NBAND), min(NC, i0 + NBAND + 1)):
         c = proj(S[i]['c'])[:2]
         band.append((c, dist(c, proj(surf(S[i], 1.0)[0])[:2])))
 
@@ -616,15 +634,18 @@ def tz(lo, hi):
 
 
 def own_tube(t, q):
-    # its own surface close by, its own halo, and the bases where they plug into it
+    # its own surface close by, its own halo, and the bases where they plug into it (with the
+    # halo of a pair's other half there, so the outline runs on unbroken past the pair's end)
     return t is not None and (
         (t[1] == 'r' and ((t[0] == 'h' and abs(t[2] - q) <= 60) or (t[0] == 't' and abs(t[2] - q) <= 9))) or
-        (t[0] in 'sg' and abs(ROOT[t[1]] - q) <= NROOT))
+        (t[0] in 'sg' and abs(ROOT[t[1]] - q) <= NBAND) or
+        (t[0] == 'g' and t[1] in PARTNER and abs(ROOT[PARTNER[t[1]]] - q) <= NBAND))
 
 
 RAILS = (-0.725, -0.435, -0.145, 0.145, 0.435, 0.725)   # 0.29 x RT apart: over 5 on the page
 BEND_R = 46.0                               # a bend: the tube's path in the picture turns tighter than this
 RING = 7.5                                  # cross strokes this far apart along a bend
+CROSS = 0.4                                 # a cross stroke's reach in from the outline (o, across the tube)
 
 
 def bend_radius(S, i, k=8):
@@ -696,7 +717,7 @@ def draw_tube(S, own, tzf):
                 p, n = surf(s, o)
                 dark = 1 - lit(n)
             if dark > 0.44:
-                wt = 0.8 + 1.2 * min(1.0, (dark - 0.44) / 0.48) ** 1.5
+                wt = 0.8 + 1.05 * min(1.0, (dark - 0.44) / 0.48) ** 1.5
                 wt = 0.8 + (wt - 0.8) * (0.55 if abs(o) > 0.7 else 1.0)
                 run.append(proj(p) + (wt * far(p[2]),))
                 rid.append(s['i'])
@@ -705,7 +726,7 @@ def draw_tube(S, own, tzf):
                     draw(piece, None, own, ids=pid, hand=0.15, minlen=8.0)
                 run, rid = [], []
     # cross strokes round the tube in the core shadow on the underside of each bend:
-    # up to three, centred on the bend's tightest point, none near the ends
+    # two short ones, either side of the bend's tightest point, none near the ends
     cands = []
     run_len, last = 0.0, None
     for s in S[40:-40]:
@@ -718,19 +739,25 @@ def draw_tube(S, own, tzf):
         rb = bend_radius(S, s['i'])
         if rb > BEND_R:
             continue
-        arc, aid = [], []
-        for j in range(25):
-            o = -1 + 2 * j / 24
+        arc, ao = [], []
+        for j in range(49):
+            o = -1 + 2 * j / 48
             p, n = surf(s, o)
             dark = 1 - lit(n)
-            if dark > 0.86 and abs(o) < 0.88:
+            if dark > 0.86 and abs(o) < 0.92:
                 arc.append(proj(p) + (0.7 + 0.35 * min(1.0, (dark - 0.86) / 0.2),))
-                aid.append(s['i'])
-            elif len(arc) > 2:
+                ao.append(o)
+            elif len(arc) > 4:
                 break
-        if len(arc) > 2 and length([q[:2] for q in arc]) > 11:
-            cands.append((s['i'], rb, arc, aid))
-            run_len = 0.0
+        if len(arc) > 4 and length([q[:2] for q in arc]) > 11:
+            # kept short: from the shadow's edge at the outline a little way in, so it crosses
+            # a contour line or so and makes no grid with them
+            if abs(ao[-1]) > abs(ao[0]):
+                arc, ao = arc[::-1], ao[::-1]
+            if abs(ao[0]) > 0.8:
+                keep = [q for q, o in zip(arc, ao) if abs(o - ao[0]) <= CROSS]
+                cands.append((s['i'], rb, keep, [s['i']] * len(keep)))
+                run_len = 0.0
     groups = []
     for cnd in cands:
         if groups and cnd[0] - groups[-1][-1][0] < 30:
@@ -741,7 +768,7 @@ def draw_tube(S, own, tzf):
         if len(g) < 3:
             continue
         core = min(g, key=lambda q: q[1])[0]
-        for i, rb, arc, aid in sorted(g, key=lambda q: abs(q[0] - core))[:3]:
+        for i, rb, arc, aid in sorted(g, key=lambda q: abs(q[0] - core))[:3:2]:   # two, one apart
             draw(arc, None, own, ids=aid, hand=0.08)
 
 
@@ -775,12 +802,12 @@ def face_strokes(cs, name, dark, far, own, clip):
     if not far and lo >= 16.5 and hi <= 1.3 * lo:
         fr, wt = [1 / 3, 2 / 3], 0.9 + 0.3 * (dark - 0.45)
     elif lo >= 7.0 and dark > (0.8 if far else 0.6):     # room for it clear of the edges
-        fr, wt = [0.5], (0.95 if far else 1.1)
+        fr, wt = [0.5], (0.95 if far else 1.0)
     else:
         return
-    for f in fr:
+    for f in fr:                            # (a stroke left as a short piece in a corner is left out)
         a, b = lerp3(cs[p0], cs[q0], f), lerp3(cs[p1], cs[q1], f)
-        draw([proj(a), proj(b)], wt, own, hand=0.0, eps=0.8, clip=clip)
+        draw([proj(a), proj(b)], wt, own, hand=0.0, eps=0.8, clip=clip, minlen=0.4 * dist(proj(a)[:2], proj(b)[:2]))
 
 
 def face_width(P, idx):
