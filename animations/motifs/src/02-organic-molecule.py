@@ -10,19 +10,20 @@ shadow of ticks along the light from the upper left), and several of them, at
 different sizes, turns and depths, swim in a warm, shallow early sea, seen in
 section and engraved as in a natural-history plate, lit from the upper left:
 
-- the water: rows of broken, gently waving lines, open under the surface and
-  closing up with depth to about 5.6 apart (longer near the floor), so it
-  darkens toward the bottom; over the outer fifth at either side the rows grow
-  shorter, sparser and ragged, so the mass has a soft, slightly oval outline;
-- the surface: a sure line that breaks up into short strokes before the sides,
-  a fine broken line under it, a few glints and wavelets;
-- the floor in section: the sediment's surface, strata below it (fine level
-  dashes, a band of diagonal hatching, a few grains of grit) fading downward and
-  to the sides; a vent mound shaded on its lower right, bubbles rising from it
-  and from a crack, breaking at the surface; pebbles with shaded undersides
-  and short cast shadows; fine particles suspended in the water;
-- above: three fine, broken, wavering wisps of steam lifting off the water over
-  the crack, and on the far horizon a volcano (form lines on its shadowed
+- the water: long, smooth, gently waving engraved lines, one to a row, evenly
+  spaced and closing up with depth to about 8 apart, so it darkens toward the
+  bottom; each is continuous except where a ring, bubble or pebble parts it
+  (a clean break), and the rows end on a smooth oval, easing out, their ends
+  staggered a little, so the mass has a soft, deliberate vignette;
+- the surface: one sure line easing out at either end, a fine line under it;
+- the floor in section: the sediment's surface and below it a fine line and
+  two strata, each a long smooth line, shorter with depth, with a band of
+  evenly spaced diagonal hatching between the strata; a vent mound shaded on
+  its lower right, bubbles (clean closed rings) rising from it and from a
+  crack, breaking at the surface in a small dome and two ripples; pebbles as
+  low domes standing on the floor's line, heavier on their shaded right;
+- above: three fine wavering wisps of steam, each in a few long pieces,
+  lifting off the water over the crack, and on the far horizon a volcano (form lines on its shadowed
   flank, ridges on the lit one) whose plume rolls off to the left as one cloud,
   small and tight at the vent, broader and flatter downwind and thinning out
   into broken strokes: a sure edge on its shaded underside, a fine broken one
@@ -296,146 +297,44 @@ for r in RINGS:
     r.draw()
 
 
-def wline(pts, w, hand=0.25, lift=0.0):
-    pen.line(pts, w=w, hand=hand, lift=lift, piece=(60, 160), occlude=False)
-
-
-def broken_line(fn, xa, xb, solid, w_solid, w_broken):
-    """A line y = fn(x) from xa to xb: solid over the middle, then breaking up into ever
-    shorter, sparser strokes before it reaches either side."""
-    sa, sb = solid
-    pts = [(x, fn(x)) for x in [sa + (sb - sa) * i / int((sb - sa) / 3) for i in range(int((sb - sa) / 3) + 1)]]
-    wline(pts, w_solid)
-    for direction, x_from, x_to in ((-1, sa, xa), (1, sb, xb)):
-        x = x_from + direction * rng.uniform(3, 7)
-        while (x - x_to) * direction < 0:
-            t = abs(x - x_from) / abs(x_to - x_from)          # 0 at the solid end, 1 at the side
-            L = (34 - 26 * t) * rng.uniform(0.7, 1.3)
-            xe = x + direction * L
-            seg = [(xx, fn(xx)) for xx in [x + (xe - x) * i / 6 for i in range(7)]]
-            wline(seg, w_broken - 0.35 * t, 0.15)
-            x = xe + direction * (5 + 22 * t) * rng.uniform(0.7, 1.4)
-
-
-# ---- the surface, a fine broken line under it, and a few glints and wavelets
-broken_line(surface_y, XC - 415.0, XC + 412.0, (215.0, 790.0), 1.7, 1.3)
-x = XC - 0.72 * half_width(SURF_Y)
-while x < XC + 0.72 * half_width(SURF_Y):
-    L = rng.uniform(30, 90) * (0.4 + 0.6 * fade(x, SURF_Y, 0.55))
-    seg = [(xx, surface_y(xx) + 7.5) for xx in [x + L * i / 10 for i in range(11)]]
-    wline(seg, 0.8, 0.15)
-    x += L + rng.uniform(25, 70)
-for gx, gl in ((268.0, 22.0), (300.0, 12.0), (352.0, 26.0), (395.0, 14.0), (448.0, 20.0), (602.0, 16.0), (640.0, 24.0)):
-    gy = surface_y(gx) + rng.uniform(13, 19)
-    wline([(gx, gy), (gx + gl * 0.5, gy - 0.4), (gx + gl, gy)], 0.75, 0.1)
-for wx, ww in ((180.0, 16.0), (330.0, 20.0), (520.0, 18.0), (585.0, 13.0), (655.0, 15.0)):
-    pen.line(ellipse_pts(wx, surface_y(wx) + 2.0, ww, 4.5, 0.0, math.pi * 1.15, math.pi * 1.85, step=1.0),
-             w=0.85, hand=0, lift=0, occlude=False)
-
-# ---- the water: rows of broken, gently waving lines, open under the surface and closing with
-# depth to about 5.6 apart, longer near the floor; shorter, sparser and ragged over the outer fifth
-y = SURF_Y + 20.0
-while y < FLOOR_Y + 14:
-    u = min(1.0, (y - SURF_Y) / (FLOOR_Y - SURF_Y))
-    hw = half_width(y)
-    xl = XC - hw + rng2.uniform(-25, 25)              # each row ends a little in or out
-    xr = XC + hw + rng2.uniform(-25, 25)
-    x = xl + rng.uniform(0, 30)
-    ph = rng.uniform(0, 6.3)
-    amp = 0.5 + 1.5 * (1 - u)
-    while x < xr:
-        f = smooth(xl, xl + 0.2 * hw, x) * smooth(xr, xr - 0.2 * hw, x)
-        L = (26 + 120 * u ** 1.3) * rng.uniform(0.6, 1.4) * (0.3 + 0.7 * f)
-        xe = min(xr, x + L)
-        if rng.random() < 0.15 + 0.85 * f ** 0.8:
-            seg = [(xx, y + amp * math.sin(xx * 0.06 + ph)) for xx in [x + (xe - x) * i / max(2, int((xe - x) / 6)) for i in range(max(2, int((xe - x) / 6)) + 1)]]
-            for run in clip_segments(seg, lambda p: p[1] < floor_y(p[0]) - 6 and clear_of_lines(p)):
-                if math.dist(run[0], run[-1]) > 6:
-                    wline(run, 0.66 + 0.2 * u, 0.15)
-        x = xe + (38 - 26 * u) * rng.uniform(0.5, 1.5) * (1 + 1.8 * (1 - f))
-    y += 5.6 + 21.0 * (1 - u) ** 1.7 + rng.uniform(-0.4, 0.4)
-
-# ---- the floor in section: the sediment's surface, strata below fading down and to the sides
-broken_line(floor_y, XC - 0.97 * half_width(FLOOR_Y), XC + 0.97 * half_width(FLOOR_Y), (225.0, 780.0), 1.5, 1.2)
-
-
-def stratum(depth, y):
-    return floor_y(y) + depth
-
-
-# stratum lines
-for depth, reach, w in ((17.0, 0.72, 0.95), (38.0, 0.6, 0.85), (60.0, 0.45, 0.75)):
-    hw = half_width(FLOOR_Y) * reach
-    x = XC - hw + rng.uniform(0, 20)
-    while x < XC + hw:
-        f = smooth(1.0, 0.7, abs(x - XC) / hw)
-        L = rng.uniform(40, 120) * (0.4 + 0.6 * f)
-        xe = min(XC + hw, x + L)
-        if rng.random() < 0.3 + 0.7 * f:
-            seg = [(xx, floor_y(xx) * 0.6 + FLOOR_Y * 0.4 + depth) for xx in [x + (xe - x) * i / 8 for i in range(9)]]
-            wline(seg, w, 0.25)
-        x = xe + rng.uniform(8, 30) * (1 + 1.5 * (1 - f))
-# between the floor and the first stratum: fine sediment, short level dashes
-for depth in (6.0, 11.5):
-    hw = half_width(FLOOR_Y) * 0.78
-    x = XC - hw + rng.uniform(0, 20)
-    while x < XC + hw:
-        f = smooth(1.0, 0.7, abs(x - XC) / hw)
-        L = rng.uniform(8, 22)
-        if rng.random() < 0.2 + 0.7 * f:
-            seg = [(xx, floor_y(xx) + depth) for xx in [x, x + L / 2, x + L]]
-            wline(seg, 0.65, 0.1)
-        x += L + rng.uniform(6, 16) * (1 + 2 * (1 - f))
-# between the first and second: diagonal hatching
-hw = half_width(FLOOR_Y) * 0.62
-x = XC - hw
-while x < XC + hw:
-    f = smooth(1.0, 0.65, abs(x - XC) / hw)
-    if rng.random() < 0.15 + 0.85 * f:
-        top = floor_y(x) * 0.6 + FLOOR_Y * 0.4 + 17.0 + 2.5
-        bot = floor_y(x) * 0.6 + FLOOR_Y * 0.4 + 38.0 - 2.5
-        wline([(x, top), (x + (bot - top) * 0.55, bot)], 0.65, 0.1)
-    x += 6.5
-# between the second and third: a scatter of grit
-for k in range(60):
-    xx = XC + rng.uniform(-1, 1) * half_width(FLOOR_Y) * 0.5
-    yy = floor_y(xx) * 0.6 + FLOOR_Y * 0.4 + rng.uniform(43, 56)
-    keep = rng.random() < smooth(1.0, 0.6, abs(xx - XC) / (half_width(FLOOR_Y) * 0.5))
-    r0 = rng.uniform(0.8, 1.4)
-    if keep and k % 3 == 0:                         # a third of them, as grains rather than specks
-        pen.line(ellipse_pts(xx, yy, 2.2 + r0, 1.5 + 0.6 * r0, 0.0), w=0.9, hand=0, lift=0, occlude=False)
-
-# ---- the vent: a mouth on the mound's top, the mound shaded on its lower right
-vx, vy = VENT, floor_y(VENT)
-pen.line(ellipse_pts(vx, vy + 2.5, 13, 3.5, 0.0, 0.0, math.pi), w=1.2, hand=0, lift=0, occlude=False)
-pen.line(ellipse_pts(vx, vy + 2.5, 13, 3.5, 0.0, math.pi, 2 * math.pi), w=1.0, hand=0, lift=0, occlude=False)
-for k in range(9):
-    x0 = vx + 10 + k * 6.5
-    y0 = floor_y(x0) + 2.5
-    L = 26 - 2.0 * k
-    wline([(x0, y0), (x0 + 0.3 * L, y0 + 0.5 * L), (x0 + 0.5 * L, y0 + L)], 0.7, 0.1)
-
-# ---- pebbles on the floor: each with its shaded underside and a short cast shadow
-for x, rx, ry in ((232, 12, 6), (254, 7, 4), (330, 9, 5), (512, 14, 6.5), (612, 8, 4.5),
-                  (790, 11, 5.5), (808, 6, 3.5)):
-    cy = floor_y(x) - ry + 1.5
-    pen.line(ellipse_pts(x, cy, rx, ry, 0.0, math.pi * 1.0, math.pi * 2.0), w=1.1, hand=0, lift=0, occlude=False)
-    for j in range(2):
-        rr = 0.75 - 0.3 * j
-        pen.line(ellipse_pts(x, cy, rx * rr, ry * rr, 0.0, math.radians(-30), math.radians(70)), w=0.7, hand=0, lift=0, occlude=False)
-    fy = floor_y(x + rx + 6)
-    wline([(x + rx * 0.6, fy + 1.5), (x + rx + 12, fy + 1.5)], 0.75, 0.05)
-
-
-# ---- bubbles: rising from the vent and from a crack, growing as they rise
-def bubble(x, y, r):
-    if r < 3.0:
-        pen.dot(x, y, r=max(1.0, r * 0.7), w=0.9)
+def engrave(pts, w, ends=(True, True), taper=36.0, step=3.0):
+    """A long, smooth engraved line: one even weight, no wobble, no lifts, laid as one stroke so
+    the engine's dashes run along it at an even pace. Where `ends` says so it thins over its last
+    `taper` units in three short steps, as a burin's cut eases out; elsewhere it stops crisply."""
+    fine = resample(pts, step)
+    if len(fine) < 2:
         return
-    pen.line(ellipse_pts(x, y, r, r * 0.96, 0, 0, 2 * math.pi + 0.15, step=1.2), w=0.9 + 0.03 * r, hand=0, lift=0, occlude=False)
-    pen.line(ellipse_pts(x, y, r * 0.55, r * 0.55, 0, math.radians(195), math.radians(250), step=0.8), w=0.7, hand=0, lift=0, occlude=False)
+    s_at = [0.0]
+    for k in range(1, len(fine)):
+        s_at.append(s_at[-1] + math.dist(fine[k - 1], fine[k]))
+    total = s_at[-1]
+    taper = min(taper, total * 0.3)
+    cuts = []                                   # (start s, end s, weight factor)
+    a, b = 0.0, total
+    if ends[0] and taper > 6:
+        cuts += [(0.0, taper / 3, 0.5), (taper / 3, 2 * taper / 3, 0.68), (2 * taper / 3, taper, 0.85)]
+        a = taper
+    if ends[1] and taper > 6:
+        b = total - taper
+    cuts.append((a, b, 1.0))
+    if ends[1] and taper > 6:
+        cuts += [(b, b + taper / 3, 0.85), (b + taper / 3, b + 2 * taper / 3, 0.68), (b + 2 * taper / 3, total, 0.5)]
+    def at(sv):                                 # the point at arc length sv
+        k = max(1, min(len(fine) - 1, next((i for i, v in enumerate(s_at) if v >= sv), len(fine) - 1)))
+        t = (sv - s_at[k - 1]) / max(1e-9, s_at[k] - s_at[k - 1])
+        return lerp(fine[k - 1], fine[k], max(0.0, min(1.0, t)))
+    for s0, s1, f in cuts:                      # pieces meet exactly, end to end
+        piece = [at(s0)] + [p for p, sv in zip(fine, s_at) if s0 < sv < s1] + [at(s1)]
+        pen.raw(piece, max(0.6, w * f))
 
 
+def line_fn(fn, xa, xb, step=3.0):
+    n = max(2, int((xb - xa) / step))
+    return [(xa + (xb - xa) * i / n, fn(xa + (xb - xa) * i / n)) for i in range(n + 1)]
+
+
+# ---- bubbles (placed first, so the water's lines can part cleanly around them)
+rng3 = random.Random(2003)
 bubbles = []
 
 
@@ -443,52 +342,122 @@ def bubble_column(x0, y0, y1, n, r0, r1, sway, ph):
     for k in range(n):
         u = (k + 0.5) / n
         y = y0 + (y1 - y0) * u ** 0.85
-        x = x0 + sway * math.sin(u * 6.5 + ph) + rng.uniform(-3, 3)
-        r = r0 + (r1 - r0) * u + rng.uniform(-0.5, 0.5)
-        if clear_of_rings((x, y), 5 + r):
+        x = x0 + sway * math.sin(u * 6.5 + ph) + rng3.uniform(-2.5, 2.5)
+        r = max(3.4, r0 + (r1 - r0) * u + rng3.uniform(-0.4, 0.4))
+        if clear_of_rings((x, y), 5 + r) and all(math.dist((x, y), (bx, by)) > r + br + 6 for bx, by, br in bubbles):
             bubbles.append((x, y, r))
 
 
-bubble_column(vx, vy - 16, SURF_Y + 20, 17, 2.4, 9.0, 11.0, 0.4)
-bubble_column(vx + 22, vy - 50, SURF_Y + 70, 7, 2.0, 6.0, 8.0, 2.1)
-bubble_column(318.0, floor_y(318.0) - 16, SURF_Y + 26, 11, 2.0, 7.5, 10.0, 4.0)
-for b in bubbles:
-    bubble(*b)
+vx, vy = VENT, floor_y(VENT)
+bubble_column(vx, vy - 16, SURF_Y + 20, 16, 2.6, 9.0, 11.0, 0.4)
+bubble_column(vx + 22, vy - 50, SURF_Y + 70, 6, 2.6, 6.0, 8.0, 2.1)
+bubble_column(318.0, floor_y(318.0) - 16, SURF_Y + 26, 10, 2.6, 7.5, 10.0, 4.0)
 
-# where bubbles break: a small dome on the surface and ripples running off either side
+
+PEBBLES = ((236.0, 12.0, 7.0), (330.0, 9.0, 5.5), (512.0, 14.0, 7.5), (612.0, 8.0, 5.0), (796.0, 11.0, 6.0))
+
+
+def clear_of_pebbles(p, m=5.0):
+    return not any(((p[0] - x) / (rx + m)) ** 2 + ((p[1] - floor_y(x) + ry * 0.4) / (ry * 0.6 + m)) ** 2 < 1 for x, rx, ry in PEBBLES)
+
+
+def clear_of_bubbles(p, m=4.0):
+    return not any((p[0] - bx) ** 2 + (p[1] - by) ** 2 < (br + m) ** 2 for bx, by, br in bubbles)
+
+
+# ---- the surface: one sure line easing out at either end, a fine line just under it
+engrave(line_fn(surface_y, XC - 414.0, XC + 412.0), 1.7, taper=70.0)
+engrave(line_fn(lambda x: surface_y(x) + 7.5, XC - 300.0, XC + 296.0), 0.75, taper=60.0)
+
+# ---- the water: long, smooth, gently waving engraved lines, evenly spaced and closing up with
+# depth; each ends on a smooth oval, easing out, and parts cleanly around rings and bubbles
+rows = []
+y = SURF_Y + 19.0
+row = 0
+while y < FLOOR_Y + 14:
+    u = min(1.0, (y - SURF_Y) / (FLOOR_Y - SURF_Y))
+    hw = half_width(y)
+    xl = XC - hw * (1 + 0.028 * math.sin(row * 1.9 + 0.5))
+    xr = XC + hw * (1 + 0.028 * math.sin(row * 2.3 + 1.7))
+    amp = 0.6 + 1.8 * (1 - u)
+    ph = 0.011 * y
+
+    def wave(x, y0=y, amp=amp, ph=ph):
+        return y0 + amp * math.sin(x * 2 * math.pi / 170.0 + ph)
+    rows.append(y)
+    pts = line_fn(wave, xl, xr, step=2.0)
+    for run in clip_segments(pts, lambda p: p[1] < floor_y(p[0]) - 6 and clear_of_lines(p) and clear_of_bubbles(p) and clear_of_pebbles(p)):
+        near_floor = any(q[1] > floor_y(q[0]) - 9 for q in (run[0], run[-1]))
+        if math.dist(run[0], run[-1]) < (48 if near_floor else 22):
+            continue                                   # no stubs, nor slivers caught in the floor's dips
+        engrave(run, 0.62 + 0.16 * u, ends=(abs(run[0][0] - xl) < 3, abs(run[-1][0] - xr) < 3), taper=40.0)
+    y += 8.2 + 23.0 * (1 - u) ** 1.5
+    row += 1
+
+# ---- the floor in section: the sediment's surface and two strata below it, each a long smooth
+# line easing out at its ends, the strata shorter with depth; a band of diagonal hatching between
+fw = half_width(FLOOR_Y)
+
+
+def layer(depth):
+    return lambda x: floor_y(x) * 0.6 + FLOOR_Y * 0.4 + depth
+
+
+engrave(line_fn(floor_y, XC - 0.96 * fw, XC + 0.96 * fw), 1.5, taper=70.0)
+engrave(line_fn(lambda x: floor_y(x) + 8.5, XC - 0.74 * fw, XC + 0.74 * fw), 0.68, taper=50.0)
+engrave(line_fn(layer(18.0), XC - 0.7 * fw, XC + 0.7 * fw), 0.9, taper=50.0)
+engrave(line_fn(layer(40.0), XC - 0.56 * fw, XC + 0.56 * fw), 0.8, taper=50.0)
+# the hatching: evenly spaced, each line running from stratum to stratum; the band's ends are
+# shaped by a smooth curve, its lines shortening toward them
+hx0, hx1 = XC - 0.6 * fw, XC + 0.6 * fw
+x = hx0
+while x <= hx1:
+    t = min(x - hx0, hx1 - x) / 60.0
+    top = layer(18.0)(x) + 2.6
+    bot = layer(40.0)(x) - 2.6
+    if t < 1.0:
+        bot = top + (bot - top) * max(0.25, t)
+    if bot - top > 7:
+        engrave([(x, top), (x + (bot - top) * 0.55, bot)], 0.65, ends=(False, False))
+    x += 6.5
+# ---- the vent: a mouth on the mound's top, the mound shaded on its lower right with evenly
+# spaced strokes that follow its slope
+pen.line(ellipse_pts(vx, vy + 2.5, 13, 3.5, 0.0, 0.0, math.pi), w=1.2, hand=0, lift=0, occlude=False)
+pen.line(ellipse_pts(vx, vy + 2.5, 13, 3.5, 0.0, math.pi, 2 * math.pi), w=1.0, hand=0, lift=0, occlude=False)
+for k in range(8):
+    x0 = vx + 12 + k * 7.0
+    y0 = floor_y(x0) + 2.2
+    L = 24 - 2.2 * k
+    engrave(catmull([(x0, y0), (x0 + 0.28 * L, y0 + 0.5 * L), (x0 + 0.5 * L, y0 + L)], step=2.0), 0.7, ends=(False, True), taper=8.0)
+
+# ---- pebbles on the floor: each a low dome standing on the floor's line, its feet exactly on it,
+# the contour heavier on the shaded right
+def dome(x, rx, ry, f=1.0, a0=math.pi, a1=2 * math.pi, n=24):
+    pts = []
+    for i in range(n + 1):
+        a = a0 + (a1 - a0) * i / n
+        px = x + rx * f * math.cos(a)
+        pts.append((px, floor_y(px) + ry * f * math.sin(a) + (1 - f) * -ry * 0.25))
+    return pts
+
+
+for x, rx, ry in PEBBLES:
+    engrave(dome(x, rx, ry, a1=1.5 * math.pi), 0.95, ends=(False, False), step=1.0)
+    engrave(dome(x, rx, ry, a0=1.5 * math.pi), 1.3, ends=(False, False), step=1.0)
+
+
+# ---- bubbles, drawn: a clean, closed ring each, the larger ones a touch firmer
+for bx, by, br in bubbles:
+    pen.line(ellipse_pts(bx, by, br, br * 0.96, 0, 0, 2 * math.pi + 0.12, step=1.0), w=1.0 + 0.03 * br, hand=0, lift=0, occlude=False)
+
+# where bubbles break: a small dome on the surface and one ripple running off either side
 for bx, sc in ((vx + 4, 1.0), (322.0, 0.85)):
     by = surface_y(bx)
     pen.line(ellipse_pts(bx, by, 7 * sc, 5 * sc, 0, math.pi * 1.05, math.pi * 1.95, step=0.8), w=1.0, hand=0, lift=0, occlude=False)
-    for j, d in enumerate((15, 26)):
-        for sgn in (-1, 1):
-            cx = bx + sgn * d * sc
-            pen.line(ellipse_pts(cx, surface_y(cx) - 0.5, 5.5 * sc, 2.6 * sc, 0, math.pi * 1.1, math.pi * 1.9, step=0.8),
-                     w=0.85 - 0.1 * j, hand=0, lift=0, occlude=False)
-
-
-def billows(circles, w_shade, w_lit, hatch=3):
-    """Rolling billows of smoke or steam, nearest first, lit from the upper left. Each shows its
-    contour where no nearer billow hides it: a sure line on the shaded lower right, a fine broken
-    one toward the light; curved parallel hatching follows each billow's lower right."""
-    occ0 = len(pen.occluders)
-    for cx, cy, r in circles:
-        ry = r * 0.88
-        a0 = math.radians(-35)
-        pen.line(ellipse_pts(cx, cy, r, ry, 0, a0, math.radians(165), step=1.2), w=w_shade, hand=0.1, lift=0.04, piece=(30, 80))
-        # toward the light: a few short, fine pieces
-        arc = ellipse_pts(cx, cy, r, ry, 0, math.radians(165), math.radians(325), step=1.2)
-        k = int(rng.uniform(0, 4))
-        while k < len(arc) - 2:
-            ln = rng.randint(4, 9)
-            pen.line(arc[k:k + ln], w=w_lit, hand=0.05, lift=0, piece=(400, 800))
-            k += ln + rng.randint(3, 8)
-        for j, (fr, b0, b1) in enumerate(((0.8, -15, 125), (0.62, 5, 105), (0.45, 25, 85))[:hatch]):
-            if r * fr < 4:
-                break
-            pen.line(ellipse_pts(cx, cy, r * fr, ry * fr, 0, math.radians(b0), math.radians(b1), step=1.0),
-                     w=0.62, hand=0.05, lift=0, piece=(400, 800))
-        pen.occlude(ellipse_pts(cx, cy, r + 1.0, ry + 1.0, 0, step=2.0))
-    del pen.occluders[occ0:]
+    for sgn in (-1, 1):
+        cx = bx + sgn * 17 * sc
+        pen.line(ellipse_pts(cx, surface_y(cx) - 0.5, 6.0 * sc, 2.6 * sc, 0, math.pi * 1.1, math.pi * 1.9, step=0.8),
+                 w=0.8, hand=0, lift=0, occlude=False)
 
 
 # ---- warm vapour: a few fine wisps wavering up off the water over the crack, each a thin
@@ -512,12 +481,12 @@ def wisp(x0, y0, h, lean, w):
     k = 0
     while k < len(fine) - 2:
         u = s_at[k] / total
-        want = (26 - 18 * u) * rng2.uniform(0.7, 1.3)
+        want = (40 - 14 * u) * rng2.uniform(0.85, 1.15)
         j = k + 1
         while j < len(fine) - 1 and s_at[j] - s_at[k] < want:
             j += 1
-        pen.line(fine[k:j + 1], w=w * (1 - 0.3 * u), hand=0.1, lift=0, piece=(400, 800), occlude=False)
-        gap = (2 + 9 * u) * rng2.uniform(0.7, 1.4)
+        pen.line(fine[k:j + 1], w=w * (1 - 0.25 * u), hand=0, lift=0, piece=(400, 800), occlude=False)
+        gap = (3 + 5 * u) * rng2.uniform(0.85, 1.15)
         while j < len(fine) - 1 and s_at[j] - s_at[k] < want + gap:
             j += 1
         k = j
@@ -555,14 +524,14 @@ def volcano(xl, xr, xc, top, crater, w):
         a = lerp(apex, foot, start)
         m = lerp(a, foot, 0.5)
         m = (m[0] - 2.0, m[1] + 2.0)
-        pen.line(catmull([a, m, foot], step=3.0), w=0.7, hand=0.15, lift=0, occlude=False)
+        pen.line(catmull([a, m, foot], step=3.0), w=0.7, hand=0.15, lift=0, piece=(400, 800), occlude=False)
         k += 1
     # ridges on the lit left flank
     for t0, t1, dx in ((0.93, 0.45, -10.0), (0.85, 0.3, -26.0), (0.9, 0.6, 8.0)):
         a, b = left_at(t0), left_at(t1)
         a = (a[0] + 8 + dx * 0.1, a[1] + 4)
         b = (b[0] + 16 + dx, b[1] + 10)
-        pen.line(catmull([a, lerp(a, b, 0.5), b], step=3.0), w=0.7, hand=0.25, lift=0, occlude=False)
+        pen.line(catmull([a, lerp(a, b, 0.5), b], step=3.0), w=0.7, hand=0.25, lift=0, piece=(400, 800), occlude=False)
     return (xc, yt + 2)
 
 
@@ -610,15 +579,16 @@ def plume(x, y):
                 # toward the light, and all of the far end: fine broken strokes, sparser far off
                 k = int(rng2.uniform(0, 3))
                 while k < len(seg) - 2:
-                    ln = rng2.randint(4, 9) if lit else rng2.randint(6, 12)
-                    pen.line(seg[k:k + ln], w=(0.65 if lit else 0.85 - 0.2 * far), hand=0.05, lift=0, piece=(400, 800), occlude=False)
-                    k += ln + rng2.randint(3, 7) + int(10 * far)
+                    ln = rng2.randint(12, 20) if lit else rng2.randint(10, 16)
+                    if len(seg[k:k + ln]) >= 6:          # no crumbs where a piece runs out
+                        pen.line(seg[k:k + ln], w=(0.65 if lit else 0.85 - 0.2 * far), hand=0.05, lift=0, piece=(400, 800), occlude=False)
+                    k += ln + rng2.randint(3, 4) + int(6 * far)
     # fold arcs: where a billow rolls in front of the next one downwind, its lower right shows
     for i in (2, 4, 5, 6, 12):
         cx, cy, rx, ry = E[i]
         arc = ellipse_pts(cx, cy, rx, ry, 0, math.radians(-10), math.radians(115), step=1.2)
         for run in clip_segments(arc, lambda p: in_union(p, i, -2.0)):
-            if len(run) > 5:
+            if len(run) > 8:
                 pen.line(run, w=0.75, hand=0.05, lift=0, piece=(400, 800), occlude=False)
     # curved hatching along the shaded underside, just inside the edge
     for i, (cx, cy, rx, ry) in enumerate(E[:9]):
@@ -640,25 +610,12 @@ def plume(x, y):
                         cur.append(b)
                 runs.append(cur)
                 for run in runs:
-                    if len(run) > 5:
+                    if len(run) > 7:
                         pen.line(run, w=0.62, hand=0.05, lift=0, piece=(400, 800), occlude=False)
 
 
 tip = volcano(742.0, 910.0, 834.0, 82.0, 10.0, 1.2)
 plume(tip[0], tip[1] - 2)
-
-# ---- fine particles suspended in the water
-placed = 0
-tries = 0
-while placed < 90 and tries < 6000:
-    tries += 1
-    x, y = rng.uniform(XC - 430, XC + 430), rng.uniform(SURF_Y + 25, FLOOR_Y - 25)
-    if rng.random() > fade(x, y) or y > floor_y(x) - 14 or not clear_of_rings((x, y), 16):
-        continue
-    if any(math.dist((x, y), (bx, by)) < br + 5 for bx, by, br in bubbles):
-        continue
-    pen.dot(x, y, r=rng.uniform(0.9, 1.6), w=1.0)
-    placed += 1
 
 pen.save('../02-organic-molecule.svg')
 pen.report()
