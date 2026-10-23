@@ -9,14 +9,15 @@ whose angles open out round the bend and then rise steadily toward the tip, up i
 foot of an upright stem of eight base pairs: an A-form helix (A', twelve pairs a turn),
 wider than 04's B-form, its pairs tilted, the purine of each pair the longer slab, with
 one front crossing (the two pairs behind it left out, the back strand showing through
-there). From the top pair the strand goes straight on
-round a low dome a little narrower than the stem, flaring into it: three bases stacked on
-its 5' side as if the stem went on, two near the crown pointing in and down, one flipped
-out on the 3' side, the middle clear. Then it comes back down the stem as the other strand
-and is cut square at its 3' end, a short stub on the left of the foot. Modelled in 3D and
-drawn with a depth test; light from the upper left, contour lines along the tube on its
-shadow side, a few cross strokes under the bends, the slabs' dark faces lined, the cut
-ends shown as cut.
+there). From the top pair the strand goes straight on round a low dome a little narrower
+than the stem, flaring into it: three bases stacked on its 5' side as if the stem went
+on, two near the crown pointing in and down, one flipped out on the 3' side, the middle
+clear. Then it comes back down the stem as the other strand and is cut square at its 3'
+end, a short stub on the left of the foot. Modelled in 3D and drawn with a depth test,
+each base stopping at the backbone's outline where it plugs in and the far side of the
+stem drawn lighter; light from the upper left, contour lines along the tube on its shadow
+side, a few cross strokes under the bends, the slabs' dark faces lined, the cut ends
+shown as cut.
 """
 
 import math
@@ -120,9 +121,9 @@ class Depth:
                 return True
         return False
 
-    def runs(self, pts, skip=None, eps=1.0, step=1.2, minlen=3.0, ids=None):
+    def runs(self, pts, skip=None, eps=1.0, step=1.2, minlen=3.0, ids=None, clip=None):
         """Visible runs of a projected polyline (points (x, y, z)). With ids, skip is
-        asked about (tag, id) at each point."""
+        asked about (tag, id) at each point; clip hides a point outright."""
         fine, fid = [], []
         for i in range(len(pts) - 1):
             a, b = pts[i], pts[i + 1]
@@ -135,7 +136,7 @@ class Depth:
         out, cur = [], []
         for p, q in zip(fine, fid):
             sk = skip if q is None or skip is None else (lambda t, q=q: skip(t, q))
-            if not self.hidden(p, sk, eps):
+            if not self.hidden(p, sk, eps) and not (clip and clip(p)):
                 cur.append(p)
             elif cur:
                 out.append(cur)
@@ -183,23 +184,33 @@ def ink(pts, w, hand=0.25, seg=24.0):
             off = hand * math.sin(s * fq * 2 * math.pi + ph) * min(1.0, s / 8, (total - s) / 8)
             moved.append((p[0] + dy / L * off, p[1] - dx / L * off))
         fine = moved
+    # the weight, piece by piece along the line; neighbouring pieces of nearly the same weight
+    # are kept as one stroke, so the line is laid in as few, long strokes as it can be
     m = max(1, int(round(total / seg)))
+    groups = []
     for q in range(m):
         k0, k1 = n * q // m, n * (q + 1) // m
+        z = sum(zs[k0:k1 + 1]) / (k1 - k0 + 1)
+        if w is None:
+            ww = sum(wl[k0:k1 + 1]) / (k1 - k0 + 1)      # the weight rides on the points
+        elif callable(w):
+            ww = w(z)
+        else:
+            ww = w
+        if groups and abs(ww - groups[-1][2] / groups[-1][3]) < 0.22:
+            groups[-1][1] = k1
+            groups[-1][2] += ww
+            groups[-1][3] += 1
+        else:
+            groups.append([k0, k1, ww, 1])
+    for k0, k1, wsum, cnt in groups:
         piece = fine[k0:k1 + 1]
         if len(piece) >= 2:
-            z = sum(zs[k0:k1 + 1]) / (k1 - k0 + 1)
-            if w is None:
-                ww = sum(wl[k0:k1 + 1]) / (k1 - k0 + 1)      # the weight rides on the points
-            elif callable(w):
-                ww = w(z)
-            else:
-                ww = w
-            pen.raw(piece, max(0.6, min(3.0, ww)))
+            pen.raw(piece, max(0.6, min(3.0, wsum / cnt)))
 
 
-def draw(pts, w, skip=None, eps=1.0, hand=0.25, minlen=3.0, ids=None):
-    for run in depth.runs(pts, skip, eps, minlen=minlen, ids=ids):
+def draw(pts, w, skip=None, eps=1.0, hand=0.25, minlen=3.0, ids=None, clip=None):
+    for run in depth.runs(pts, skip, eps, minlen=minlen, ids=ids, clip=clip):
         ink(run, w, hand=hand)
 
 
@@ -404,7 +415,7 @@ for smp in (S[0], S[-1]):                   # the cut faces, as discs
 
 SLAB_T = 6.0                                # as 04
 SLAB_W = 17.0
-GAP = 2.0
+GAP = 0.0                                   # a pair's two bases meet end to end, one line between
 SEQ1 = 'GGCAUCCG'                           # the stem's 5' side, foot to top
 PAIR = {'G': 'C', 'C': 'G', 'A': 'U', 'U': 'A'}
 TAIL_SEQ = 'ACUAGCU'
@@ -417,6 +428,7 @@ def purine(b):
 
 
 slabs = []                                  # (k, corners, dd, wv, tv)
+PARTNER = {}                                # a stem slab's other half
 
 
 def box(a0, a1, wv, tv):
@@ -446,6 +458,7 @@ for k in range(NSTEM):
     tv = norm(cross(d, wv))
     for s0, dd in ((pa, d), (pb, mul(d, -1))):
         box(add(s0, mul(dd, RT * 0.4)), add(m, mul(dd, -GAP)), wv, tv)
+    PARTNER[len(slabs) - 2], PARTNER[len(slabs) - 1] = len(slabs) - 1, len(slabs) - 2
 
 
 def single(i, b, roll):
@@ -546,6 +559,31 @@ def face_normal(name, dd, wv, tv):
     return {'root': mul(dd, -1), 'tip': dd, 'w-': mul(wv, -1), 'w+': wv, 't-': mul(tv, -1), 't+': tv}[name]
 
 
+# where each base plugs into the backbone: there the backbone is drawn whole over the base's
+# root, and the base's lines stop exactly at the backbone's outline
+NROOT = 45                                  # backbone samples either side of a base's root
+ROOT = {k: nearest(lerp3(cs[0], cs[3], 0.5)) for k, cs, dd, wv, tv in slabs}
+
+
+def root_clip(k):
+    """True for a picture point inside the backbone near the base's root."""
+    i0 = ROOT[k]
+    band = []
+    for i in range(max(0, i0 - NROOT), min(NC, i0 + NROOT + 1)):
+        c = proj(S[i]['c'])[:2]
+        band.append((c, dist(c, proj(surf(S[i], 1.0)[0])[:2])))
+
+    def clip(p):
+        for (a, ra), (b, rb) in zip(band, band[1:]):
+            ex, ey = b[0] - a[0], b[1] - a[1]
+            L2 = ex * ex + ey * ey or 1.0
+            t = max(0.0, min(1.0, ((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / L2))
+            if math.hypot(p[0] - a[0] - ex * t, p[1] - a[1] - ey * t) < ra + (rb - ra) * t:
+                return True
+        return False
+    return clip
+
+
 for k, cs, dd, wv, tv in slabs:
     P = [proj(c) for c in cs]
     for idx, name in FACES:
@@ -568,13 +606,20 @@ def lit(n):
     return max(0.0, dot(n, LIGHT))
 
 
+def far(z):
+    """Lines on the far side of the stem, seen through it, are drawn lighter."""
+    return 1.0 - 0.35 * max(0.0, min(1.0, (-0.3 * R - (z + 8.0)) / (0.6 * R)))
+
+
 def tz(lo, hi):
-    return lambda z: lo + (hi - lo) * max(0.0, min(1.0, (z - ZLO) / (ZHI - ZLO)))
+    return lambda z: (lo + (hi - lo) * max(0.0, min(1.0, (z - ZLO) / (ZHI - ZLO)))) * far(z)
 
 
 def own_tube(t, q):
-    return t is not None and t[1] == 'r' and (
-        (t[0] == 'h' and abs(t[2] - q) <= 60) or (t[0] == 't' and abs(t[2] - q) <= 9))
+    # its own surface close by, its own halo, and the bases where they plug into it
+    return t is not None and (
+        (t[1] == 'r' and ((t[0] == 'h' and abs(t[2] - q) <= 60) or (t[0] == 't' and abs(t[2] - q) <= 9))) or
+        (t[0] in 'sg' and abs(ROOT[t[1]] - q) <= NROOT))
 
 
 RAILS = (-0.725, -0.435, -0.145, 0.145, 0.435, 0.725)   # 0.29 x RT apart: over 5 on the page
@@ -590,6 +635,32 @@ def bend_radius(S, i, k=8):
     return dist(a[:2], b[:2]) * dist(b[:2], c[:2]) * dist(a[:2], c[:2]) / (4 * area)
 
 
+def unkink(run, rid, k=3, max_turn=0.45):
+    """A contour line split where it would double back on itself round a bend tighter than
+    the tube is thick; the bit round the bend is left out, so it ends cleanly either side."""
+    n = len(run)
+    bad = [False] * n
+    for i in range(k, n - k):
+        a, b, c = run[i - k], run[i], run[i + k]
+        t1, t2 = math.atan2(b[1] - a[1], b[0] - a[0]), math.atan2(c[1] - b[1], c[0] - b[0])
+        if abs((t2 - t1 + math.pi) % (2 * math.pi) - math.pi) > max_turn:
+            for j in range(max(0, i - 2 * k), min(n, i + 2 * k + 1)):
+                bad[j] = True
+    out, cur, cid = [], [], []
+    for p, q, b in zip(run + [None], rid + [None], bad + [True]):
+        if b:
+            if len(cur) > 3:
+                out.append((cur, cid))
+            cur, cid = [], []
+        else:
+            cur.append(p)
+            cid.append(q)
+    return out
+
+
+OPEN = 0.2                                  # a cut face turned to us at least this much shows its whole rim
+
+
 def draw_tube(S, own, tzf):
     """A backbone tube: its two silhouettes, the square cuts at its ends, contour lines along
     it on the shadow side, and a few cross strokes in the core shadow under each bend."""
@@ -602,10 +673,10 @@ def draw_tube(S, own, tzf):
         fn = mul(smp['t'], sg)
         facing = dot(fn, view(smp['c']))
         rim = cut_rim(smp)
-        pts = rim if facing > 0.03 else rim[:17]
+        pts = rim if facing > OPEN else rim[:17]
         draw([proj(p) for p in pts], tzf(1.6, 2.4), own, ids=[smp['i']] * len(pts), hand=0.1)
         dark = 1 - lit(fn)
-        if facing > 0.03 and dark > 0.4:
+        if facing > OPEN and dark > 0.4:
             c = smp['c']
             Lw = dist(proj(add(c, mul(smp['w'], RT)))[:2], proj(c)[:2])
             nl = min(4, int(2 * Lw / 5.5) - 1)
@@ -625,13 +696,13 @@ def draw_tube(S, own, tzf):
                 p, n = surf(s, o)
                 dark = 1 - lit(n)
             if dark > 0.44:
-                wt = 0.85 + 1.5 * min(1.0, (dark - 0.44) / 0.48) ** 1.5
-                wt = 0.85 + (wt - 0.85) * (0.55 if abs(o) > 0.7 else 1.0)
-                run.append(proj(p) + (wt,))
+                wt = 0.8 + 1.2 * min(1.0, (dark - 0.44) / 0.48) ** 1.5
+                wt = 0.8 + (wt - 0.8) * (0.55 if abs(o) > 0.7 else 1.0)
+                run.append(proj(p) + (wt * far(p[2]),))
                 rid.append(s['i'])
             else:
-                if len(run) > 3:
-                    draw(run, None, own, ids=rid, hand=0.15)
+                for piece, pid in unkink(run, rid):
+                    draw(piece, None, own, ids=pid, hand=0.15, minlen=8.0)
                 run, rid = [], []
     # cross strokes round the tube in the core shadow on the underside of each bend:
     # up to three, centred on the bend's tightest point, none near the ends
@@ -682,10 +753,14 @@ SIDES = {'t-': ((0, 4), (2, 6)), 't+': ((1, 5), (3, 7)), 'w-': ((0, 4), (1, 5)),
 
 
 def own_slab(k):
-    return lambda t: t is not None and t[0] in 'sg' and t[1] == k
+    # itself, its partner's halo (the two meet end to end), and the backbone's halo at its root
+    pk, i0 = PARTNER.get(k), ROOT[k]
+    return lambda t: t is not None and (
+        (t[0] in 'sg' and (t[1] == k or (t[0] == 'g' and t[1] == pk))) or
+        (t[0] == 'h' and t[1] == 'r' and abs(t[2] - i0) <= NROOT))
 
 
-def face_strokes(cs, name, dark, far, own):
+def face_strokes(cs, name, dark, far, own, clip):
     """Even strokes along a slab's dark side face: two or three that stay parallel and at
     least 5 apart, else one heavier line down its middle; fewer on the far side."""
     (p0, p1), (q0, q1) = SIDES[name]
@@ -697,35 +772,47 @@ def face_strokes(cs, name, dark, far, own):
     spa = abs(ex * (Q0[1] - P0[1]) - ey * (Q0[0] - P0[0])) / L
     spb = abs(ex * (Q1[1] - P1[1]) - ey * (Q1[0] - P1[0])) / L
     lo, hi = min(spa, spb), max(spa, spb)
-    nl = min(3, int(lo / 5.5) - 1)
-    if not far and nl >= 2 and hi <= 1.3 * lo:
-        fr, wt = [j / (nl + 1) for j in range(1, nl + 1)], 0.9 + 0.5 * (dark - 0.45)
+    if not far and lo >= 16.5 and hi <= 1.3 * lo:
+        fr, wt = [1 / 3, 2 / 3], 0.9 + 0.3 * (dark - 0.45)
     elif lo >= 7.0 and dark > (0.8 if far else 0.6):     # room for it clear of the edges
-        fr, wt = [0.5], (1.0 if far else 1.35)
+        fr, wt = [0.5], (0.95 if far else 1.1)
     else:
         return
     for f in fr:
         a, b = lerp3(cs[p0], cs[q0], f), lerp3(cs[p1], cs[q1], f)
-        a, b = lerp3(a, b, 0.06), lerp3(a, b, 0.94)
-        draw([proj(a), proj(b)], wt, own, hand=0.1, eps=0.8)
+        draw([proj(a), proj(b)], wt, own, hand=0.0, eps=0.8, clip=clip)
 
 
+def face_width(P, idx):
+    """A face's width on the page, square to its longest side."""
+    q = [P[j][:2] for j in idx]
+    area = abs(sum(q[j][0] * q[(j + 1) % 4][1] - q[(j + 1) % 4][0] * q[j][1] for j in range(4))) / 2
+    return area / (max(dist(q[j], q[(j + 1) % 4]) for j in range(4)) or 1.0)
+
+
+NARROW = 3.5                                # a face seen nearly edge-on is left out: no doubled lines
 for k, cs, dd, wv, tv in slabs:
     P = [proj(c) for c in cs]
     v = view(lerp3(cs[0], cs[7], 0.5))
-    edges = {}
+    own, clip, paired = own_slab(k), root_clip(k), k in PARTNER
+    edges, broad = {}, (0.0, None)
     for idx, name in FACES:
         n = face_normal(name, dd, wv, tv)
-        if dot(n, v) <= 0.02:
+        fw = face_width(P, idx)
+        if (paired and name == 'tip') or dot(n, v) <= 0.02 or fw < NARROW:
             continue
         for j in range(4):
             e = tuple(sorted((idx[j], idx[(j + 1) % 4])))
             edges[e] = edges.get(e, 0) + 1
+            if e[0] >= 4 and name in SIDES and fw > broad[0]:
+                broad = (fw, e)             # where a pair meets: one straight line across its broadest face
         dark = 1 - lit(n)
         if dark > 0.45 and name in SIDES:
-            face_strokes(cs, name, dark, lerp3(cs[0], cs[7], 0.5)[2] < O[2] - 0.3 * R, own_slab(k))
+            face_strokes(cs, name, dark, lerp3(cs[0], cs[7], 0.5)[2] < O[2] - 0.3 * R, own, clip)
     for (i, j), cnt in edges.items():
-        draw([P[i], P[j]], tz(1.2, 1.9), own_slab(k), hand=0.1, eps=0.8)
+        if paired and i >= 4 and j >= 4 and (PARTNER[k] < k or (i, j) != broad[1]):
+            continue                        # the line where the pair meets, drawn once
+        draw([P[i], P[j]], tz(1.2, 1.9), own, hand=0.0, eps=0.8, clip=clip)
 
 # ---------------------------------------------------------------- frame it
 
