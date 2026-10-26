@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coelacanth</title>
+  <link rel="stylesheet" href="preview.css">
+  <style>
+    .fish {
+      width: min(100%, 1400px);
+      aspect-ratio: 2;
+      margin: 1.5rem auto 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Coelacanth</h1>
+  <nav><a href="dragonfly.html">Dragonfly</a><a href="index.html">all animations</a></nav>
+  <p class="note">Latimeria in tiny dashes, at full size: a deep blue-black body with its pale spots and the hind edges of its scales left out of the hatching, eight fins in rays, six of them on fleshy lobes. It paddles with its paired fins in a walker's diagonal gait while its second dorsal and anal fins scull together and its tail waves.</p>
+  <div class="fish" id="fish"></div>
+
+  <script type="module">
+    import { mountCoelacanth } from './coelacanth.js';
+
+    const params = new URLSearchParams(location.search);
+    const options = {};
+    for (const [key, value] of params) if (key !== 't') options[key] = value === 'true' ? true : value === 'false' ? false : Number(value);
+    const fish = mountCoelacanth(document.getElementById('fish'), options);
+    if (params.has('t')) fish.advance(Number(params.get('t')));
+  </script>
+</body>
+</html>
