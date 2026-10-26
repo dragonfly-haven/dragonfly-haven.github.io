@@ -7,6 +7,8 @@
 // It hangs in the water as coelacanths drift, paddling with its paired fins in
 // the diagonal gait of a walking tetrapod (Fricke and others, Nature 1987),
 // while its second dorsal and anal fins scull together and its tail waves.
+// With `rise`, it first lies as a fossil in the sand, and its grains lift and
+// gather into the living fish, whose fins then unfurl and begin to paddle.
 //
 //   import { mountCoelacanth } from './animations/coelacanth.js';
 //   mountCoelacanth(document.getElementById('coelacanth'));
@@ -38,6 +40,7 @@ const FORM = {
   rings: 0.42, // gap between the body's rings of dashes, in dash lengths
   spots: 1, // how many pale spots, as a share of the usual
   speed: 1, // of the fins' beat
+  rise: false, // first rise from the sand as a fossil comes alive
 };
 
 // ---------------------------------------------------------------------------
@@ -116,6 +119,13 @@ const SCULL = { period: 1.9, swing: 0.5, lag: 1.2 };
 const WAVE = { period: 3.2, amplitude: 2.4, wavelength: 34 };
 const LEVELS = 16; // steps from root to tip in which a fin's bend is worked out each frame
 
+// The rise, in seconds: how long the fossil lies in the sand before its grains
+// begin to lift; how long the lifting takes to sweep from head to tail; how
+// long each grain flies, and how much longer some take; how long the fins take
+// to unfurl once the body has gathered, and the beat to reach its full swing.
+const RISE = { rest: 1.0, sweep: 1.3, flight: 0.85, spread: 0.5, fins: 1.1, wake: 1.4 };
+const SAND = 0.42; // how dark a grain of sand lying still is, against the fish's black
+
 // ---------------------------------------------------------------------------
 
 export function mountCoelacanth(el, options = {}) {
@@ -128,6 +138,7 @@ export function mountCoelacanth(el, options = {}) {
   const fins = makeFins(body, o);
 
   let lay = null, clock = 0, loop = null, playing = !calm;
+  let rising = o.rise && !calm; // whether the rise is still to be seen
   const surface = mountSurface(el, (view) => {
     lay = layout(view);
     draw();
@@ -165,7 +176,9 @@ export function mountCoelacanth(el, options = {}) {
       const q = apply(G, p), k = (DISTANCE / (DISTANCE - q[2])) * scale;
       return [next.ox + q[0] * k, next.oy - q[1] * k];
     };
-    next.body = drawBody(body, G, o, L, project, rand, next);
+    const drawn = drawBody(body, G, o, L, project, rand, next);
+    next.body = drawn.canvas;
+    next.rise = prepareRise(drawn.grains, next, random(o.seed + 2));
     next.mask = drawMask(body, project, next);
     next.fins = fins.map((fin) => fin.sample(L, rand, G));
     return next;
@@ -182,18 +195,27 @@ export function mountCoelacanth(el, options = {}) {
     ctx.lineCap = 'butt';
     ctx.lineJoin = 'round';
     const t = clock;
-    const poses = fins.map((fin) => fin.pose(t, G));
+    // While it rises, its body is grains in flight, its fins unfurl one after
+    // another and the beat swells.
+    const gathered = rising ? lay.rise.done : -Infinity;
+    if (t > gathered + RISE.fins + RISE.wake + 1) rising = false;
+    const amount = smooth(clamp((t - gathered) / RISE.wake, 0, 1));
+    const grows = fins.map((_, i) => smooth(clamp((t - gathered + 0.5 - i * 0.07) / RISE.fins, 0, 1)));
+    const poses = fins.map((fin) => fin.pose(t, G, amount));
     // The fins on the far side, then the body over them, hiding what it covers.
-    fins.forEach((fin, i) => fin.far && drawFin(ctx, lay, fin, lay.fins[i], poses[i]));
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.drawImage(lay.mask, 0, 0, canvas.width, canvas.height);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(lay.body, 0, 0, canvas.width, canvas.height);
+    fins.forEach((fin, i) => fin.far && drawFin(ctx, lay, fin, lay.fins[i], poses[i], grows[i]));
+    if (t < gathered) drawRise(ctx, lay, t, o.weight);
+    else {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(lay.mask, 0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(lay.body, 0, 0, canvas.width, canvas.height);
+    }
     ctx.setTransform(kx, 0, 0, ky, 0, 0);
     // Then the fins in the middle plane and on the near side, each clearing
     // the body behind it.
-    fins.forEach((fin, i) => !fin.far && drawFin(ctx, lay, fin, lay.fins[i], poses[i]));
+    fins.forEach((fin, i) => !fin.far && drawFin(ctx, lay, fin, lay.fins[i], poses[i], grows[i]));
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   }
 
@@ -207,6 +229,13 @@ export function mountCoelacanth(el, options = {}) {
     },
     setSpeed(speed) {
       o.speed = speed;
+    },
+    // Lays it back in the sand to rise again.
+    rise() {
+      if (calm) return;
+      rising = true;
+      clock = 0;
+      draw();
     },
     // Runs the fins on by `seconds` at once (for previews and tests).
     advance(seconds) {
@@ -261,14 +290,23 @@ function bodyShape() {
 
 function drawBody(body, G, o, L, project, rand, next) {
   const path = new Path2D(), thin = new Path2D();
+  // How many dashes long the fish is decides how much of it is drawn. Large,
+  // its hatching is open, toned by the light, and shows its scales; small, as
+  // an emblem, it closes into deep black like the dragonfly's body, with fewer,
+  // larger spots, and its dashes keep to a length that suits its girth.
+  const { dense, B } = detailOf(L);
+  // Every dash is also kept as a grain, for the rise: its ends, and whether it is thin.
+  const grains = [];
   const stroke = (into, p, dir, len = 1) => {
-    const hl = L * 0.45 * len * (0.85 + 0.3 * rand());
+    const hl = B * 0.45 * len * (0.85 + 0.3 * rand());
     const a = project(add(p, scaled(dir, -hl))), b = project(add(p, scaled(dir, hl)));
     into.moveTo(a[0], a[1]);
     into.lineTo(b[0], b[1]);
+    grains.push(a[0], a[1], b[0], b[1], into === thin ? 1 : 0);
   };
-  const spots = makeSpots(body, random(o.seed + 1), o.spots);
-  const gap = Math.max(0.1, L * 0.42); // half the width of a pale line
+  const detail = 100 / L;
+  const spots = makeSpots(body, random(o.seed + 1), o.spots, dense, L);
+  const gap = Math.max(0.1, B * 0.42); // half the width of a pale line
   const eye = eyeFrame(body);
 
   // The scales lie in a quincunx, ROWS of them round the body, staggered
@@ -294,40 +332,46 @@ function drawBody(body, G, o, L, project, rand, next) {
   const gillAt = (y) => lineAt(GILL, y);
   const near = (pts, a, y, width) => distanceTo(pts, a, y) < width;
 
-  hatch((u, v) => body.at(u * 100, v * TAU), (p, u) => sub(p, [u * 100 - 50, body.yc(u * 100), 0]), L * o.rings, L * 1.12, rand, (p, dir, nrm, u, v) => {
+  const ringGap = L * o.rings + (B * 0.22 - L * o.rings) * dense, ringStep = L * 1.12 + (B - L * 1.12) * dense;
+  hatch((u, v) => body.at(u * 100, v * TAU), (p, u) => sub(p, [u * 100 - 50, body.yc(u * 100), 0]), ringGap, ringStep, rand, (p, dir, nrm, u, v, along) => {
     const n = apply(G, nrm);
     if (n[2] < 0.02) return; // facing away
     const a = u * 100, q = v * TAU, y = p[1], side = p[2] > 0;
     if (side) {
       const de = Math.hypot(a - EYE.a, y - EYE.y);
       if (de < EYE.r * 1.16 + gap) return;
-      if (near(MOUTH, a, y, gap * 1.1)) return;
-      if (near(GILL, a, y, gap)) return;
-      if (CHEEK.some((line) => near(line, a, y, gap * 0.8))) return;
+      if (detail > 80 && near(MOUTH, a, y, gap * 1.1)) return;
+      if (detail > 45 && near(GILL, a, y, gap * (1 - 0.4 * dense))) return;
+      if (detail > 140 && CHEEK.some((line) => near(line, a, y, gap * 0.8))) return;
     }
     if (a > gillAt(y) + gap && scaleEdge(a, q)) return;
     if (rand() < spotAt(spots, body, a, q, L)) return;
     const diffuse = Math.max(0, dot(n, LIGHT));
     const gloss = Math.max(0, dot(n, HALF)) ** 14;
-    const ink = o.ink - o.light * diffuse ** 2 - 0.55 * smooth(clamp((gloss - 0.3) / 0.5, 0, 1));
+    const sheen = smooth(clamp((gloss - 0.3) / 0.5, 0, 1));
+    const open = o.ink - o.light * diffuse ** 2 - 0.55 * sheen, closed = 1 - 0.5 * sheen;
+    const ink = open + (closed - open) * dense;
     if (rand() > ink) return;
-    stroke(path, p, dir);
+    // On a middling fish, whose rings come close to a pixel apart, each dash
+    // strays a little off its ring, as a hand's would, so that the rings never
+    // beat against the screen's pixels.
+    stroke(path, add(p, scaled(along, (rand() - 0.5) * ringGap * 1.2 * Math.min(1, dense * 3))), dir);
   });
 
   // The eye: a black pupil in rings of dashes, with a glint, inside a paler iris and a rim.
   const { c, e1, e2, nrm } = eye;
   const on = (x, y) => add(c, add(add(scaled(e1, x), scaled(e2, y)), scaled(nrm, 0.5 * (1 - (x * x + y * y) / (EYE.r * EYE.r)))));
   const pupil = EYE.r * 0.56, glint = [-pupil * 0.36, pupil * 0.38];
-  for (let r = L * 0.25; r < pupil; r += L * 0.3) {
-    const count = Math.max(3, Math.round((TAU * r) / (L * 0.95))), shift = rand();
+  for (let r = B * 0.25; r < pupil; r += B * 0.3) {
+    const count = Math.max(3, Math.round((TAU * r) / (B * 0.95))), shift = rand();
     for (let k = 0; k < count; k++) {
       const q = ((k + shift) / count) * TAU, x = r * Math.cos(q), y = r * Math.sin(q);
       if (Math.hypot(x - glint[0], y - glint[1]) < pupil * 0.3) continue;
       stroke(path, on(x, y), unit(add(scaled(e1, -Math.sin(q)), scaled(e2, Math.cos(q)))));
     }
   }
-  for (let r = pupil + L * 0.55; r < EYE.r * 0.9; r += L * 0.55) {
-    const count = Math.round((TAU * r) / (L * 0.9));
+  for (let r = pupil + B * 0.55; detail > 100 && r < EYE.r * 0.9; r += B * 0.55) {
+    const count = Math.round((TAU * r) / (B * 0.9));
     for (let k = 0; k < count; k++) {
       const q = ((k + rand()) / count) * TAU;
       if (rand() < 0.45) continue;
@@ -335,7 +379,7 @@ function drawBody(body, G, o, L, project, rand, next) {
     }
   }
   {
-    const r = EYE.r, count = Math.round((TAU * r) / (L * 1.05));
+    const r = EYE.r, count = Math.round((TAU * r) / (B * 1.05));
     for (let k = 0; k < count; k++) {
       const q = (k / count) * TAU;
       stroke(path, on(r * Math.cos(q), r * Math.sin(q)), unit(add(scaled(e1, -Math.sin(q)), scaled(e2, Math.cos(q)))));
@@ -353,7 +397,83 @@ function drawBody(body, G, o, L, project, rand, next) {
   g.stroke(path);
   g.lineWidth = next.dash.width * o.weight * 0.7;
   g.stroke(thin);
-  return canvas;
+  return { canvas, grains: Float32Array.from(grains) };
+}
+
+// The rise, laid out: where each grain of the body lies in the fossil, flat on
+// the seabed below the fish as it would look lying on its side; when it lifts
+// and how it flies; and the loose sand of the seabed round it, which drifts
+// away once the fish has risen.
+function prepareRise(grains, lay, rand) {
+  const n = grains.length / 5;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const cx = (grains[5 * i] + grains[5 * i + 2]) / 2, cy = (grains[5 * i + 1] + grains[5 * i + 3]) / 2;
+    x0 = Math.min(x0, cx); x1 = Math.max(x1, cx);
+    y0 = Math.min(y0, cy); y1 = Math.max(y1, cy);
+  }
+  const flat = 0.36, mid = (y0 + y1) / 2, bed = Math.min(y1 + (lay.height - y1) * 0.55, lay.height - ((y1 - y0) * flat) / 2 - lay.dash.length * 2);
+  const at = new Float32Array(n * 9); // start x, y, angle, half length; control x, y; launch, flight; thin
+  let done = 0;
+  for (let i = 0; i < n; i++) {
+    const [ax, ay, bx, by, thin] = grains.subarray(5 * i, 5 * i + 5);
+    const cx = (ax + bx) / 2, cy = (ay + by) / 2, half = Math.hypot(bx - ax, by - ay) / 2;
+    const sx = cx, sy = bed + (cy - mid) * flat;
+    const launch = RISE.rest + RISE.sweep * ((cx - x0) / (x1 - x0 || 1)) + rand() * 0.35;
+    const flight = RISE.flight + rand() * RISE.spread;
+    done = Math.max(done, launch + flight);
+    // Each grain swings up in an arc, a little to one side or the other.
+    const kx = (sx + cx) / 2 + (rand() - 0.5) * (x1 - x0) * 0.12, ky = Math.min(sy, cy) - (0.1 + rand() * 0.25) * (bed - y0);
+    at.set([sx, sy, (rand() - 0.5) * 0.5, half, kx, ky, launch, flight, thin], 9 * i);
+  }
+  // Loose sand: a band along the seabed, thinning towards its ends.
+  const m = Math.round(n * 0.35), sand = new Float32Array(m * 5); // x, y, angle, half length, when it drifts off
+  const spanX = (x1 - x0) * 1.1, band = (y1 - y0) * 0.12;
+  for (let j = 0; j < m; j++) {
+    const u = (rand() + rand() + rand()) / 3;
+    const x = x0 - (x1 - x0) * 0.05 + spanX * u;
+    const y = bed + (rand() + rand() + rand() - 1.5) * band * 0.9;
+    const half = lay.dash.length * 0.45 * (0.85 + 0.3 * rand());
+    sand.set([x, y, (rand() - 0.5) * 0.4, half, RISE.rest + RISE.sweep * clamp((x - x0) / (x1 - x0 || 1), 0, 1) + 0.4 + rand() * 1.2], 5 * j);
+  }
+  return { at, grains, sand, done, n, m };
+}
+
+// Strokes the rise at time t: grains lying in the fossil, in flight, or home.
+function drawRise(ctx, lay, t, weight) {
+  const { at, grains, sand, n, m } = lay.rise;
+  const STEPS = 6, paths = Array.from({ length: STEPS + 1 }, () => new Path2D());
+  const appear = smooth(clamp(t / 0.6, 0, 1));
+  const put = (path, x, y, angle, half) => {
+    const c = Math.cos(angle) * half, s = Math.sin(angle) * half;
+    path.moveTo(x - c, y - s);
+    path.lineTo(x + c, y + s);
+  };
+  for (let i = 0; i < n; i++) {
+    const k = 9 * i, g = 5 * i;
+    const u = clamp((t - at[k + 6]) / at[k + 7], 0, 1), e = smooth(u), f = 1 - e;
+    const ax = grains[g], ay = grains[g + 1], bx = grains[g + 2], by = grains[g + 3];
+    const tx = (ax + bx) / 2, ty = (ay + by) / 2;
+    const x = f * f * at[k] + 2 * f * e * at[k + 4] + e * e * tx;
+    const y = f * f * at[k + 1] + 2 * f * e * at[k + 5] + e * e * ty;
+    const end = Math.atan2(by - ay, bx - ax), start = at[k + 2];
+    const angle = start + (end - start - TAU * Math.round((end - start) / TAU)) * e;
+    const half = at[k + 3];
+    const tone = u > 0 ? SAND + (1 - SAND) * e : SAND * appear;
+    put(paths[Math.round(tone * STEPS)], x, y, angle, half);
+  }
+  for (let j = 0; j < m; j++) {
+    const k = 5 * j, gone = smooth(clamp((t - sand[k + 4]) / 1.2, 0, 1));
+    if (gone >= 1) continue;
+    const tone = SAND * appear * (1 - gone);
+    put(paths[Math.round(tone * STEPS)], sand[k] + gone * sand[k + 3] * 3, sand[k + 1] + gone * sand[k + 3] * 2, sand[k + 2], sand[k + 3]);
+  }
+  ctx.lineWidth = lay.dash.width * weight;
+  for (let s = 1; s <= STEPS; s++) {
+    ctx.globalAlpha = s / STEPS;
+    ctx.stroke(paths[s]);
+  }
+  ctx.globalAlpha = 1;
 }
 
 // The body's outline, filled: what it hides of the fins on its far side.
@@ -392,7 +512,9 @@ function eyeFrame(body) {
 }
 
 // The pale spots, scattered over the body, irregular and each its own shape.
-function makeSpots(body, rand, amount) {
+// The same spots at any size, though a small fish shows only its largest, grown
+// so that they still show between its dashes.
+function makeSpots(body, rand, amount, dense = 0, L = 0) {
   const spots = [];
   const want = Math.round(64 * amount);
   for (let tries = 0; tries < 6000 && spots.length < want; tries++) {
@@ -405,7 +527,20 @@ function makeSpots(body, rand, amount) {
     if (!clear) continue;
     spots.push({ a, q, r, k: [rand() * TAU, rand() * TAU, rand() * TAU], e: [0.3 * rand(), 0.2 * rand(), 0.12 * rand()], stretch: 0.7 + 0.6 * rand() });
   }
-  return spots;
+  if (!dense) return spots;
+  const keep = Math.round(spots.length * (1 - 0.8 * dense));
+  return spots
+    .slice()
+    .sort((p, q) => q.r - p.r)
+    .slice(0, keep)
+    .map((s) => ({ ...s, r: Math.max(s.r, L * 0.55 * dense) }));
+}
+
+// How much a fish whose dashes are `L` long is drawn as an emblem (dense, 0 to
+// 1), and the length B its body's dashes keep to.
+function detailOf(L) {
+  const detail = 100 / L;
+  return { detail, dense: smooth(clamp((150 - detail) / 75, 0, 1)), B: Math.min(L, 1.5) };
 }
 
 // How surely a point at station a, angle θ, is pale: 1 inside a spot, 0 well outside.
@@ -510,7 +645,7 @@ function lobedFin(body, spec, far, phase, beat) {
   outline.push(...rim);
   for (let s = first; s > clearFrom; s -= 0.5) outline.push([s, radius(s)]);
 
-  const pose = (t, G) => {
+  const pose = (t, G, amount = 1) => {
     const p = TAU * (t / beat.period + phase);
     const M = [];
     for (let l = 0; l <= LEVELS; l++) {
@@ -518,12 +653,12 @@ function lobedFin(body, spec, far, phase, beat) {
       let W;
       if (beat === PADDLE) {
         // Forward and out, back and in: the tip sweeps a loop; it feathers as it turns.
-        const sw = -beat.swing * Math.sin(q), sp = beat.spread * Math.cos(q), fe = beat.feather * Math.cos(q + 0.4);
+        const sw = -beat.swing * amount * Math.sin(q), sp = beat.spread * amount * Math.cos(q), fe = beat.feather * amount * Math.cos(q + 0.4);
         const spreadAxis = unit(cross(S, [0, 0, 1]));
         W = mul(rotZ(sw), mul(axisAngle(spreadAxis, sp), mul(R0, rotX(fe))));
       } else {
         // From side to side about the body's long axis, a little back and forth.
-        W = mul(rotX(beat.swing * Math.sin(q)), mul(rotZ(0.08 * Math.cos(q) * Math.sign(angle)), R0));
+        W = mul(rotX(beat.swing * amount * Math.sin(q)), mul(rotZ(0.08 * amount * Math.cos(q) * Math.sign(angle)), R0));
       }
       const CM = mul(G, far ? mul([1, 0, 0, 0, 1, 0, 0, 0, -1], W) : W);
       M.push(CM);
@@ -541,9 +676,11 @@ function lobedFin(body, spec, far, phase, beat) {
   };
   const levelOf = (s) => clamp(Math.round((s / F) * LEVELS), 0, LEVELS);
 
-  // Laid out in dashes for dashes `L` long.
+  // Laid out in dashes for dashes `L` long; on a small fish, as fewer rays in
+  // fine unbroken lines, as the dragonfly's wings are on a small screen.
   const sample = (L, rand, G) => {
     const lines = [], membrane = [], lobe = [];
+    const { dense, B, detail } = detailOf(L), unbroken = detail < 110;
     const dashAlong = (into, a, b, step, len, drop = 0) => {
       walk([a, b], step, step * (0.3 + 0.4 * rand()), (p, t) => {
         if (rand() < drop) return;
@@ -551,9 +688,18 @@ function lobedFin(body, spec, far, phase, beat) {
         into.push(p[0] - t[0] * h, p[1] - t[1] * h, levelOf(p[0] - t[0] * h), p[0] + t[0] * h, p[1] + t[1] * h, levelOf(p[0] + t[0] * h));
       });
     };
-    for (const [from, to] of rays) dashAlong(lines, from, to, L * 1.08, 1);
+    const lineAlong = (into, a, b) => {
+      for (let k = 0; k < 4; k++) {
+        const p = [a[0] + ((b[0] - a[0]) * k) / 4, a[1] + ((b[1] - a[1]) * k) / 4], q = [a[0] + ((b[0] - a[0]) * (k + 1)) / 4, a[1] + ((b[1] - a[1]) * (k + 1)) / 4];
+        into.push(p[0], p[1], levelOf(p[0]), q[0], q[1], levelOf(q[0]));
+      }
+    };
+    if (unbroken) {
+      const every = Math.max(1, Math.round((L * 0.75) / (total / rays.length)));
+      rays.forEach(([from, to], k) => k % every === Math.floor(every / 2) && lineAlong(lines, from, to));
+    } else for (const [from, to] of rays) dashAlong(lines, from, to, L * 1.08, 1);
     // Fine membrane between the rays, along them.
-    for (let k = 0; k < rays.length - 1; k++) {
+    for (let k = 0; !unbroken && k < rays.length - 1; k++) {
       const [a0, b0] = rays[k], [a1, b1] = rays[k + 1];
       const wideBy = Math.hypot(b1[0] - b0[0], b1[1] - b0[1]);
       const n = Math.max(0, Math.floor(wideBy / (L * 0.8)));
@@ -569,14 +715,15 @@ function lobedFin(body, spec, far, phase, beat) {
         return [s, r * Math.cos(q), 0.72 * r * Math.sin(q)];
       },
       (p) => [0, p[1], p[2]],
-      L * 0.55,
-      L * 1.1,
+      L * 0.55 + (B * 0.22 - L * 0.55) * dense,
+      L * 1.1 + (B - L * 1.1) * dense,
       rand,
       (p, dir, nrm) => {
         const n = apply(G, apply(R0, nrm));
-        const diffuse = Math.max(0, dot(n, LIGHT));
-        if (rand() > 1 - 0.45 * diffuse ** 2) return;
-        const h = L * 0.45 * (0.85 + 0.3 * rand());
+        const diffuse = Math.max(0, dot(n, LIGHT)), sheen = smooth(clamp((Math.max(0, dot(n, HALF)) ** 14 - 0.3) / 0.5, 0, 1));
+        const open = 1 - 0.45 * diffuse ** 2, closed = 1 - 0.5 * sheen;
+        if (rand() > open + (closed - open) * dense) return;
+        const h = B * 0.45 * (0.85 + 0.3 * rand());
         const a = sub(p, scaled(dir, h)), b = add(p, scaled(dir, h));
         lobe.push(a[0], a[1], a[2], b[0], b[1], b[2], nrm[0], nrm[1], nrm[2], levelOf(p[0]));
       },
@@ -588,6 +735,7 @@ function lobedFin(body, spec, far, phase, beat) {
       outline: outline.map(([s, c]) => [s, c, levelOf(s)]),
       axis: [[clearFrom + r0 * 0.4, 0, levelOf(clearFrom)], [Ls * 0.8, 0, levelOf(Ls * 0.8)]],
       lobeWidth: r0 * 1.9,
+      unbroken,
     };
   };
 
@@ -621,10 +769,19 @@ function fanFin(body, spec, phase) {
   const k = TAU / WAVE.wavelength;
   const sway = (x, f, t) => WAVE.amplitude * (spec.bold ? 0.25 : 1) * f ** 1.5 * Math.sin(TAU * (t / WAVE.period + phase) - k * (x + 50));
 
-  const pose = (t) => ({ t });
+  const pose = (t, G, amount = 1) => ({ t, amount });
   const reach = (kk) => outline.map(([x, y]) => [x, y, sway(x, 1, kk * WAVE.period)]);
   const sample = (L, rand) => {
     const lines = [], membrane = [];
+    const unbroken = detailOf(L).detail < 110;
+    if (unbroken) {
+      const every = Math.max(1, Math.round((L * 0.75) / (total / rays.length)));
+      rays.forEach(([a, b], m) => {
+        if (m % every !== Math.floor(every / 2) && m !== 0 && m !== rays.length - 1) return;
+        for (let k = 0; k < 4; k++) lines.push(a[0] + ((b[0] - a[0]) * k) / 4, a[1] + ((b[1] - a[1]) * k) / 4, k / 4, a[0] + ((b[0] - a[0]) * (k + 1)) / 4, a[1] + ((b[1] - a[1]) * (k + 1)) / 4, (k + 1) / 4);
+      });
+      return { lines: Float32Array.from(lines), membrane: new Float32Array(0), sway, unbroken };
+    }
     const along = (into, a, b, step, len, stop = 1, drop = 0) => {
       const total = Math.hypot(b[0] - a[0], b[1] - a[1]);
       walk([a, b], step, step * (0.3 + 0.4 * rand()), (p, t) => {
@@ -661,7 +818,9 @@ function fanFin(body, spec, phase) {
 }
 
 // Strokes a fin as it is posed now.
-function drawFin(ctx, lay, fin, dashes, pose) {
+// `grow` is how far it has unfurled, from nothing at 0 to all of it at 1.
+function drawFin(ctx, lay, fin, dashes, pose, grow = 1) {
+  if (grow <= 0) return;
   const { scale, ox, oy, dash } = lay;
   const width = dash.width;
   const toScreen = (q, out) => {
@@ -672,20 +831,21 @@ function drawFin(ctx, lay, fin, dashes, pose) {
   };
   const A = [0, 0], B = [0, 0];
   if (fin.kind === 'fan') {
-    const t = pose.t;
+    const { t, amount } = pose;
     const G = lay.G;
     const strokeAll = (arr, w) => {
       ctx.lineWidth = width * w;
       ctx.beginPath();
       for (let i = 0; i < arr.length; i += 6) {
-        toScreen(apply(G, [arr[i], arr[i + 1], dashes.sway(arr[i], arr[i + 2], t)]), A);
-        toScreen(apply(G, [arr[i + 3], arr[i + 4], dashes.sway(arr[i + 3], arr[i + 5], t)]), B);
+        if (arr[i + 2] > grow) continue;
+        toScreen(apply(G, [arr[i], arr[i + 1], amount * dashes.sway(arr[i], arr[i + 2], t)]), A);
+        toScreen(apply(G, [arr[i + 3], arr[i + 4], amount * dashes.sway(arr[i + 3], arr[i + 5], t)]), B);
         ctx.moveTo(A[0], A[1]);
         ctx.lineTo(B[0], B[1]);
       }
       ctx.stroke();
     };
-    strokeAll(dashes.lines, 1.1);
+    strokeAll(dashes.lines, dashes.unbroken ? (fin.bold ? 1 : 0.75) : 1.1);
     strokeAll(dashes.membrane, 0.75);
     return;
   }
@@ -707,6 +867,7 @@ function drawFin(ctx, lay, fin, dashes, pose) {
     place(p[0], 0, 0, p[2], A);
     place(q[0], 0, 0, q[2], B);
     ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = grow;
     ctx.fill(outline);
     ctx.lineWidth = width * 2.2;
     ctx.stroke(outline);
@@ -716,11 +877,14 @@ function drawFin(ctx, lay, fin, dashes, pose) {
     ctx.lineTo(B[0], B[1]);
     ctx.stroke();
     ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
   }
+  const reach = grow * LEVELS + 0.5;
   const strokeAll = (arr, w) => {
     ctx.lineWidth = width * w;
     ctx.beginPath();
     for (let i = 0; i < arr.length; i += 6) {
+      if (arr[i + 2] > reach) continue;
       place(arr[i], arr[i + 1], 0, arr[i + 2], A);
       place(arr[i + 3], arr[i + 4], 0, arr[i + 5], B);
       ctx.moveTo(A[0], A[1]);
@@ -728,13 +892,14 @@ function drawFin(ctx, lay, fin, dashes, pose) {
     }
     ctx.stroke();
   };
-  strokeAll(dashes.lines, 1.1);
+  strokeAll(dashes.lines, dashes.unbroken ? 0.75 : 1.1);
   strokeAll(dashes.membrane, 0.75);
   // The lobe, leaving out its far side.
   const arr = dashes.lobe;
   ctx.lineWidth = width;
   ctx.beginPath();
   for (let i = 0; i < arr.length; i += 10) {
+    if (arr[i + 9] > reach) continue;
     const m = M[arr[i + 9]];
     if (m[6] * arr[i + 6] + m[7] * arr[i + 7] + m[8] * arr[i + 8] < 0.02) continue;
     place(arr[i], arr[i + 1], arr[i + 2], arr[i + 9], A);
@@ -826,7 +991,7 @@ function hatch(at, out, gap, step, rand, emit) {
       const around = unit(sub(dv, scaled(along, dot(dv, along))));
       let nrm = cross(around, along);
       if (dot(nrm, out(p, u)) < 0) nrm = scaled(nrm, -1);
-      emit(p, around, unit(nrm), u, v);
+      emit(p, around, unit(nrm), u, v, along);
     }
   }
 }

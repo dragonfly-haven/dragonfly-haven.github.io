@@ -26,7 +26,10 @@
     const options = {};
     for (const [key, value] of params) if (key !== 't') options[key] = value === 'true' ? true : value === 'false' ? false : Number(value);
     const fish = mountCoelacanth(document.getElementById('fish'), options);
-    if (params.has('t')) fish.advance(Number(params.get('t')));
+    if (params.has('t')) {
+      fish.pause();
+      fish.advance(Number(params.get('t')));
+    }
   </script>
 </body>
 </html>
