@@ -250,15 +250,20 @@
       "maxim": "Plain American dress, more Western European faces, more detail: yes"
     },
     "neural-net": {
-      "passed": true,
-      "when": "2026-10-19",
-      "scores": [
-        8,
-        9,
-        8
-      ],
-      "maxim": "more sleek and technical: yes",
-      "note": "rework after Maxim's notes: ruled 4-6-6-6-3 diagram; polished: half-lit nodes, heavier strong paths, no crossing dots, rings only on lit nodes, solid arrowheads"
+      "passed": false,
+      "note": "now the future city scene (draft A, stage 2): a family on a knoll looking out at a metropolis under a sky whose stars form neural networks; not yet reviewed. 2026-11-05: the family redrawn, the parents turned to profile looking down at the child, the child in lost profile looking up at the city; necks, sloping shoulders, arms hanging close, hands with thumbs and a clasp, calves and knees",
+      "maxim": "discard the pure neural net; carefully work on the human faces and anatomy",
+      "discarded": {
+        "passed": true,
+        "when": "2026-10-19",
+        "scores": [
+          8,
+          9,
+          8
+        ],
+        "maxim": "more sleek and technical: yes",
+        "note": "rework after Maxim's notes: ruled 4-6-6-6-3 diagram; polished: half-lit nodes, heavier strong paths, no crossing dots, rings only on lit nodes, solid arrowheads"
+      }
     }
   }
 }

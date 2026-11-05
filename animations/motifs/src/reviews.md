@@ -15,6 +15,6 @@ Scores are in status.json.
 - Heavy double shoulder line behind the gill cover reads as a helmet seam: thin or break the rear line.
 - Thin the eye's outer ring; thin the scale marks toward the belly.
 
-## 21 neural net (2026-10-19: 9 / 9 / 8, pass)
-- Remove the small vertical ticks above the top and below the bottom node of each column (stray marks at 1x).
-- Optional: a slight wobble or taper on the thinnest connections.
+## 21 the future (city scene)
+- Not yet reviewed. The notes that stood here were for the ruled neural-net diagram, discarded on 2026-11-05.
+- Open from a first look (2026-11-05): far over the set's budget (about 6200 strokes, 91 000 units of ink); the star-made nets small and faint at 1x; the road on the left runs through the knoll; the city's saucers lean toward cartoon.

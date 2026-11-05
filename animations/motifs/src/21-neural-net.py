@@ -3,6 +3,10 @@ whose stars form neural networks.
 
 STAGE 2 (draft A, "big sky", chosen by Maxim): a family stands on a knoll at
 the left, seen from behind, hand in hand, an old tree framing them at the edge.
+The parents have turned their heads to look down at the child, so their faces
+show in profile (an ear, an eye under its lid, brow, nose, lips, chin, jaw);
+the child looks up and out at the city, its cheek, nose tip and lashes just
+showing past its head.
 Below them a meadow plain falls away, with belts of woodland and single trees,
 to a calm lake; the metropolis rises from its far shore in three ranks (low
 domes and terraces, towers with saucers, skybridges and a great arch, then the
@@ -20,8 +24,9 @@ over a flat plain, horizon at YH), so the roads narrow as they should. Things
 are drawn front to back; each solid shape hides what is drawn after it.
 Not mirrored (slot 21 faces as drawn).
 
-(The passed neural-net figure this replaces is backed up in the scratchpad;
-base/21-neural-net.svg holds the older hand-drawn net and is not read.)
+The ruled neural-net diagram that passed review for this slot on 2026-10-19 was
+discarded at Maxim's word on 2026-11-05 (it stays in git history at 820c732);
+base/21-neural-net.svg holds the older hand-drawn net and is not read.
 """
 
 import math
@@ -328,21 +333,50 @@ def tube(ctrl, widths, cap0=True, cap1=True):
     return lit, shd, outline
 
 
-def hand(W, d, L, wd, fingers=True, w=1.3):
-    """A hand seen from the back: a rounded mitten from the wrist W along unit d."""
+def _frame(W, d, L, side):
+    """Hand-local points: x across the hand (outward to `side`), y along d."""
     ux, uy = d
-    nx, ny = -uy, ux
+    nx, ny = side * uy, -side * ux
 
-    def Q(s, t):
-        return (W[0] + ux * s * L + nx * t * wd, W[1] + uy * s * L + ny * t * wd)
-    out = C([Q(0, -0.46), Q(0.32, -0.55), Q(0.66, -0.5), Q(0.9, -0.32), Q(1.0, -0.04), Q(0.96, 0.24), Q(0.78, 0.47),
-             Q(0.5, 0.56), Q(0.22, 0.56), Q(0, 0.46)], step=0.8)
-    pen.line(out, w=w, hand=0.2, lift=0)
-    if fingers:
-        for t in (-0.22, 0.04, 0.28):
-            fine([Q(0.58, t), Q(0.93, t * 1.05)], w=0.7, hand=0.1)
-        fine([Q(0.12, 0.34), Q(0.42, 0.36)], w=0.6, hand=0.1)   # a tendon
-    poly = out + [Q(-0.05, 0.46), Q(-0.05, -0.46)]
+    def Q(x, y):
+        return (W[0] + (nx * x + ux * y) * L, W[1] + (ny * x + uy * y) * L)
+    return Q
+
+
+def hand(W, d, L, side, w=1.3, occ=True):
+    """A relaxed hanging hand, seen from behind and a little outside: the
+    little-finger edge outward (side +1 = page right), the fingers loosely
+    together and a little curled, the thumb's tip showing past the index."""
+    Q = _frame(W, d, L, side)
+    edge = [(0.19, 0.0), (0.235, 0.16), (0.262, 0.34), (0.25, 0.5), (0.215, 0.64), (0.16, 0.76), (0.1, 0.84),
+            (0.03, 0.905), (-0.04, 0.925), (-0.1, 0.885), (-0.145, 0.79), (-0.175, 0.67), (-0.2, 0.6),
+            (-0.245, 0.585), (-0.268, 0.53), (-0.262, 0.44), (-0.235, 0.37), (-0.212, 0.22), (-0.185, 0.0)]
+    out = C([Q(*p) for p in edge], step=0.7)
+    pen.line(out, w=w, hand=0.15, lift=0)
+    fine(C([Q(0.15, 0.56), Q(0.125, 0.69), Q(0.085, 0.8)], step=0.8), w=0.7, hand=0.1)      # little finger
+    fine(C([Q(-0.06, 0.6), Q(-0.075, 0.74), Q(-0.09, 0.84)], step=0.8), w=0.7, hand=0.1)    # index
+    fine(C([Q(-0.2, 0.44), Q(-0.215, 0.52), Q(-0.205, 0.575)], step=0.8), w=0.65, hand=0.1)  # the thumb's root
+    poly = out + [Q(-0.19, -0.08), Q(0.19, -0.08)]
+    if occ:
+        pen.occlude(poly)
+    return poly
+
+
+def grip(W, d, L, side, w=1.35):
+    """A parent's hand closed round a child's, seen from behind: the back of
+    the hand, a row of knuckles, the fingers wrapped forward out of sight and
+    the thumb lying along the top (side +1: thumb toward page right)."""
+    Q = _frame(W, d, L, side)
+    edge = [(-0.23, 0.0), (-0.26, 0.2), (-0.27, 0.42), (-0.245, 0.56), (-0.18, 0.66), (-0.08, 0.71),
+            (0.03, 0.72), (0.13, 0.69), (0.21, 0.62), (0.27, 0.53), (0.33, 0.46), (0.37, 0.36), (0.34, 0.28),
+            (0.27, 0.27), (0.24, 0.14), (0.22, 0.0)]
+    out = C([Q(*p) for p in edge], step=0.7)
+    pen.line(out, w=w, hand=0.15, lift=0)
+    fine(C([Q(-0.24, 0.5), Q(-0.1, 0.53), Q(0.04, 0.53), Q(0.17, 0.5)], step=0.8), w=0.7, hand=0.1)   # knuckles
+    fine(C([Q(-0.1, 0.55), Q(-0.1, 0.68)], step=0.8), w=0.65, hand=0.05)
+    fine(C([Q(0.08, 0.55), Q(0.09, 0.69)], step=0.8), w=0.65, hand=0.05)
+    fine(C([Q(0.24, 0.3), Q(0.25, 0.44), Q(0.22, 0.52)], step=0.8), w=0.7, hand=0.1)              # the thumb
+    poly = out + [Q(0.22, -0.08), Q(-0.23, -0.08)]
     pen.occlude(poly)
     return poly
 
@@ -427,216 +461,320 @@ def sleeve(fig, S, E, W, widths, w=1.8, body_cx=None, t_in=0.24):
     return out
 
 
-def hairy_head(hc, rx, ry, w=1.8, amp=0.03):
-    """The back of a head as its hair's outline: an oval with small locks."""
-    ph1, ph2 = R(0, 6.3), R(0, 6.3)
-    pts = []
-    N = int(2 * math.pi * max(rx, ry) / 1.0)
-    for k in range(N + 1):
-        a = 2 * math.pi * k / N
-        top = max(0.0, -math.sin(a))  # locks on the crown and sides, a smooth nape
-        r = 1 + amp * top * (0.6 * math.sin(9 * a + ph1) + 0.4 * math.sin(14 * a + ph2))
-        pts.append((hc[0] + math.cos(a) * rx * r, hc[1] + math.sin(a) * ry * r))
-    pen.line(pts, w=w, hand=0.25, lift=0.04)
-    return pts
+# ---------------------------------------------------------------- heads
+#
+# A head is drawn in its own frame: unit = the head's height (crown to chin),
+# origin at the ear opening, x toward the face, y down. head_xf places it on
+# the page facing right (+1) or left (-1), tipped down by `pitch` degrees
+# (negative looks up) about the top of the neck.
+
+def head_xf(o, h, facing, pitch, pivot=(0.04, 0.26)):
+    a = math.radians(pitch) * facing
+    ca, sa = math.cos(a), math.sin(a)
+    px, py = pivot[0] * facing, pivot[1]
+
+    def T(pts):
+        out = []
+        for x, y in pts:
+            x *= facing
+            dx, dy = x - px, y - py
+            out.append((o[0] + (px + dx * ca - dy * sa) * h, o[1] + (py + dx * sa + dy * ca) * h))
+        return out
+    return T
 
 
-def hair_short(hc, rx, ry, crown, n, u, tousle=0.0, seed_side=1):
-    """Short hair on the back of a head: strands sweeping from the crown whorl
-    down and round to the nape and sides, of varied length, clumped, and more
-    of them on the shade (right) side."""
-    head = ellipse_pts(hc[0], hc[1], rx, ry, 0, 0, 2 * math.pi, step=1.0)
-    for k in range(n):
-        f = (k + R(0.2, 0.8)) / n
-        a = math.pi * (0.04 + 0.92 * f)            # 0 = right side ... pi = left side, through the bottom
-        r0 = R(0.22, 0.5)
-        st = (crown[0] + math.cos(a) * rx * r0 * 0.7, crown[1] + math.sin(a) * ry * r0 * 0.45 + ry * 0.04)
-        reach = R(0.72, 0.98) if R() < 0.75 else R(0.45, 0.7)
-        en = (hc[0] + math.cos(a) * rx * reach, hc[1] + math.sin(a) * ry * reach * 0.9 + ry * 0.05)
-        tw = 0.18 * rx * (1 if k % 2 else -0.6)            # the sweep round the whorl
-        m = lerp(st, en, 0.5)
-        m = (m[0] - math.sin(a) * tw + G(0.5), m[1] + math.cos(a) * tw * 0.3)
-        pts = [st, m, en]
-        if tousle:
-            pts.append((en[0] + math.cos(a + 1.2) * tousle * rx, en[1] + math.sin(a + 1.2) * tousle * ry))
-        wv = 0.75 if math.cos(a) > -0.2 else 0.68
-        for run in clip_in(C(pts, step=1.0), head):
-            if length(run) > 3:
-                fine(run, w=wv * R(0.9, 1.1), hand=0.25)
-    # the whorl itself: two small curls
-    for r in (0.12, 0.22):
-        arc = ellipse_pts(crown[0], crown[1] + ry * 0.04, rx * r, ry * r * 0.8, 0, R(0, 1), R(3.5, 4.8), step=0.6)
-        fine(arc, w=0.65, hand=0.1)
+# a head in profile: the back of the skull from the nape over the crown to the
+# hairline, then the face (brow, nose, lips, chin) and under the jaw to the throat
+SKULL = [(-0.25, 0.33), (-0.33, 0.22), (-0.41, 0.08), (-0.455, -0.07), (-0.445, -0.22), (-0.38, -0.36),
+         (-0.26, -0.46), (-0.1, -0.51), (0.06, -0.505), (0.2, -0.45), (0.3, -0.35), (0.355, -0.23)]
+FACE = {
+    'woman': [(0.355, -0.23), (0.373, -0.13), (0.38, -0.07), (0.372, -0.025), (0.385, 0.04), (0.408, 0.11),
+              (0.428, 0.157), (0.418, 0.181), (0.392, 0.193), (0.378, 0.205), (0.392, 0.246), (0.39, 0.276),
+              (0.377, 0.292), (0.39, 0.318), (0.382, 0.348), (0.362, 0.37), (0.37, 0.415), (0.35, 0.462),
+              (0.29, 0.492), (0.2, 0.49), (0.11, 0.455), (0.06, 0.44)],
+    'man': [(0.355, -0.23), (0.378, -0.13), (0.398, -0.07), (0.376, -0.018), (0.392, 0.04), (0.428, 0.11),
+            (0.468, 0.16), (0.455, 0.19), (0.41, 0.2), (0.38, 0.212), (0.393, 0.252), (0.382, 0.282),
+            (0.366, 0.297), (0.38, 0.323), (0.364, 0.352), (0.35, 0.374), (0.37, 0.425), (0.358, 0.478),
+            (0.3, 0.508), (0.2, 0.5), (0.11, 0.462), (0.06, 0.446)],
+}
+EAR = [(0.03, -0.075), (-0.02, -0.108), (-0.085, -0.095), (-0.125, -0.035), (-0.132, 0.05), (-0.112, 0.12),
+       (-0.08, 0.18), (-0.04, 0.214), (0.0, 0.208), (0.016, 0.178)]
+ANTIHELIX = [(-0.025, -0.06), (-0.075, -0.035), (-0.088, 0.04), (-0.065, 0.11)]
 
+
+def profile_head(o, h, facing, pitch, kind, hair=None):
+    """A head turned to profile on a body seen from behind: an ear, an eye
+    under its lid looking down, a brow, the nose's wing, the line of the
+    mouth, the jaw; short hair for the man, long hair (drawn by the caller,
+    since it falls down the back) for the woman. Returns (T, outline)."""
+    T = head_xf(o, h, facing, pitch)
+    face = FACE[kind]
+    man = kind == 'man'
+    # the ear (in front of the hair)
+    ear = C(T(EAR), step=0.6)
+    pen.line(ear, w=1.15, hand=0.1, lift=0)
+    fine(C(T(ANTIHELIX), step=0.6), w=0.65, hand=0.05)
+    pen.occlude(ear + T([(0.03, 0.12)]))
+    # the eye, looking down, its lashes; the brow above
+    fine(C(T([(0.262, 0.004), (0.298, -0.008), (0.335, 0.008)]), step=0.5), w=1.0, hand=0.05)
+    fine(C(T([(0.335, 0.008), (0.352, 0.024)]), step=0.5), w=0.85, hand=0.0)
+    fine(C(T([(0.28, 0.03), (0.318, 0.034)]), step=0.5), w=0.6, hand=0.0)
+    brow = [(0.232, -0.068), (0.29, -0.09), (0.35, -0.083)] if not man else [(0.228, -0.062), (0.29, -0.082),
+                                                                              (0.365, -0.072)]
+    fine(C(T(brow), step=0.5), w=1.0 if man else 0.8, hand=0.05)
+    # the nose's wing, the mouth, the jaw and the fold from nose to cheek
+    fine(C(T([(0.392, 0.152), (0.378, 0.174), (0.39, 0.193)] if not man else
+             [(0.42, 0.15), (0.398, 0.176), (0.41, 0.2)]), step=0.5), w=0.8, hand=0.0)
+    mouth = [(0.377, 0.293), (0.345, 0.3)] if not man else [(0.366, 0.297), (0.335, 0.303)]
+    fine(C(T(mouth), step=0.5), w=0.85, hand=0.0)
+    jaw = [(-0.005, 0.24), (0.005, 0.33), (0.07, 0.405), (0.17, 0.46)] if man else [(0.0, 0.26), (0.02, 0.34),
+                                                                                    (0.08, 0.4)]
+    fine(C(T(jaw), step=0.6), w=0.95 if man else 0.75, hand=0.1)
+    if man:
+        # short hair: the hairline down the temple to a sideburn, round the ear
+        # to the nape, and a few locks swept back from the brow
+        line = [(0.33, -0.3), (0.25, -0.27), (0.17, -0.2), (0.14, -0.12), (0.115, -0.04), (0.105, 0.05),
+                (0.07, 0.05), (0.055, -0.06), (0.0, -0.13), (-0.085, -0.14), (-0.155, -0.075), (-0.18, 0.05),
+                (-0.215, 0.17), (-0.27, 0.27)]
+        pen.line(C(T(line), step=0.6), w=0.75, hand=0.1, lift=0.15, piece=(8, 20))
+        locks = [[(0.29, -0.36), (0.14, -0.42), (-0.05, -0.43)], [(0.2, -0.27), (0.06, -0.33), (-0.12, -0.36)],
+                 [(0.12, -0.16), (-0.02, -0.24), (-0.2, -0.3)], [(-0.2, -0.12), (-0.3, -0.21), (-0.36, -0.3)],
+                 [(-0.24, 0.12), (-0.32, 0.02), (-0.38, -0.1)], [(-0.1, -0.44), (-0.26, -0.4), (-0.36, -0.3)]]
+        for lk in locks:
+            fine(C(T(lk), step=0.8), w=0.7, hand=0.15)
+    if hair:
+        hair(T)          # long hair lies over the skull's outline
+    outline = C(T(SKULL + face[1:]), step=0.6)
+    pen.line(outline, w=1.75, hand=0.2, lift=0.02)
+    poly = outline + T([(0.0, 0.42), (-0.15, 0.38)])
+    pen.occlude(poly)
+    return T, poly
+
+
+def lost_profile_head(o, h, pitch):
+    """A child's head from behind, turned a little to the right and up toward
+    the city: the curve of the cheek, the tip of the nose and the lashes show
+    past it; the near ear seen from behind; tousled short hair from a whorl."""
+    T = head_xf(o, h, 1, pitch, pivot=(0.0, 0.32))
+    ear = C(T([(0.18, -0.085), (0.13, -0.075), (0.105, 0.0), (0.112, 0.09), (0.145, 0.15), (0.19, 0.155)]), step=0.6)
+    pen.line(ear, w=1.15, hand=0.1, lift=0)
+    fine(C(T([(0.16, -0.045), (0.14, 0.03), (0.152, 0.1)]), step=0.6), w=0.65, hand=0.05)
+    pen.occlude(ear + T([(0.2, 0.05)]))
+    fine(C(T([(0.352, 0.0), (0.378, -0.008), (0.402, -0.026)]), step=0.5), w=0.85, hand=0.0)   # lashes
+    fine(C(T([(0.2, 0.2), (0.24, 0.29), (0.3, 0.33)]), step=0.6), w=0.7, hand=0.1)    # the jaw under the cheek
+    # hair: the hairline at the temple and in front of the ear, the nape
+    fine(C(T([(0.348, -0.25), (0.3, -0.17), (0.265, -0.09), (0.245, -0.03), (0.2, -0.09)]), step=0.6), w=0.85,
+         hand=0.1)
+    fine(C(T([(0.115, 0.13), (0.06, 0.24), (-0.04, 0.31), (-0.17, 0.33)]), step=0.6), w=0.85, hand=0.15)
+    out = [(-0.17, 0.36), (-0.27, 0.25), (-0.34, 0.1), (-0.37, -0.07), (-0.35, -0.24), (-0.27, -0.39),
+           (-0.13, -0.48), (0.03, -0.505), (0.18, -0.465), (0.29, -0.365), (0.352, -0.225), (0.372, -0.1),
+           (0.368, -0.035), (0.36, 0.005), (0.378, 0.05), (0.418, 0.105), (0.402, 0.135), (0.376, 0.15),
+           (0.386, 0.19), (0.372, 0.262), (0.335, 0.318), (0.27, 0.36), (0.19, 0.38)]
+    outline = C(T(out), step=0.6)
+    inner = T(out) + T([(0.1, 0.42), (-0.05, 0.42)])
+    # short hair: locks combed out from a whorl at the crown, following the
+    # skull, a few lifting off the outline
+    crown = (0.02, -0.3)
+    for lk in ([(0.06, -0.41), (0.19, -0.38), (0.3, -0.27)], [(0.04, -0.29), (0.15, -0.22), (0.23, -0.1)],
+               [(-0.04, -0.37), (-0.19, -0.36), (-0.3, -0.25)], [(-0.04, -0.27), (-0.19, -0.18), (-0.29, -0.01)],
+               [(0.0, -0.21), (-0.08, -0.05), (-0.14, 0.13)], [(0.07, -0.2), (0.08, -0.03), (0.05, 0.13)],
+               [(-0.17, 0.04), (-0.21, 0.17), (-0.25, 0.26)]):
+        lk = [(x + G(0.006), y + G(0.006)) for x, y in lk]
+        for run in clip_in(C(T(lk), step=0.5), inner):
+            if length(run) > 2:
+                fine(run, w=0.72 * R(0.92, 1.08), hand=0.1)
+    fine(C(T([(crown[0] + math.cos(t) * 0.04, crown[1] + math.sin(t) * 0.035) for t in
+              [0.3 + k * 0.5 for k in range(9)]]), step=0.5), w=0.68, hand=0.05)
+    for t, L_ in ((-2.0, 0.07), (-1.55, 0.08), (-1.05, 0.07), (-2.6, 0.06), (2.9, 0.06)):
+        base = (crown[0] + math.cos(t) * 0.36, crown[1] + 0.3 + math.sin(t) * 0.48)
+        tip = (base[0] + math.cos(t + 0.7) * L_, base[1] + math.sin(t + 0.7) * L_)
+        fine(C(T([lerp(base, crown, 0.06), base, tip]), step=0.5), w=0.9, hand=0.05)
+    pen.line(outline, w=1.7, hand=0.2, lift=0.02)
+    poly = outline + T([(0.1, 0.42), (-0.05, 0.42)])
+    pen.occlude(poly)
+    return T, poly
+
+
+def neck(f, T, xs, y0, y1, w=1.05, scm=None):
+    """The neck below a turned head: its two sides as seen from behind (x in
+    figure units, from y0 down to y1), clipped by the head; and the long
+    muscle from behind the ear down toward the throat (head-frame points)."""
+    for x in xs:
+        fine(C(f.Ps([(x, y0), (x * 1.04, (y0 + y1) / 2), (x * 1.12, y1)]), step=0.8), w=w, hand=0.1)
+    if scm:
+        fine(C(scm, step=0.8), w=0.75, hand=0.1)
+
+
+# ---------------------------------------------------------------- the family
 
 def family(ox, oy, H):
-    """A woman, a child and a man, hand in hand, seen from behind, looking
-    out at the city. (ox, oy) is the middle of their feet line on the page; H
-    the man's height. Plain, timeless dress: a long sashed dress, a knee coat
-    over trousers, a child's tunic over leggings."""
+    """A woman, a child and a man, hand in hand, seen from behind on the
+    knoll. The parents have turned their heads to look down at the child, so
+    their faces show in profile; the child looks up and out at the city, its
+    cheek and nose just showing. (ox, oy) is the middle of their feet line on
+    the page; H the man's height. Plain, timeless dress: a long sashed dress, a
+    knee coat over trousers, a child's tunic over leggings."""
     Wf = Fig(ox, oy, H, -0.385, 0.93, 0.0)
     Cf = Fig(ox, oy, H, 0.0, 0.60, 0.015)
     Mf = Fig(ox, oy, H, 0.395, 1.0, 0.004)
 
     def gp(g):
         return (ox + g[0] * H, oy + g[1] * H)
-    GL, GR = gp((-0.272, -0.405)), gp((0.274, -0.415))     # where the hands meet
+    GL, GR = gp((-0.268, -0.405)), gp((0.27, -0.415))     # where the hands meet
 
-    # -- the parents' hands that hold the child's (they are nearest the eye there)
-    wS = Wf.P((0.106, -0.788))
-    wW = (GL[0] + 0.006 * H, GL[1] - 0.052 * H)
-    wE, wW = ik(wS, wW, 0.175 * Wf.u, 0.16 * Wf.u, (1, 0))
-    d = (GL[0] - wW[0] - 0.004 * H, GL[1] + 0.03 * H - wW[1])
-    dl = math.hypot(*d)
-    hand(wW, (d[0] / dl, d[1] / dl), 0.085 * Wf.u, 0.05 * Wf.u)
-    mS = Mf.P((-0.116, -0.794))
-    mW = (GR[0] - 0.006 * H, GR[1] - 0.054 * H)
-    mE, mW = ik(mS, mW, 0.18 * H, 0.17 * H, (-1, 0))
-    d = (GR[0] - mW[0] + 0.004 * H, GR[1] + 0.03 * H - mW[1])
-    dl = math.hypot(*d)
-    hand(mW, (d[0] / dl, d[1] / dl), 0.088 * H, 0.052 * H)
+    def unit(a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        dl = math.hypot(dx, dy) or 1
+        return (dx / dl, dy / dl)
+
+    # -- the parents' hands that hold the child's (nearest the eye there)
+    wS = Wf.P((0.094, -0.806))
+    wW = (GL[0] - 0.012 * H, GL[1] - 0.048 * H)
+    wE, wW = ik(wS, wW, 0.178 * Wf.u, 0.152 * Wf.u, (1, 0.4))
+    grip(wW, unit(wW, (GL[0] + 0.01 * H, GL[1] + 0.012 * H)), 0.1 * Wf.u, -1)
+    mS = Mf.P((-0.1, -0.81))
+    mW = (GR[0] + 0.012 * H, GR[1] - 0.05 * H)
+    mE, mW = ik(mS, mW, 0.185 * H, 0.158 * H, (-1, 0.4))
+    grip(mW, unit(mW, (GR[0] - 0.01 * H, GR[1] + 0.012 * H)), 0.104 * H, 1)
 
     # ------------------------------------------------ the child (in front)
     f = Cf
     u = f.u
-    hc = f.P((0, -0.885))
-    head = ellipse_pts(hc[0], hc[1], 0.088 * u, 0.102 * u, 0, 0, 2 * math.pi, step=1.0)
-    # ears, then the head and hair
-    for sgn in (-1, 1):
-        ear = f.Ps([(sgn * 0.084, -0.912), (sgn * 0.101, -0.906), (sgn * 0.104, -0.884), (sgn * 0.093, -0.866),
-                    (sgn * 0.082, -0.866)])
-        pen.line(C(ear, step=0.8), w=1.2, hand=0.2, lift=0)
-    head = hairy_head(hc, 0.088 * u, 0.102 * u, amp=0.035)
-    nape = C(f.Ps([(-0.082, -0.858), (-0.06, -0.836), (-0.03, -0.826), (0, -0.822), (0.03, -0.829), (0.058, -0.838),
-                   (0.082, -0.858)]), step=1)
-    fine(nape, w=1.1, hand=0.3)
-    # tousled short hair, from a whorl at the crown
-    hair_short(hc, 0.088 * u, 0.102 * u, f.P((0.014, -0.962)), 14, u, tousle=0.14)
-    pen.occlude(head)
-    # neck
-    fine(C(f.Ps([(-0.033, -0.826), (-0.035, -0.8)]), step=1), w=1.0)
-    fine(C(f.Ps([(0.033, -0.826), (0.035, -0.8)]), step=1), w=1.0)
-    # arms raised a little to the parents' hands
+    T, hpoly = lost_profile_head(f.P((0.0, -0.89)), 0.205 * u, -7)
+    neck(f, T, (-0.036, 0.04), -0.86, -0.792, w=1.0)
+    # arms raised a little to the parents' hands; small hands inside theirs
     for sgn, G_ in ((-1, GL), (1, GR)):
-        S = f.P((sgn * 0.112, -0.742))
-        dd = (G_[0] - S[0], G_[1] - S[1])
-        dl = math.hypot(*dd)
-        Wt = (G_[0] - dd[0] / dl * 0.05 * u, G_[1] - dd[1] / dl * 0.05 * u)
-        E, Wt = ik(S, Wt, 0.16 * u, 0.15 * u, (0, 1))
-        hd = (G_[0] - Wt[0], G_[1] - Wt[1])
-        hl = math.hypot(*hd)
-        hand(Wt, (hd[0] / hl, hd[1] / hl), 0.075 * u, 0.055 * u, fingers=False, w=1.2)
-        sleeve(f, S, E, Wt, [0.068 * u, 0.058 * u, 0.05 * u], w=1.7, t_in=0.16)
+        S = f.P((sgn * 0.1, -0.748))
+        dd = unit(S, G_)
+        Wt = (G_[0] - dd[0] * 0.07 * u, G_[1] - dd[1] * 0.07 * u)
+        E, Wt = ik(S, Wt, 0.165 * u, 0.15 * u, (0, 1))
+        hand(Wt, unit(Wt, G_), 0.11 * u, -sgn, w=1.15, occ=False)
+        sleeve(f, S, E, Wt, [0.062 * u, 0.054 * u, 0.047 * u], w=1.65, t_in=0.16)
     # tunic
-    tl = [(-0.048, -0.796), (-0.098, -0.778), (-0.133, -0.752), (-0.13, -0.69), (-0.121, -0.6), (-0.124, -0.51),
-          (-0.142, -0.408)]
-    hem = [(-0.142, -0.408), (-0.07, -0.401), (0, -0.404), (0.07, -0.4), (0.142, -0.408)]
+    tl = [(-0.046, -0.8), (-0.082, -0.786), (-0.107, -0.766), (-0.118, -0.735), (-0.114, -0.69), (-0.108, -0.6),
+          (-0.114, -0.51), (-0.134, -0.408)]
+    hem = [(-0.134, -0.408), (-0.07, -0.401), (0, -0.404), (0.07, -0.4), (0.134, -0.408)]
     tr = list(reversed(f.mirror(tl)))
-    top = [(0.048, -0.796), (0, -0.792), (-0.048, -0.796)]
+    top = [(0.046, -0.8), (0, -0.795), (-0.046, -0.8)]
     tunic = outline_of(f.Ps(tl), f.Ps(hem), f.Ps(tr), f.Ps(top))
-    pen.line(tunic, w=1.8, hand=0.45, lift=0.06)
-    fine(C(f.Ps([(-0.054, -0.781), (0, -0.773), (0.054, -0.781)]), step=1), w=0.9)          # collar band
-    fine(C(f.Ps([(-0.137, -0.424), (0, -0.42), (0.137, -0.424)]), step=1), w=0.8)            # the hem's turn
-    fine(C(f.Ps([(-0.118, -0.58), (0, -0.572), (0.118, -0.58)]), step=1), w=0.85)            # a soft belt
-    fine(C(f.Ps([(-0.12, -0.556), (0, -0.549), (0.12, -0.556)]), step=1), w=0.85)
-    for x0, x1 in ((-0.05, -0.07), (0.045, 0.07)):
+    pen.line(tunic, w=1.75, hand=0.45, lift=0.06)
+    fine(C(f.Ps([(-0.052, -0.784), (0, -0.776), (0.052, -0.784)]), step=1), w=0.9)          # collar band
+    fine(C(f.Ps([(-0.13, -0.424), (0, -0.42), (0.13, -0.424)]), step=1), w=0.8)              # the hem's turn
+    fine(C(f.Ps([(-0.106, -0.58), (0, -0.572), (0.106, -0.58)]), step=1), w=0.85)            # a soft belt
+    fine(C(f.Ps([(-0.107, -0.556), (0, -0.549), (0.107, -0.556)]), step=1), w=0.85)
+    for x0, x1 in ((-0.05, -0.068), (0.045, 0.068)):
         fine(C(f.Ps([(x0, -0.545), (x1, -0.42)]), step=1), w=0.8)
-    rl = f.Ps([(-0.13, -0.74), (-0.123, -0.6), (-0.13, -0.5), (-0.14, -0.41)])
-    rr = f.Ps([(0.13, -0.74), (0.123, -0.6), (0.13, -0.5), (0.14, -0.41)])
-    lengthwise(C(rl), C(rr), 0.64, 0.97, spacing=5.4, clip=tunic, t0=0.04)
-    pen.occlude(tunic)
-    # legs in leggings, little boots
+    # the shoulder blades under the cloth
     for sgn in (-1, 1):
-        ol = [(sgn * 0.106, -0.42), (sgn * 0.098, -0.3), (sgn * 0.09, -0.16), (sgn * 0.084, -0.075)]
-        bt = [(sgn * 0.084, -0.075), (sgn * 0.056, -0.071), (sgn * 0.03, -0.075)]
-        il = [(sgn * 0.03, -0.075), (sgn * 0.028, -0.2), (sgn * 0.022, -0.32), (sgn * 0.012, -0.42)]
-        boot = C(f.Ps([(sgn * 0.088, -0.09), (sgn * 0.091, -0.035), (sgn * 0.083, -0.006), (sgn * 0.058, 0.0),
+        fine(C(f.Ps([(sgn * 0.03, -0.75), (sgn * 0.055, -0.715), (sgn * 0.075, -0.69)]), step=1), w=0.7, hand=0.1)
+    rl = f.Ps([(-0.117, -0.74), (-0.108, -0.6), (-0.116, -0.5), (-0.132, -0.41)])
+    rr = f.Ps([(0.117, -0.74), (0.108, -0.6), (0.116, -0.5), (0.132, -0.41)])
+    lengthwise(C(rl), C(rr), 0.66, 0.97, spacing=5.4, clip=tunic, t0=0.04)
+    pen.occlude(tunic)
+    # legs in leggings, with knees and calves; little boots
+    for sgn in (-1, 1):
+        ol = [(sgn * 0.102, -0.42), (sgn * 0.094, -0.33), (sgn * 0.088, -0.255), (sgn * 0.092, -0.2),
+              (sgn * 0.09, -0.14), (sgn * 0.078, -0.075)]
+        bt = [(sgn * 0.078, -0.075), (sgn * 0.054, -0.071), (sgn * 0.03, -0.075)]
+        il = [(sgn * 0.03, -0.075), (sgn * 0.024, -0.14), (sgn * 0.026, -0.2), (sgn * 0.022, -0.3),
+              (sgn * 0.012, -0.42)]
+        boot = C(f.Ps([(sgn * 0.082, -0.09), (sgn * 0.086, -0.035), (sgn * 0.079, -0.006), (sgn * 0.056, 0.0),
                        (sgn * 0.032, -0.006), (sgn * 0.026, -0.035), (sgn * 0.028, -0.09)]), step=0.8)
         pen.line(boot, w=1.6, hand=0.25, lift=0)
-        fine(C(f.Ps([(sgn * 0.09, -0.02), (sgn * 0.058, -0.016), (sgn * 0.027, -0.02)]), step=1), w=0.8)
+        fine(C(f.Ps([(sgn * 0.085, -0.02), (sgn * 0.056, -0.016), (sgn * 0.027, -0.02)]), step=1), w=0.8)
         pen.occlude(boot + [boot[0]])
         leg = outline_of(f.Ps(ol), f.Ps(bt), f.Ps(il))
         pen.line(leg, w=1.6, hand=0.35, lift=0.04)
-        lit = C(f.Ps([(sgn * 0.02, -0.41), (sgn * 0.028, -0.2), (sgn * 0.03, -0.08)]))
-        shd = C(f.Ps([(sgn * 0.104, -0.41), (sgn * 0.092, -0.2), (sgn * 0.084, -0.08)]))
+        fine(C(f.Ps([(sgn * 0.034, -0.262), (sgn * 0.058, -0.252), (sgn * 0.08, -0.262)]), step=1), w=0.7, hand=0.1)
+        lit = C(f.Ps([(sgn * 0.02, -0.41), (sgn * 0.026, -0.2), (sgn * 0.03, -0.08)]))
+        shd = C(f.Ps([(sgn * 0.1, -0.41), (sgn * 0.09, -0.2), (sgn * 0.078, -0.08)]))
         if sgn < 0:
             lit, shd = shd, lit
-        lengthwise(lit, shd, 0.6, 0.96, spacing=5.3, clip=leg + [leg[0]])
+        lengthwise(lit, shd, 0.62, 0.96, spacing=5.3, clip=leg + [leg[0]])
         pen.occlude(leg)
 
     # ------------------------------------------------ the woman
     f = Wf
     u = f.u
-    hl_ = [(0, -0.996), (-0.038, -0.99), (-0.058, -0.96), (-0.062, -0.92), (-0.066, -0.875), (-0.082, -0.83),
-           (-0.092, -0.77), (-0.091, -0.71), (-0.084, -0.66)]
-    tips = [(-0.084, -0.66), (-0.072, -0.634), (-0.052, -0.62), (-0.036, -0.626), (-0.018, -0.607), (0.004, -0.612),
-            (0.026, -0.602), (0.05, -0.617), (0.068, -0.628), (0.086, -0.662)]
-    hr_ = [(0.086, -0.662), (0.093, -0.712), (0.094, -0.772), (0.084, -0.832), (0.068, -0.877), (0.063, -0.92),
-           (0.058, -0.96), (0.038, -0.99), (0, -0.996)]
-    hair = C(f.Ps(hl_)) + C(f.Ps(tips), step=0.8)[1:] + C(f.Ps(hr_))[1:]
-    pen.line(hair, w=1.8, hand=0.45, lift=0.05)
-    railL = C(f.Ps(hl_))
-    railR = C(f.Ps(list(reversed(hr_))))
-    # locks: strands flowing from the crown, waving a little, more of them on the shade side
-    N = 40
-    A, B = frac_pts(railL, N), frac_pts(railR, N)
-    for k, uu in enumerate([0.07, 0.19, 0.31, 0.43, 0.55, 0.66, 0.76, 0.85, 0.93]):
-        t0 = 0.04 + 0.1 * abs(uu - 0.5) + R(0, 0.04)
-        ph = R(0, 6.3)
-        pts = []
-        for i in range(N + 1):
-            t = i / N
-            if t < t0:
-                continue
-            p = lerp(A[i], B[i], uu)
-            off = (1.2 + 1.6 * t) * math.sin(t * 7.5 + ph) * (u / 200)
-            pts.append((p[0] + off, p[1] + t * t * 0.01 * u))
-        wv = 0.95 if k in (2, 5, 7) else 0.72
-        for run in clip_in(C(pts, step=1.5), hair):
-            if length(run) > 4:
-                fine(run, w=wv, hand=0.35)
-    # the light catches the crown: a few short strokes there only
-    for k in range(3):
-        a = R(0.2, 0.8)
-        p0 = lerp(A[3], B[3], a)
-        fine([p0, (p0[0] + R(-2, 2), p0[1] + 0.05 * u)], w=0.65)
-    pen.occlude(hair)
+    def woman_hair(T):
+        # her long hair: from the hairline over the crown, tucked behind the ear,
+        # falling down her back
+        front = T([(0.335, -0.3), (0.25, -0.265), (0.16, -0.19), (0.09, -0.12), (0.03, -0.125), (-0.05, -0.135),
+                   (-0.13, -0.09), (-0.165, 0.01), (-0.17, 0.13)])
+        over = T([(0.34, -0.31), (0.27, -0.43), (0.13, -0.53), (-0.06, -0.555), (-0.25, -0.5), (-0.4, -0.38),
+                  (-0.49, -0.2), (-0.505, 0.0), (-0.49, 0.16)])
+        left = f.Ps([(-0.076, -0.87), (-0.087, -0.8), (-0.09, -0.73), (-0.086, -0.665)])
+        tips = f.Ps([(-0.086, -0.665), (-0.074, -0.64), (-0.056, -0.628), (-0.04, -0.634), (-0.022, -0.616),
+                     (-0.002, -0.622), (0.016, -0.612), (0.03, -0.628), (0.04, -0.66)])
+        right = f.Ps([(0.04, -0.66), (0.042, -0.72), (0.036, -0.79), (0.016, -0.85)])
+        hair = C(over + left, step=1.0) + C(tips, step=0.8)[1:] + \
+            C(right + [front[-1]], step=1.0)[1:] + C(list(reversed(front)), step=0.8)[1:]
+        pen.line(hair, w=1.75, hand=0.35, lift=0.04)
+        # locks from the crown and the hairline, sweeping back and down the back
+        N = 40
+        A = frac_pts(C(over[4:] + left, step=1.0), N)
+        B = frac_pts(C([front[-1]] + list(reversed(right)), step=1.0), N)
+        for k, uu in enumerate([0.12, 0.27, 0.42, 0.57, 0.72, 0.86]):
+            t0 = 0.03 + R(0, 0.06)
+            ph = R(0, 6.3)
+            pts = []
+            for i in range(N + 1):
+                t = i / N
+                if t < t0:
+                    continue
+                p = lerp(A[i], B[i], uu)
+                off = (0.8 + 1.4 * t) * math.sin(t * 6.5 + ph) * (u / 200)
+                pts.append((p[0] + off, p[1]))
+            for run in clip_in(C(pts, step=1.5), hair):
+                if length(run) > 4:
+                    fine(run, w=0.9 if k in (1, 4) else 0.72, hand=0.3)
+        for lk in ([(0.3, -0.3), (0.14, -0.4), (-0.06, -0.43), (-0.26, -0.36)],
+                   [(0.17, -0.2), (0.02, -0.3), (-0.2, -0.3), (-0.36, -0.2)],
+                   [(0.05, -0.15), (-0.1, -0.2), (-0.28, -0.12), (-0.38, 0.02)]):
+            for run in clip_in(C(T(lk), step=0.8), hair):
+                if length(run) > 3:
+                    fine(run, w=0.72, hand=0.15)
+        pen.occlude(hair)
+
+    T, hpoly = profile_head(f.P((0.004, -0.94)), 0.142 * u, 1, 13, 'woman', hair=woman_hair)
+    neck(f, T, (0.038,), -0.885, -0.855, w=0.95, scm=T([(-0.03, 0.25), (0.06, 0.4), (0.13, 0.5)]))
     # her free left arm, hanging, and the right reaching to the child
-    S = f.P((-0.106, -0.788))
-    E = f.P((-0.135, -0.625))
-    Wl = f.P((-0.127, -0.475))
-    hand(Wl, (0.12, 0.99), 0.085 * u, 0.05 * u)
-    sleeve(f, S, E, Wl, [0.058 * u, 0.051 * u, 0.045 * u], w=1.7)
-    sleeve(f, wS, wE, wW, [0.058 * u, 0.051 * u, 0.045 * u], w=1.7)
+    S = f.P((-0.094, -0.806))
+    E = f.P((-0.108, -0.63))
+    Wl = f.P((-0.1, -0.488))
+    hand(Wl, unit(Wl, f.P((-0.094, -0.4))), 0.105 * u, -1)
+    sleeve(f, S, E, Wl, [0.05 * u, 0.046 * u, 0.04 * u], w=1.65)
+    sleeve(f, wS, wE, wW, [0.05 * u, 0.046 * u, 0.04 * u], w=1.65)
     # the dress: a fitted bodice with a sash, a long skirt falling in folds
-    dl_ = [(-0.05, -0.86), (-0.088, -0.84), (-0.117, -0.818), (-0.127, -0.792), (-0.114, -0.725), (-0.097, -0.66),
-           (-0.089, -0.605), (-0.099, -0.545), (-0.122, -0.43), (-0.148, -0.27), (-0.166, -0.14), (-0.178, -0.046)]
-    hem = [(-0.178, -0.046), (-0.15, -0.036), (-0.12, -0.041), (-0.088, -0.033), (-0.05, -0.04), (-0.015, -0.032),
-           (0.022, -0.041), (0.058, -0.033), (0.094, -0.042), (0.13, -0.034), (0.158, -0.04), (0.18, -0.046)]
+    dl_ = [(-0.04, -0.866), (-0.072, -0.854), (-0.097, -0.837), (-0.111, -0.814), (-0.112, -0.778), (-0.1, -0.716),
+           (-0.086, -0.656), (-0.08, -0.606), (-0.09, -0.545), (-0.112, -0.43), (-0.14, -0.27), (-0.16, -0.14),
+           (-0.176, -0.046)]
+    hem = [(-0.176, -0.046), (-0.15, -0.036), (-0.12, -0.041), (-0.088, -0.033), (-0.05, -0.04), (-0.015, -0.032),
+           (0.022, -0.041), (0.058, -0.033), (0.094, -0.042), (0.13, -0.034), (0.158, -0.04), (0.178, -0.046)]
     dr_ = list(reversed(f.mirror(dl_)))
-    dr_[0] = (0.18, -0.046)
-    top = [(0.05, -0.86), (0, -0.866), (-0.05, -0.86)]
+    dr_[0] = (0.178, -0.046)
+    top = [(0.04, -0.866), (0, -0.87), (-0.04, -0.866)]
     dress = outline_of(f.Ps(dl_), f.Ps(hem), f.Ps(dr_), f.Ps(top))
-    pen.line(dress, w=1.9, hand=0.45, lift=0.06)
-    fine(C(f.Ps([(-0.172, -0.072), (-0.1, -0.064), (0, -0.064), (0.1, -0.064), (0.172, -0.072)]), step=1), w=0.8)
+    pen.line(dress, w=1.85, hand=0.45, lift=0.06)
+    fine(C(f.Ps([(-0.17, -0.072), (-0.1, -0.064), (0, -0.064), (0.1, -0.064), (0.17, -0.072)]), step=1), w=0.8)
     for yy in (-0.614, -0.59):
-        fine(C(f.Ps([(-0.094, yy), (-0.04, yy + 0.003), (0.04, yy + 0.003), (0.094, yy)]), step=1), w=1.0)
+        fine(C(f.Ps([(-0.082, yy), (-0.04, yy + 0.003), (0.04, yy + 0.003), (0.082, yy)]), step=1), w=1.0)
     # the sash's knot and ends at the back
     fine(C(f.Ps([(0.01, -0.59), (0.022, -0.53), (0.03, -0.48)]), step=1), w=0.9)
     fine(C(f.Ps([(0.028, -0.59), (0.044, -0.535), (0.05, -0.495)]), step=1), w=0.9)
     folds = [[(-0.055, -0.585), (-0.08, -0.33), (-0.118, -0.041)], [(-0.02, -0.585), (-0.03, -0.3), (-0.05, -0.04)],
              [(0.022, -0.585), (0.03, -0.32), (0.022, -0.041)], [(0.06, -0.585), (0.08, -0.32), (0.094, -0.042)],
-             [(0.09, -0.48), (0.13, -0.22), (0.158, -0.04)]]
+             [(0.085, -0.48), (0.125, -0.22), (0.156, -0.04)]]
     for fl in folds:
         ln = C(f.Ps(fl), step=1.5)
         fine(ln, w=1.0, hand=0.4)
         ticks(ln, +1, spacing=5.4, L=(3, 8), t0=0.35, t1=0.97, clip=dress, ang=0.6)
     # shade down the right side of the skirt and bodice
-    sl = C(f.Ps([(-0.099, -0.545), (-0.122, -0.43), (-0.148, -0.27), (-0.166, -0.14), (-0.178, -0.05)]))
-    sr = C(f.Ps([(0.099, -0.545), (0.122, -0.43), (0.148, -0.27), (0.166, -0.14), (0.178, -0.05)]))
+    sl = C(f.Ps([(-0.09, -0.545), (-0.112, -0.43), (-0.14, -0.27), (-0.16, -0.14), (-0.176, -0.05)]))
+    sr = C(f.Ps([(0.09, -0.545), (0.112, -0.43), (0.14, -0.27), (0.16, -0.14), (0.176, -0.05)]))
     lengthwise(sl, sr, 0.64, 0.97, spacing=5.6, clip=dress, t0=0.03, t1=0.99)
-    bl = C(f.Ps([(-0.112, -0.73), (-0.095, -0.66), (-0.089, -0.62)]))
-    br = C(f.Ps([(0.112, -0.73), (0.095, -0.66), (0.089, -0.62)]))
+    bl = C(f.Ps([(-0.108, -0.75), (-0.09, -0.67), (-0.08, -0.62)]))
+    br = C(f.Ps([(0.108, -0.75), (0.09, -0.67), (0.08, -0.62)]))
     lengthwise(bl, br, 0.66, 0.96, spacing=5.4, clip=dress)
     pen.occlude(dress)
     for sgn in (-1, 1):
@@ -647,53 +785,41 @@ def family(ox, oy, H):
     # ------------------------------------------------ the man
     f = Mf
     u = f.u
-    hc = f.P((0, -0.931))
-    head = ellipse_pts(hc[0], hc[1], 0.057 * u, 0.067 * u, 0, 0, 2 * math.pi, step=1.0)
-    for sgn in (-1, 1):
-        ear = f.Ps([(sgn * 0.054, -0.948), (sgn * 0.066, -0.944), (sgn * 0.069, -0.925), (sgn * 0.06, -0.906),
-                    (sgn * 0.052, -0.906)])
-        pen.line(C(ear, step=0.8), w=1.2, hand=0.2, lift=0)
-    head = hairy_head(hc, 0.057 * u, 0.067 * u, amp=0.025)
-    nape = C(f.Ps([(-0.054, -0.905), (-0.036, -0.887), (-0.012, -0.881), (0.012, -0.882), (0.036, -0.888),
-                   (0.054, -0.905)]), step=1)
-    fine(nape, w=1.1)
-    hair_short(hc, 0.057 * u, 0.067 * u, f.P((0.01, -0.978)), 13, u)
-    pen.occlude(head)
-    fine(C(f.Ps([(-0.03, -0.884), (-0.033, -0.866)]), step=1), w=1.0)
-    fine(C(f.Ps([(0.03, -0.884), (0.033, -0.866)]), step=1), w=1.0)
+    T, hpoly = profile_head(f.P((-0.004, -0.937)), 0.137 * u, -1, 10, 'man')
+    neck(f, T, (-0.034, 0.024), -0.9, -0.858, w=1.05)
     # his free right arm, and the left to the child
-    S = f.P((0.116, -0.794))
-    E = f.P((0.143, -0.63))
-    Wr = f.P((0.137, -0.478))
-    hand(Wr, (-0.1, 0.995), 0.088 * u, 0.052 * u)
-    sleeve(f, S, E, Wr, [0.068 * u, 0.059 * u, 0.051 * u], w=1.8)
-    sleeve(f, mS, mE, mW, [0.068 * u, 0.059 * u, 0.051 * u], w=1.8)
+    S = f.P((0.1, -0.81))
+    E = f.P((0.13, -0.635))
+    Wr = f.P((0.126, -0.49))
+    hand(Wr, unit(Wr, f.P((0.122, -0.4))), 0.107 * u, 1)
+    sleeve(f, S, E, Wr, [0.058 * u, 0.052 * u, 0.045 * u], w=1.8)
+    sleeve(f, mS, mE, mW, [0.058 * u, 0.052 * u, 0.045 * u], w=1.8)
     # the coat: a stand collar, a yoke, a back seam and vent, a waist seam
-    cl_ = [(-0.052, -0.868), (-0.094, -0.849), (-0.128, -0.828), (-0.141, -0.80), (-0.13, -0.745), (-0.113, -0.70),
-           (-0.105, -0.605), (-0.111, -0.50), (-0.12, -0.40), (-0.127, -0.335)]
-    hem = [(-0.127, -0.335), (-0.06, -0.329), (0.0, -0.331), (0.06, -0.329), (0.127, -0.335)]
+    cl_ = [(-0.046, -0.867), (-0.077, -0.856), (-0.104, -0.84), (-0.122, -0.817), (-0.127, -0.79), (-0.122, -0.745),
+           (-0.112, -0.70), (-0.104, -0.605), (-0.11, -0.50), (-0.118, -0.40), (-0.124, -0.335)]
+    hem = [(-0.124, -0.335), (-0.06, -0.329), (0.0, -0.331), (0.06, -0.329), (0.124, -0.335)]
     cr_ = list(reversed(f.mirror(cl_)))
-    top = [(0.052, -0.868), (0, -0.876), (-0.052, -0.868)]
+    top = [(0.046, -0.867), (0, -0.874), (-0.046, -0.867)]
     coat = outline_of(f.Ps(cl_), f.Ps(hem), f.Ps(cr_), f.Ps(top))
     pen.line(coat, w=2.0, hand=0.45, lift=0.06)
-    fine(C(f.Ps([(-0.056, -0.85), (0, -0.854), (0.056, -0.85)]), step=1), w=1.0)        # collar
-    fine(C(f.Ps([(-0.125, -0.352), (-0.06, -0.347), (-0.008, -0.348)]), step=1), w=0.8)  # the hem's turn
-    fine(C(f.Ps([(0.008, -0.348), (0.06, -0.347), (0.125, -0.352)]), step=1), w=0.8)
-    fine(C(f.Ps([(-0.126, -0.79), (-0.06, -0.778), (0, -0.776), (0.06, -0.778), (0.126, -0.79)]), step=1), w=0.85)
-    fine(C(f.Ps([(0, -0.854), (0.0, -0.65), (0.001, -0.45)]), step=1), w=1.0)          # back seam
+    fine(C(f.Ps([(-0.05, -0.85), (0, -0.855), (0.05, -0.85)]), step=1), w=1.0)          # collar
+    fine(C(f.Ps([(-0.122, -0.352), (-0.06, -0.347), (-0.008, -0.348)]), step=1), w=0.8)  # the hem's turn
+    fine(C(f.Ps([(0.008, -0.348), (0.06, -0.347), (0.122, -0.352)]), step=1), w=0.8)
+    fine(C(f.Ps([(-0.118, -0.79), (-0.06, -0.778), (0, -0.776), (0.06, -0.778), (0.118, -0.79)]), step=1), w=0.85)
+    fine(C(f.Ps([(0, -0.855), (0.0, -0.65), (0.001, -0.45)]), step=1), w=1.0)          # back seam
     fine(C(f.Ps([(0.001, -0.45), (0.006, -0.39), (0.007, -0.333)]), step=1), w=1.0)    # the vent
     fine(C(f.Ps([(0.001, -0.45), (-0.004, -0.39), (-0.005, -0.333)]), step=1), w=0.8)
-    fine(C(f.Ps([(-0.106, -0.606), (-0.05, -0.598), (0, -0.597), (0.05, -0.598), (0.106, -0.606)]), step=1), w=0.9)
-    for fl in ([(-0.07, -0.59), (-0.08, -0.47), (-0.088, -0.345)], [(0.066, -0.59), (0.078, -0.47), (0.09, -0.345)],
-               [(-0.06, -0.77), (-0.064, -0.70), (-0.066, -0.625)], [(0.055, -0.77), (0.058, -0.70), (0.06, -0.625)]):
+    fine(C(f.Ps([(-0.104, -0.606), (-0.05, -0.598), (0, -0.597), (0.05, -0.598), (0.104, -0.606)]), step=1), w=0.9)
+    for fl in ([(-0.068, -0.59), (-0.078, -0.47), (-0.086, -0.345)], [(0.064, -0.59), (0.076, -0.47), (0.088, -0.345)],
+               [(-0.058, -0.77), (-0.062, -0.70), (-0.064, -0.625)], [(0.053, -0.77), (0.056, -0.70), (0.058, -0.625)]):
         ln = C(f.Ps(fl), step=1.5)
         fine(ln, w=0.9, hand=0.35)
         ticks(ln, +1, spacing=5.6, L=(3, 7), t0=0.3, t1=0.95, clip=coat, ang=0.5)
-    ul = C(f.Ps([(-0.13, -0.77), (-0.113, -0.70), (-0.106, -0.615)]))
-    ur = C(f.Ps([(0.13, -0.77), (0.113, -0.70), (0.106, -0.615)]))
+    ul = C(f.Ps([(-0.122, -0.77), (-0.11, -0.70), (-0.104, -0.615)]))
+    ur = C(f.Ps([(0.122, -0.77), (0.11, -0.70), (0.104, -0.615)]))
     lengthwise(ul, ur, 0.6, 0.97, spacing=5.5, clip=coat)
-    ll = C(f.Ps([(-0.106, -0.592), (-0.111, -0.50), (-0.12, -0.40), (-0.127, -0.34)]))
-    lr = C(f.Ps([(0.106, -0.592), (0.111, -0.50), (0.12, -0.40), (0.127, -0.34)]))
+    ll = C(f.Ps([(-0.104, -0.592), (-0.11, -0.50), (-0.118, -0.40), (-0.124, -0.34)]))
+    lr = C(f.Ps([(0.104, -0.592), (0.11, -0.50), (0.118, -0.40), (0.124, -0.34)]))
     lengthwise(ll, lr, 0.58, 0.97, spacing=5.5, clip=coat)
     across(ll, lr, spacing=6.0, frac=(0.18, 0.34), bow=2.0, w=0.65, t0=0.12, t1=0.9, from_b=True, clip=coat)
     pen.occlude(coat)
@@ -704,18 +830,19 @@ def family(ox, oy, H):
         pen.line(shoe, w=1.7, hand=0.2, lift=0)
         fine(C(f.Ps([(sgn * 0.076, -0.014), (sgn * 0.047, -0.01), (sgn * 0.02, -0.014)]), step=1), w=0.85)
         pen.occlude(shoe + [shoe[0]])
-        ol = [(sgn * 0.1, -0.35), (sgn * 0.091, -0.25), (sgn * 0.081, -0.14), (sgn * 0.073, -0.052)]
+        ol = [(sgn * 0.098, -0.35), (sgn * 0.093, -0.27), (sgn * 0.087, -0.215), (sgn * 0.089, -0.16),
+              (sgn * 0.082, -0.1), (sgn * 0.073, -0.052)]
         bt = [(sgn * 0.073, -0.052), (sgn * 0.047, -0.046), (sgn * 0.021, -0.052)]
-        il = [(sgn * 0.021, -0.052), (sgn * 0.021, -0.2), (sgn * 0.016, -0.35)]
+        il = [(sgn * 0.021, -0.052), (sgn * 0.024, -0.12), (sgn * 0.023, -0.22), (sgn * 0.016, -0.35)]
         leg = outline_of(f.Ps(ol), f.Ps(bt), f.Ps(il))
         pen.line(leg, w=1.8, hand=0.35, lift=0.04)
-        inner = C(f.Ps([(sgn * 0.017, -0.345), (sgn * 0.021, -0.2), (sgn * 0.022, -0.06)]))
-        outer = C(f.Ps([(sgn * 0.099, -0.345), (sgn * 0.09, -0.25), (sgn * 0.08, -0.14), (sgn * 0.073, -0.06)]))
+        inner = C(f.Ps([(sgn * 0.017, -0.345), (sgn * 0.023, -0.2), (sgn * 0.023, -0.06)]))
+        outer = C(f.Ps([(sgn * 0.097, -0.345), (sgn * 0.088, -0.215), (sgn * 0.086, -0.14), (sgn * 0.073, -0.06)]))
         lit, shd = (outer, inner) if sgn < 0 else (inner, outer)
-        lengthwise(lit, shd, 0.58, 0.96, spacing=5.4, clip=leg)
-        # creases behind the knee
-        for yy in (-0.235, -0.218):
-            fine(C(f.Ps([(sgn * 0.03, yy), (sgn * 0.055, yy + 0.004), (sgn * 0.078, yy)]), step=1), w=0.7)
+        lengthwise(lit, shd, 0.6, 0.96, spacing=5.4, clip=leg)
+        # the soft fold behind the knee, and the break above the shoe
+        fine(C(f.Ps([(sgn * 0.03, -0.236), (sgn * 0.055, -0.226), (sgn * 0.08, -0.238)]), step=1), w=0.75, hand=0.1)
+        fine(C(f.Ps([(sgn * 0.026, -0.075), (sgn * 0.05, -0.07), (sgn * 0.072, -0.076)]), step=1), w=0.7, hand=0.1)
         pen.occlude(leg)
 
 
@@ -2033,6 +2160,28 @@ knoll_top = catmull([(20, 846), (110, 808), (210, 792), (320, 792), (420, 812), 
                      (630, 940), (660, 1000)], step=2)
 
 
+# Where the first draft of this scene had its random stream at each step from
+# here on (draws from the seed, and gauss's cached value), so that reworking
+# what comes before (the family) does not reshuffle the knoll, trees, roads,
+# city and sky drawn after it.
+STREAM = [(50702, 0.3167348584093328), (50702, 0.3167348584093328), (50912, 0.3167348584093328), (50912,
+          0.3167348584093328), (50912, 0.3167348584093328), (54748,), (55567,), (65033,), (65033,), (65193,),
+          (65304,), (65304,), (65304,), (65304,), (65340,), (65340,), (65340,), (66315,), (66513,), (66798,),
+          (67646, -0.28788862108884883), (67675,), (67675,), (67675,), (68067,), (68252,), (68719,), (68947,),
+          (69404,), (69624, -1.079814959314049), (70263, -1.079814959314049), (70812, -1.079814959314049), (72344,
+          1.4319620471764087), (76032,), (76065,), (76101,), (76125,), (76125,), (76815,), (76874,), (77060,),
+          (77143,), (77278,), (77315,), (77367,), (77406,), (77406,), (77406,), (79300,), (79300,), (82856,)]
+
+
+def keep_stream(k):
+    n, gauss_next = (STREAM[k] + (None,))[:2]
+    pen.rng.seed(2101)
+    for _ in range(n):
+        pen.rng.random()
+    st = pen.rng.getstate()
+    pen.rng.setstate((st[0], st[1], gauss_next))
+
+
 def knoll_y(x):
     return min(knoll_top, key=lambda p: abs(p[0] - x))[1]
 
@@ -2044,7 +2193,9 @@ frame_tree(852)
 front_grass(160, 420, 801, 9, 26)
 family(286, 800, 220)
 
+keep_stream(0)
 plants = []
+keep_stream(1)
 for k in range(70):
     x = R(14, 645)
     yk = knoll_y(x)
@@ -2052,6 +2203,7 @@ for k in range(70):
     if y > 978 or (14 < x < 125 and y < 875):
         continue
     plants.append((y, 'tuft', x))
+keep_stream(2)
 for spec in [(120, 845, 'daisy'), (162, 882, 'daisy'), (424, 840, 'daisy'), (470, 884, 'daisy'), (84, 902, 'daisy'),
              (250, 905, 'daisy'), (330, 930, 'daisy'), (520, 930, 'daisy'),
              (205, 850, 'umbel'), (380, 880, 'umbel'), (560, 960, 'umbel'),
@@ -2059,7 +2211,9 @@ for spec in [(120, 845, 'daisy'), (162, 882, 'daisy'), (424, 840, 'daisy'), (470
              (180, 905, 'bell'), (350, 905, 'bell'), (505, 900, 'bell'), (230, 960, 'bell'),
              (110, 880, 'seed'), (270, 880, 'seed'), (430, 900, 'seed'), (600, 975, 'seed'), (60, 935, 'seed')]:
     plants.append((spec[1], spec[2], spec[0]))
+keep_stream(3)
 plants.sort(reverse=True)  # nearest first
+keep_stream(4)
 for y, kind, x in plants:
     grow = 1 + (y - 780) / 260
     if kind == 'tuft':
@@ -2074,27 +2228,39 @@ for y, kind, x in plants:
         bellflower(x, y, R(42, 58) * grow, lean=R(0.05, 0.25), n=int(R(2, 4)))
     elif kind == 'seed':
         seed_grass(x, y, R(70, 100) * grow, lean=R(0.0, 0.25))
+keep_stream(5)
 for (bx, by, a, L, cu) in [(40, 975, -1.25, 150, 0.35), (75, 985, -0.7, 170, 0.35), (175, 992, -1.05, 120, 0.3),
                            (120, 880, -0.55, 95, 0.3), (590, 992, -2.0, 110, -0.3)]:
     frond((bx, by), a, L, curl=cu)
+keep_stream(6)
 knoll_hatch(knoll_top)
+keep_stream(7)
 flank = [p for p in knoll_top if p[0] > 440]
+keep_stream(8)
 for k in (1, 2, 3):
     run = offset(flank, -5.0 * k)
     run = run[int(len(run) * 0.12 * k):]
     for pc in pieces(run, on=(30, 90), off=(5, 14), start_off=False):
         pen.line(pc, w=0.74 - 0.03 * k, hand=0.3, lift=0.1, piece=(15, 40))
+keep_stream(9)
 pen.line(knoll_top, w=2.0, hand=0.7, lift=0.15)
+keep_stream(10)
 pen.occlude(knoll_top + [(1000, 1000), (0, 1000), (0, 828)])
 # a thin margin of clear paper round the people against the land behind
+keep_stream(11)
 pen.add_halo((150, 570, 432, 812), r=4.0)
 
 # ---- the near verge at the lower right, by the road
+keep_stream(12)
 verge = []
+keep_stream(13)
 for k in range(18):
     verge.append((R(925, 992), 'tuft', R(770, 990)))
+keep_stream(14)
 verge += [(962, 'daisy', 905), (975, 'dandelion', 822), (984, 'seed', 948), (958, 'bell', 860)]
+keep_stream(15)
 verge.sort(reverse=True)
+keep_stream(16)
 for y, kind, x in verge:
     if kind == 'tuft':
         tuft(x, y, R(24, 50), n=int(R(3, 6)), w=1.05, lean=R(-0.2, 0.1), occ=True)
@@ -2106,53 +2272,82 @@ for y, kind, x in verge:
         seed_grass(x, y, 96, lean=-0.2)
     elif kind == 'bell':
         bellflower(x, y, 50, lean=-0.15, n=3)
+keep_stream(17)
 frond((990, 994), -2.25, 130, curl=-0.3)
 
 # ---- the nearer trees stand in front of the ways (which lie flat on the plain) and of the skyway's piers
+keep_stream(18)
 groves([(752, 716, 1), (566, 742, 1)])
+keep_stream(19)
 woods(880, 1010, 694, 752, 9, Hm=(7.0, 10.0))
+keep_stream(20)
 groves([(690, 690, 1)])
 
 # ---- the ways to the city
+keep_stream(21)
 R1 = [(860, 1010), (760, 880), (640, 760), (590, 690), (612, 648), (648, 622), (654, 608), (650, 603.5)]
+keep_stream(22)
 R3 = [(560, 1000), (540, 900), (512, 820), (494, 750), (492, 690), (480, 645), (464, 618), (456, 604.5)]
+keep_stream(23)
 ground_road(R1, 9.0)
+keep_stream(24)
 ground_road(R3, 5.5)
+keep_stream(25)
 skyway([(1010, 700), (900, 672), (820, 640), (775, 620), (740, 608), (705, 603)], 8.0,
        elev=lambda t: 26 + 50 * t ** 1.5, pylon_every=70.0, min_sep=38.0)
 
 # ---- the middle ground, nearest first: woods, single trees, then the folds of the meadow
+keep_stream(26)
 groves([(548, 676, 1), (930, 664, 1)])
+keep_stream(27)
 belt(120, 470, 656, Hm=11.0)
+keep_stream(28)
 groves([(520, 640, 2), (596, 632, 1), (430, 628, 2)])
+keep_stream(29)
 belt(8, 362, 614, Hm=12.0)
+keep_stream(30)
 for (x0, x1, y, rise) in [(600, 1000, 860, 0.06), (660, 1000, 790, 0.08), (420, 640, 790, 0.07), (640, 920, 712, 0.1),
                           (8, 160, 760, 0.08), (500, 640, 712, 0.1), (8, 330, 690, 0.1), (540, 680, 662, 0.12),
                           (300, 470, 636, 0.12), (8, 200, 628, 0.12)]:
     fold(x0, x1, y, rise=rise)
+keep_stream(31)
 grass_ticks(110, (8, 992), 650, 950)
 
 # ---- the city on the far shore, the lake before it, the hills behind
+keep_stream(32)
 towers = city(650, YH + 1.5, 1.0, wline=1.1)
+keep_stream(33)
 skybridge(600, 706, 470, 7)
+keep_stream(34)
 skybridge(706, 826, 430, 7)
+keep_stream(35)
 skybridge(500, 598, 520, 5)
+keep_stream(36)
 lake_poly = [(664, 606.5), (1000, 606.5)] + catmull(
     [(1000, 641), (960, 646), (880, 650), (790, 647), (722, 638), (686, 625), (670, 614), (664, 606.5)], step=2)
+keep_stream(37)
 lake(lake_poly, towers, 606.5)
+keep_stream(38)
 pen.line(catmull([(1000, 641), (960, 646), (880, 650), (790, 647), (722, 638), (686, 625), (670, 614)], step=2),
          w=0.9, hand=0.3, lift=0.25, piece=(10, 30))
+keep_stream(39)
 for x in (676, 700, 742, 905, 958):
     yy = span_at(lake_poly, 620) and min(p[1] for p in lake_poly if abs(p[0] - x) < 6 and p[1] > 610) or 640
     tuft(x, yy + 1, R(6, 9), n=4, w=0.7, lean=R(-0.1, 0.1))
+keep_stream(40)
 glow(480, 880, 596, n=3)
+keep_stream(41)
 far_hills([(8, 590), (90, 582), (200, 586), (330, 576), (420, 568), (540, 562), (650, 568), (760, 558), (870, 568),
            (992, 578)])
+keep_stream(42)
 horizon_line(8, 664, YH + 4)
+keep_stream(43)
 craft(470, 345, 22, d=-1)
+keep_stream(44)
 craft(735, 252, 12, d=1, trail=40)
 
 # ---- the sky: the Milky Way, five networks of stars, plain stars
+keep_stream(45)
 nets = [
     dict(cx=410, cy=268, sizes=[3, 4, 3], W=160, H=88, rot=-0.08),
     dict(cx=830, cy=92, sizes=[2, 3, 2], W=130, H=70, rot=0.1),
@@ -2160,12 +2355,17 @@ nets = [
     dict(cx=905, cy=302, sizes=[2, 3, 1], W=90, H=58, rot=0.06),
     dict(cx=345, cy=442, sizes=[2, 2, 1], W=64, H=36, rot=0.1),
 ]
+keep_stream(46)
 boxes = []
+keep_stream(47)
 for nt in nets:
     net_of_stars(nt['cx'], nt['cy'], nt['sizes'], nt['W'], nt['H'], nt['rot'])
     boxes.append((nt['cx'], nt['cy'], nt['W'] / 2 + 18, nt['H'] / 2 + 18))
+keep_stream(48)
 avoid = [lambda p, b=b: abs(p[0] - b[0]) < b[2] and abs(p[1] - b[1]) < b[3] for b in boxes]
+keep_stream(49)
 milky_way([(320, -10), (450, 60), (600, 130), (760, 185), (900, 215), (1010, 235)], 44, n_dots=300, avoid=avoid)
+keep_stream(50)
 star_sky(220, (14, 14, 986, YH - 14), avoid)
 
 
