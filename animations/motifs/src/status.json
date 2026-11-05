@@ -236,7 +236,8 @@
         "maxim": "refine a tiny bit anatomically: yes",
         "passed": true,
         "note": "adult head with chinless jaw, barrel chest, sloping neck, far forearm from bone lengths, calves, heels and arches; polished: larger projecting nose, firm jaw line, deltoid and elbow shown, normal ear"
-      }
+      },
+      "changed_since_review": "2026-11-05, after Maxim's note on faces and anatomy: the man's chest given the lower edges of the pectorals, the breastbone and the navel; the woman's nose made less bulbous and her elbow point smaller; not yet re-reviewed"
     },
     "couple-1690s": {
       "passed": true,
@@ -247,7 +248,8 @@
         8
       ],
       "note": "rework after Maxim's notes (round w2): clear faces, detailed hands, shoes, hat, coat and basket; polished: hands held, shoe ties instead of buckles, finer hooks-and-eyes, calf highlights",
-      "maxim": "Plain American dress, more Western European faces, more detail: yes"
+      "maxim": "Plain American dress, more Western European faces, more detail: yes",
+      "changed_since_review": "2026-11-05, after Maxim's note on faces and anatomy: both faces turned properly three-quarters (the nose's bridge drawn between the eyes, the far eye moved inside the far contour), eyes smaller and finer, his beard shorter and rounder with the throat and collar showing below; not yet re-reviewed"
     },
     "neural-net": {
       "passed": false,
