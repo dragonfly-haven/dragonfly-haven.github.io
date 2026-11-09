@@ -1,0 +1,131 @@
+{
+  "note": "The drawings in the order they are shown. `dashes` is how many dashes each takes, relative to the others (measured at 1440 by 900 CSS px on a standard screen); with it the page sizes the animation from the first drawing and sets off without waiting for the rest. A drawing without it makes the page wait for all.",
+  "motifs": [
+    {
+      "order": 1,
+      "slug": "galaxy",
+      "title": "Galaxy",
+      "dashes": 4146
+    },
+    {
+      "order": 2,
+      "slug": "organic-molecule",
+      "title": "Organic molecule",
+      "dashes": 4806
+    },
+    {
+      "order": 3,
+      "slug": "rna",
+      "title": "RNA",
+      "dashes": 2351
+    },
+    {
+      "order": 4,
+      "slug": "dna",
+      "title": "DNA",
+      "dashes": 2586
+    },
+    {
+      "order": 5,
+      "slug": "prokaryotic-cell",
+      "title": "Prokaryotic cell",
+      "dashes": 5358
+    },
+    {
+      "order": 6,
+      "slug": "endosymbiosis",
+      "title": "Endosymbiosis",
+      "dashes": 3785
+    },
+    {
+      "order": 7,
+      "slug": "eukaryotic-cell",
+      "title": "Eukaryotic cell",
+      "dashes": 6751
+    },
+    {
+      "order": 8,
+      "slug": "choanoflagellate-colony",
+      "title": "Choanoflagellate colony",
+      "dashes": 5497
+    },
+    {
+      "order": 9,
+      "slug": "jellyfish",
+      "title": "Jellyfish",
+      "dashes": 5112
+    },
+    {
+      "order": 10,
+      "slug": "trilobite",
+      "title": "Trilobite",
+      "dashes": 3848
+    },
+    {
+      "order": 11,
+      "slug": "fish",
+      "title": "Fish",
+      "dashes": 3202
+    },
+    {
+      "order": 12,
+      "slug": "quastenflosser",
+      "title": "Quastenflosser",
+      "dashes": 3803
+    },
+    {
+      "order": 13,
+      "slug": "cynodont",
+      "title": "Cynodont",
+      "dashes": 3217
+    },
+    {
+      "order": 14,
+      "slug": "ginkgo-tree",
+      "title": "Ginkgo tree",
+      "dashes": 6264
+    },
+    {
+      "order": 15,
+      "slug": "triceratops",
+      "title": "Triceratops",
+      "dashes": 3865
+    },
+    {
+      "order": 16,
+      "slug": "crow",
+      "title": "Crow",
+      "dashes": 2444
+    },
+    {
+      "order": 17,
+      "slug": "rat",
+      "title": "Rat",
+      "dashes": 2585
+    },
+    {
+      "order": 18,
+      "slug": "early-primate",
+      "title": "Early primate",
+      "dashes": 3315
+    },
+    {
+      "order": 19,
+      "slug": "neanderthals",
+      "title": "Neanderthals",
+      "dashes": 4715
+    },
+    {
+      "order": 20,
+      "slug": "couple-1890s",
+      "title": "Couple, 1890s",
+      "dashes": 3767
+    },
+    {
+      "order": 21,
+      "slug": "neural-net",
+      "title": "Future city",
+      "dashes": 11529
+    }
+  ]
+}
