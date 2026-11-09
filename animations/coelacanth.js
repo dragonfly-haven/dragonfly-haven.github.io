@@ -44,6 +44,7 @@ const FORM = {
   spots: 1, // how many pale spots, as a share of the usual
   speed: 1, // of the fins' beat
   rise: false, // first rise from the sand as a fossil comes alive
+  rest: 1.0, // with rise: seconds the fossil lies still before its grains begin to lift
   gpu: true, // draw with WebGL2 where it is to be had; false draws in 2D
 };
 
@@ -184,7 +185,7 @@ export function mountCoelacanth(el, options = {}) {
     };
     const drawn = drawBody(body, G, o, L, project, rand, next);
     next.body = drawn.canvas;
-    next.rise = prepareRise(drawn.grains, next, random(o.seed + 2));
+    next.rise = prepareRise(drawn.grains, next, random(o.seed + 2), o.rest);
     next.mask = drawMask(body, project, next);
     next.fins = fins.map((fin) => fin.sample(L, rand, G));
     return next;
@@ -218,7 +219,7 @@ export function mountCoelacanth(el, options = {}) {
     const grows = fins.map((_, i) => smooth(clamp((t - gathered + 0.5 - i * 0.07) / RISE.fins, 0, 1)));
     const poses = fins.map((fin) => fin.pose(t, G, amount));
     if (surface.gpu) {
-      const frame = { back: [], front: [], rise: t < gathered ? { time: t, appear: smooth(clamp(t / 0.6, 0, 1)), width: lay.dash.width * o.weight, sand: SAND } : null };
+      const frame = { back: [], front: [], rise: t < gathered ? { time: t, appear: smooth(clamp(t / lay.rise.fade, 0, 1)), width: lay.dash.width * o.weight, sand: SAND } : null };
       fins.forEach((fin, i) => {
         const pose = poses[i], grow = grows[i];
         let at;
@@ -443,7 +444,7 @@ function drawBody(body, G, o, L, project, rand, next) {
 // the seabed below the fish as it would look lying on its side; when it lifts
 // and how it flies; and the loose sand of the seabed round it, which drifts
 // away once the fish has risen.
-function prepareRise(grains, lay, rand) {
+function prepareRise(grains, lay, rand, rest = RISE.rest) {
   const n = grains.length / 5;
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (let i = 0; i < n; i++) {
@@ -458,7 +459,7 @@ function prepareRise(grains, lay, rand) {
     const [ax, ay, bx, by, thin] = grains.subarray(5 * i, 5 * i + 5);
     const cx = (ax + bx) / 2, cy = (ay + by) / 2, half = Math.hypot(bx - ax, by - ay) / 2;
     const sx = cx, sy = bed + (cy - mid) * flat;
-    const launch = RISE.rest + RISE.sweep * ((cx - x0) / (x1 - x0 || 1)) + rand() * 0.35;
+    const launch = rest + RISE.sweep * ((cx - x0) / (x1 - x0 || 1)) + rand() * 0.35;
     const flight = RISE.flight + rand() * RISE.spread;
     done = Math.max(done, launch + flight);
     // Each grain swings up in an arc, a little to one side or the other.
@@ -473,16 +474,17 @@ function prepareRise(grains, lay, rand) {
     const x = x0 - (x1 - x0) * 0.05 + spanX * u;
     const y = bed + (rand() + rand() + rand() - 1.5) * band * 0.9;
     const half = lay.dash.length * 0.45 * (0.85 + 0.3 * rand());
-    sand.set([x, y, (rand() - 0.5) * 0.4, half, RISE.rest + RISE.sweep * clamp((x - x0) / (x1 - x0 || 1), 0, 1) + 0.4 + rand() * 1.2], 5 * j);
+    sand.set([x, y, (rand() - 0.5) * 0.4, half, rest + RISE.sweep * clamp((x - x0) / (x1 - x0 || 1), 0, 1) + 0.4 + rand() * 1.2], 5 * j);
   }
-  return { at, grains, sand, done, n, m };
+  // the fossil fades in over its rest, quickly if it has next to none
+  return { at, grains, sand, done, n, m, fade: Math.min(0.6, 0.15 + rest * 0.45) };
 }
 
 // Strokes the rise at time t: grains lying in the fossil, in flight, or home.
 function drawRise(ctx, lay, t, weight) {
   const { at, grains, sand, n, m } = lay.rise;
   const STEPS = 6, paths = Array.from({ length: STEPS + 1 }, () => new Path2D());
-  const appear = smooth(clamp(t / 0.6, 0, 1));
+  const appear = smooth(clamp(t / lay.rise.fade, 0, 1));
   const put = (path, x, y, angle, half) => {
     const c = Math.cos(angle) * half, s = Math.sin(angle) * half;
     path.moveTo(x - c, y - s);
