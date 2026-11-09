@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""20 - A couple of the 1890s, the Belle Epoque.
+"""20 - An American couple of the 1890s, the Belle Epoque.
 
 (The slug still reads couple-1690s: the couple was first drawn as a pair of
 the 1690s, the time of the Amish split, and was restyled at Maxim's word to
 look more modern.)
 
-He in a hard round bowler, his hair cut short and a trimmed moustache, a
-lounge suit worn open over a buttoned waistcoat with a watch chain across it,
-a high starched collar and a knotted tie, white shirt cuffs, long creased
-trousers and laced shoes; she with her hair swept up in a pompadour under a
-small straw boater, a high-collared blouse with leg-of-mutton sleeves, a
-belted narrow waist, a long gored skirt, and a small framed handbag. They
-stand side by side, hand in hand, turned three-quarters to the right. Far
-off behind them a factory and its chimney smoke.
+An American couple of the Gay Nineties. He in a straw boater, his hair cut
+short and a trimmed moustache, a sack suit worn open over a buttoned waistcoat
+with a watch chain across it, a high starched collar and a knotted tie, white
+shirt cuffs, long creased trousers and laced shoes; she a Gibson girl, her
+hair swept up into a full pompadour and a knot on the crown, a shirtwaist
+with a high collar, a small bow tie and leg-of-mutton sleeves, a belted narrow
+waist, a long gored skirt, and a small framed handbag. They stand side by
+side, hand in hand, turned three-quarters to the right. Far off behind them a
+factory flying its flag, its chimney smoking, and telegraph poles.
 
 Drawn facing right with the light from the upper left; saved mirrored so that
 on the page the couple faces the text.
@@ -299,34 +300,34 @@ S([(556, 338), (552, 372), (548, 400)], w=0.9)
 across(sleeveN_out, sleeveN_in, spacing=6.5, frac=(0.22, 0.42), bow=2.5, w=0.68, from_b=True)
 pen.occlude(R(sleeveN_out + sleeveN_in[::-1]))
 
-# ---- the bowler: a hard round crown with a ribbon band and a narrow brim
-# that turns up at the sides; it sits low and level on his head
-brimU = [(593, 160), (604, 168), (630, 174), (658, 177), (686, 175), (707, 169), (718, 161)]
-brimL = [(596, 166), (607, 175), (632, 181), (658, 184), (686, 182), (707, 176), (717, 167)]
-S(brimL, w=2.2, hand=0.4)
-S(brimU, w=1.5, hand=0.4)
-F([(593, 160), (591.5, 163), (596, 166)], w=1.6)
-F([(718, 161), (719.5, 164), (717, 167)], w=1.6)
-F([(601, 166.5), (630, 177.5), (658, 180.5), (686, 178.5), (712, 168.5)], w=0.75, hand=0.2)   # the bound edge
-pen.occlude(R(brimU + brimL[::-1]))
-crown = [(607, 169), (605, 150), (610, 133), (623, 121), (642, 115), (661, 114), (679, 118), (692, 127),
-         (699, 143), (702, 168)]
-band_t = [(606, 156), (632, 161.5), (658, 163.5), (684, 161.5), (701, 156)]
-S(crown, w=2.3, hand=0.5)
-S(band_t, w=1.2, hand=0.3)
-F([(611, 157.5), (606, 152), (604, 158), (610, 164), (617, 162), (621, 157), (613, 160)], w=0.9)   # the bow
-F([(612, 162), (614, 170)], w=0.8)
-crown_poly = R(crown + [(684, 175), (658, 177), (632, 174)])
-band_poly = R([(606, 156), (632, 161.5), (658, 163.5), (684, 161.5), (701, 156), (702, 168), (684, 174.5),
-               (658, 177), (632, 174), (607, 169)])
-# black felt: close hatching, a highlight left on the upper left of the dome
-hatch_keep(crown_poly, 62, 5.0, lambda p: ((p[0] - 634) / 22) ** 2 + ((p[1] - 132) / 13) ** 2 > 1 and p[1] < 156,
-           w=0.62)
-hatch_keep(R(crown + [(684, 175), (658, 177), (632, 174)]), 152, 6.0,
-           lambda p: p[0] > 664 and p[1] < 156, w=0.6)
-hatch_keep(band_poly, 100, 5.0, lambda p: True, w=0.7)
-F([(616, 128), (626, 121.5), (640, 117.5)], w=0.7)                        # the dome's sheen
-pen.occlude(crown_poly)
+# ---- the straw boater: a flat brim of plaited straw, a low flat-topped
+# crown circled by a dark ribbon; it sits level on his head
+hm = (656, 172)
+brimM = ellipse_pts(hm[0], hm[1], 64, 10, -0.03, 0, TAU, step=2.0)
+pen.line(ellipse_pts(hm[0], hm[1], 64, 10, -0.03, -0.04, math.pi + 0.04, step=2.0), w=2.1, hand=0.3)
+pen.line(ellipse_pts(hm[0], hm[1], 64, 10, -0.03, math.pi + 0.04, TAU - 0.04, step=2.0), w=1.3, hand=0.3)
+pen.line(ellipse_pts(hm[0], hm[1] + 2.0, 61.5, 9.2, -0.03, 0.12, math.pi - 0.12, step=2.0), w=0.75, hand=0.2)
+for k in range(1, 26):                                               # the straw's plait, round the brim
+    a = 0.1 + (math.pi - 0.2) * k / 26
+    p0 = (hm[0] + 64 * math.cos(a), hm[1] + 10 * math.sin(a))
+    p1 = (hm[0] + 55 * math.cos(a + 0.035), hm[1] + 8.4 * math.sin(a + 0.035))
+    F([p0, p1], w=0.6, hand=0.0)
+tone(R([(600, 176), (630, 181), (660, 182), (690, 180), (712, 175), (700, 182), (660, 186), (620, 183)]), 70, 5.5,
+     w=0.6, skip=0.2)                                                 # the brim's shadow side
+pen.occlude(brimM)
+S([(616, 171), (615, 160), (616, 150)], w=1.9)                        # the crown's sides
+S([(696, 150), (697, 160), (696, 170)], w=1.9)
+pen.line(ellipse_pts(656, 150, 40, 6, -0.03, 0, TAU, step=2.0), w=1.5, hand=0.2)   # its flat top
+for k in range(1, 4):                                                 # plaited rows round the crown
+    y = 150 + k * 2.6
+    F([(616.5, y + 0.5), (636, y + 4.8), (656, y + 6), (676, y + 4.8), (695.5, y + 0.4)], w=0.6, hand=0.1)
+band = [(615.5, 160), (636, 165), (656, 166.5), (676, 165), (696.5, 159.5), (696.5, 169.5), (676, 175), (656, 177),
+        (636, 175), (616, 170)]
+S([(615.5, 160), (636, 165), (656, 166.5), (676, 165), (696.5, 159.5)], w=1.1, hand=0.2)   # the ribbon
+hatch_keep(R(band), 100, 5.0, lambda p: True, w=0.68)
+F([(619, 163), (612, 159), (610, 166), (618, 167.5), (612, 173), (619, 172)], w=0.85)   # its bow
+pen.occlude(R([(616, 172), (615, 160), (616, 149), (636, 145), (656, 144), (676, 145), (696, 149), (697, 160), (696, 171),
+               (656, 178)]))
 
 # ---- his head: clean-shaven but for a trimmed moustache, the face kept a
 # pale plane; hair cut short at the back and sides
@@ -343,21 +344,22 @@ F([(709, 244), (710, 247.5), (708, 251), (704.5, 253.5), (705, 256), (708, 260),
    (698, 270.5), (690, 271)], w=1.6)
 F([(708, 245.5), (701, 246.5), (694, 246.5)], w=1.1)                       # the mouth
 F([(696, 250.5), (701.5, 251.5), (706, 250.5)], w=0.7)                     # under the lower lip
-F([(697, 270), (684, 266), (670, 259), (659, 250), (653, 241)], w=1.5)    # the jaw
+F([(698, 270.5), (686, 267.5), (672, 262), (662, 255), (656, 247), (653, 239)], w=1.6)   # the jaw, firm to its angle
 # nose, eyes, brows, the forehead under the brim
-S([(694, 182), (696, 188), (698, 192)], w=1.8)
-F([(698, 192), (695, 200), (697, 205), (705, 213), (712, 220), (715, 224), (714, 228), (709, 230)], w=1.7)
-F([(709, 230), (704, 230), (700, 228)], w=1.3)
+S([(694, 181), (696, 188), (698, 192)], w=1.8)
+F([(698, 192), (695.5, 199), (697, 204), (704, 212), (710, 219), (713, 223.5), (712.5, 227.5), (708.5, 229.5)], w=1.7)
+F([(708.5, 229.5), (704, 230), (700, 228)], w=1.3)
 F([(703, 222), (698, 224), (698, 228), (702, 230)], w=1.2)       # nostril wing
 F([(683.5, 196), (684.5, 204), (688, 211.5), (694, 217.5), (699, 221.5)], w=0.95, hand=0.15)   # the nose's bridge
-F([(661.7, 203.5), (666.2, 200.9), (671.5, 200.3), (676.9, 202.7)], w=2.1)   # upper lid
+F([(661, 203.6), (666, 200.6), (671.5, 200), (677.4, 202.8)], w=1.9)   # upper lid
+F([(664, 199), (670, 197.2), (676, 198.6)], w=0.6)                # its crease
 F([(666.6, 206.0), (671.5, 206.4), (674.8, 204.7)], w=0.8)
 pen.blot(671.2, 203.7, 2.5, w=2.0)
 F([(687.5, 203.5), (691, 201.5), (694.5, 202.5)], w=1.5)         # far eye
 pen.blot(691.4, 203.3, 1.5, w=1.3)
 F([(655, 195), (661, 191.5), (669, 190.5), (680, 193.5)], w=1.9)  # brows
 F([(687, 194.5), (692.5, 193), (697, 193.8)], w=1.5)
-face = [(656, 180), (694, 181), (698, 193), (694, 201), (703, 211), (716, 224), (713, 240), (711, 250),
+face = [(656, 178), (694, 179), (698, 193), (694, 201), (703, 211), (716, 224), (713, 240), (711, 250),
         (709, 263), (700, 271), (688, 272), (670, 260), (656, 246), (652, 232), (653, 200)]
 pen.occlude(R(face))
 
@@ -368,12 +370,12 @@ F([(651, 199), (645, 196), (639, 201), (636, 212), (637, 223), (641, 231), (647,
 F([(646, 202), (641, 207), (641, 217), (644, 223)], w=0.9)       # inner rim
 pen.occlude(R(ear))
 
-# short hair: close round the back of the head, tapered at the nape
-hair = [(606, 170), (655, 178), (655, 190), (651, 198), (645, 195), (638, 199), (636, 214), (636, 228), (632, 240),
-        (625, 249), (618, 244), (610, 228), (606, 208), (605, 190)]
-back = [(607, 172), (605, 190), (607, 210), (612, 228), (619, 242), (625, 249)]
+# short hair: close round the back of the skull, which rounds in to the nape
+hair = [(606, 170), (655, 178), (655, 190), (651, 198), (645, 195), (638, 199), (636, 214), (636, 228), (637, 236),
+        (634, 246), (624, 239), (614, 227), (608, 212), (605, 192)]
+back = [(607, 172), (605, 190), (608, 208), (614, 224), (623, 237), (634, 246)]
 S(back, w=1.9, hand=0.5)
-F([(625, 249), (630, 244), (634, 236), (637, 228)], w=1.0, hand=0.3)   # the hairline behind the ear
+F([(634, 246), (636.5, 240), (637.5, 232)], w=1.0, hand=0.3)         # the hairline behind the ear
 F([(655, 180), (655.5, 190), (652, 198)], w=1.1)                       # the sideburn
 for k, d in enumerate((5.5, 11.5, 17.5, 24.0)):                        # short hair, row on row round the skull
     rail = offset(C(back, step=1.0), d if offset(C(back), 1)[0][0] > back[0][0] else -d)
@@ -382,10 +384,10 @@ for k, d in enumerate((5.5, 11.5, 17.5, 24.0)):                        # short h
 for k in range(4):
     F([(653 - k * 2.5, 182 + k * 4), (643 - k * 3, 186 + k * 4.5)], w=0.65)   # combed back from the temple
 pen.occlude(R(hair))
-F([(625, 249), (627, 264), (629, 279)], w=1.5)                         # the back of the neck
+F([(634, 246), (637, 261), (641, 277)], w=1.5)                         # the back of the neck
 F([(690, 271), (692, 277)], w=1.1)                                  # the throat
 ticks([(655, 243), (668, 256), (684, 266)], ang=95, spacing=5.5, maxlen=7, w=0.6, minlen=2)   # under the jaw
-pen.occlude(R([(625, 249), (651, 236), (664, 254), (684, 266), (696, 271), (696, 279), (630, 287), (627, 266)]))
+pen.occlude(R([(634, 246), (651, 236), (664, 254), (684, 266), (696, 271), (696, 279), (641, 279), (637, 261)]))
 
 # ---- the far hand and its shirt cuff, beside the coat
 fh = frame((771, 563), 93)
@@ -411,7 +413,7 @@ S([(789, 547), (789, 554), (788, 560)], w=1.6)
 S([(756, 561), (772, 562), (788, 560)], w=1.5)
 pen.occlude(R(cuffF))
 
-# ---- the lounge coat, worn open: lapels rolled to the top button, the
+# ---- the sack coat, worn open: lapels rolled to the top button, the
 # fronts rounding away below to show the waistcoat
 NF = [(660, 303), (663, 330), (661, 370), (656, 405), (652, 425), (649, 480), (647, 540), (643, 563), (632, 574),
       (618, 578)]
@@ -423,7 +425,7 @@ S(NF, w=1.8)
 S(FF, w=1.6)
 S(lapN_out, w=1.5)
 S(lapF_out, w=1.2)
-F([(625, 285), (641, 290), (656, 299), (661, 303)], w=1.5)          # the collar behind his neck
+F([(626, 300), (632, 294), (641, 292), (652, 296), (661, 303)], w=1.5)   # the coat's collar behind his neck
 F([(624, 300), (632, 312), (639, 318)], w=1.4)                      # its edge, to the notch
 F([(645, 317.5), (635, 324)], w=1.4)                                # the lapel's top
 F([(656, 305), (643, 319)], w=1.0)                                  # the gorge
@@ -470,7 +472,7 @@ tone(R([(586, 548), (630, 556), (645, 552), (643, 563), (632, 574), (618, 578), 
      skip=0.2)
 coatN = [(626, 300), (600, 305), (575, 312), (557, 322), (560, 360), (575, 400), (588, 440), (590, 470), (588, 520),
          (584, 576), (600, 578), (618, 578), (632, 574), (643, 563), (647, 540), (649, 480), (652, 425), (656, 405),
-         (661, 370), (663, 330), (660, 303), (641, 289), (625, 285)]
+         (661, 370), (663, 330), (660, 303), (641, 291), (630, 295)]
 coatF = FF + [(750, 570), (746, 520), (742, 470), (740, 425), (738, 380), (741, 340), (743, 322), (727, 305),
               (712, 301)]
 pen.occlude(R(coatN))
@@ -515,11 +517,12 @@ pen.occlude(R([(666, 306), (682, 362), (702, 306), (700, 298), (670, 300)]))
 # the high starched collar, straight round the neck, its fronts meeting under the chin
 F([(692, 278), (691.5, 288), (691, 297)], w=1.4)
 F([(699, 279), (699.5, 288), (700, 296)], w=1.1)
-F([(692, 278), (676, 277), (660, 278.5), (643, 279.5), (628, 279)], w=1.4)
+F([(692, 278), (676, 277), (660, 277.5), (648, 278), (641, 277.5)], w=1.4)
+F([(641, 277.5), (640.5, 285), (640, 292)], w=1.2)
 F([(699, 279), (704, 278), (707, 280)], w=1.0)
-F([(691, 297), (676, 298.5), (662, 301)], w=1.1)
+F([(691, 297), (676, 298.5), (662, 300)], w=1.1)
 F([(696, 297), (700, 296), (704, 300)], w=0.9)
-pen.occlude(R([(628, 279), (692, 277), (707, 279), (705, 302), (627, 300)]))
+pen.occlude(R([(641, 277), (692, 277), (707, 279), (705, 302), (640, 296)]))
 
 # ---- his far coat sleeve, behind the body
 sleeveF_out = [(744, 321), (759, 350), (769, 398), (776, 450), (783, 498), (788, 530), (789, 547)]
@@ -678,78 +681,60 @@ pen.occlude(R(sleeveW_out + sleeveW_in[::-1] + [(345, 320)]))
 
 # ---- her head: the face, then the boater, the pompadour and the ear
 F([(405, 229), (406, 239), (407, 244)], w=1.6)
-F([(407, 244), (404, 251), (405, 254), (409, 260), (412, 265), (412.5, 268), (410, 270), (407, 271), (404, 270)],
-  w=1.5)
-F([(406, 263), (402, 264), (400, 268), (403, 271)], w=1.0)              # nostril wing
+F([(407, 244), (405, 251), (406, 255), (409, 260.5), (411, 264.5), (411.3, 267.3), (409.4, 269.2), (406.6, 269.7),
+   (404, 268.8)], w=1.5)
+F([(405.5, 262.5), (402, 263.5), (400.5, 267), (403, 269.5)], w=1.0)    # nostril wing
 F([(394.5, 246.5), (395.2, 253), (397.6, 258.6), (401.2, 262.6)], w=0.85, hand=0.15)   # the nose's bridge
-F([(408, 272), (406, 276), (407, 280)], w=1.1)                          # upper lip, in profile
-F([(407, 280), (405, 283), (407, 286), (404, 290)], w=1.2)              # the lips' fronts
-F([(391, 284), (396, 284.5), (401, 284.5), (405, 283.5)], w=1.3)        # mouth
-F([(389, 282.5), (390, 285.5)], w=0.7)                                  # its corner
-F([(395, 289.5), (398.5, 291.8), (402, 291.5), (404.5, 289.5)], w=1.1)  # a full lower lip
-F([(404, 274), (403, 279)], w=0.6)                                      # philtrum
-F([(404, 290), (402, 296), (398, 301), (391, 304), (384, 304)], w=1.6)  # chin
-F([(384, 304), (374, 301), (364, 295), (357, 289)], w=1.4)              # jaw
+F([(405.5, 270.5), (406.8, 275), (408.2, 279.2)], w=1.1)                # upper lip, in profile
+F([(408.2, 279.2), (406.3, 282.4), (407.6, 285.4), (405.2, 288.6)], w=1.2)   # the lips' fronts
+F([(391, 282.6), (396, 283.8), (401.5, 284), (406.3, 282.6)], w=1.25)   # the mouth, its corner lifting
+F([(393.5, 280.4), (399, 279.6), (404.5, 279.9)], w=0.7)               # the upper lip's edge
+F([(395, 288), (398.5, 290.2), (402, 290), (405, 288.4)], w=1.1)        # a full lower lip
+F([(404, 273.5), (403.2, 277.5)], w=0.6)                                # philtrum
+F([(405.2, 288.6), (403.6, 294), (400, 298.6), (393, 302), (385, 302.2)], w=1.6)   # a soft, smaller chin
+F([(385, 302.2), (374, 299.6), (364, 294), (357, 288)], w=1.4)          # jaw
 # eyes: lids, lashes, irises
-F([(373.6, 251.7), (376.8, 248.5), (381.6, 247.7), (386.4, 250.1)], w=1.5)
-F([(375.2, 246.9), (380.0, 245.3), (385.6, 246.9)], w=0.65)                         # lid crease
-F([(376.0, 253.3), (380.8, 254.1), (385.6, 251.7)], w=0.7)
-for (x0, y0) in ((374.4, 251.1), (376, 249.4), (378, 248.3)):
-    F([(x0, y0), (x0 - 2.0, y0 - 1.6)], w=0.6)                            # lashes
-pen.blot(382.6, 250.6, 1.7, w=1.2)
-F([(398, 251), (401.2, 248.6), (404.4, 250.2)], w=1.25)
+F([(373, 251.8), (376.5, 248), (381.6, 247), (387, 249.8)], w=1.5)
+F([(375, 246.4), (380, 244.6), (385.8, 246.4)], w=0.65)                 # lid crease
+F([(376, 253.6), (381, 254.4), (386, 252)], w=0.7)
+for (x0, y0) in ((373.8, 251.2), (375.6, 249.2), (377.8, 247.9)):
+    F([(x0, y0), (x0 - 2.2, y0 - 1.8)], w=0.6)                          # lashes
+pen.blot(382.4, 250.6, 1.9, w=1.25)
+F([(398, 251), (401.2, 248.4), (404.4, 250.2)], w=1.25)
 F([(399.5, 252.8), (403, 252.8)], w=0.6)
-pen.blot(401.4, 250.5, 1.2, w=1.05)
-F([(368, 245), (373, 241.5), (380, 239.8), (386, 240.5), (391, 243)], w=1.6)   # brows, clearly arched
-F([(397.5, 243.5), (401, 241.5), (405, 242)], w=1.3)
-F([(386, 304), (388.5, 309)], w=1.2)                                     # the throat
-ticks([(386, 306), (378, 304), (368, 300)], ang=95, spacing=5, maxlen=5, w=0.6, minlen=2)
-pen.occlude(R([(372, 226), (405, 228), (407, 244), (414, 267), (403, 290), (386, 306), (390, 312), (360, 308),
+pen.blot(401.3, 250.5, 1.25, w=1.05)
+F([(368, 245), (373, 241.8), (380, 240.2), (386, 240.8), (391, 243)], w=1.35)   # brows, softly arched
+F([(397.5, 243.5), (401, 241.8), (405, 242.2)], w=1.15)
+F([(387, 302.5), (389, 308.5)], w=1.2)                                   # the throat
+ticks([(386, 304), (378, 302), (368, 298)], ang=95, spacing=5, maxlen=5, w=0.6, minlen=2)
+pen.occlude(R([(372, 226), (405, 228), (407, 244), (413, 267), (409, 280), (403, 292), (386, 304), (390, 312), (360, 308),
                (358, 290), (360, 268), (362, 246)]))
-# the boater: a flat straw brim tipped a little forward, a low crown, a ribbon
-hb = (366, 197)
-brimW = ellipse_pts(hb[0], hb[1], 47, 8, 0.07, 0, TAU, step=2.0)
-pen.line(ellipse_pts(hb[0], hb[1], 47, 8, 0.07, -0.05, math.pi + 0.05, step=2.0), w=1.8, hand=0.3)
-pen.line(ellipse_pts(hb[0], hb[1], 47, 8, 0.07, math.pi + 0.05, TAU - 0.05, step=2.0), w=1.2, hand=0.3)
-pen.line(ellipse_pts(hb[0], hb[1] + 1.6, 45, 7.4, 0.07, 0.1, math.pi - 0.1, step=2.0), w=0.7, hand=0.2)
-for k in range(1, 20):                                               # the straw's plait, round the brim
-    a = 0.12 + (math.pi - 0.24) * k / 20
-    p0 = (hb[0] + 47 * math.cos(a), hb[1] + 8 * math.sin(a))
-    p1 = (hb[0] + 40 * math.cos(a + 0.04), hb[1] + 6.4 * math.sin(a + 0.04))
-    F([p0, p1], w=0.6, hand=0.0)
-pen.occlude(brimW)
-crownW = [(341, 193), (340, 186), (341, 180), (366, 176), (391, 182), (392, 188), (392, 196)]
-S([(341, 194), (340, 186), (341, 179)], w=1.6)
-S([(392, 183), (392, 189), (392, 196)], w=1.6)
-pen.line(ellipse_pts(366, 180.5, 25.5, 4.6, 0.07, 0, TAU, step=2.0), w=1.3, hand=0.2)
-S([(340.5, 186), (366, 191.5), (392, 189)], w=1.0, hand=0.2)        # the ribbon
-hatch_keep(R([(340.5, 186), (366, 191.5), (392, 189), (392, 196), (366, 199), (341, 194)]), 95, 5.0,
-           lambda p: True, w=0.62)
-F([(343, 189), (334, 184), (331, 190), (339, 192), (333, 197), (340, 197)], w=0.9)   # its bow behind
-pen.occlude(R(crownW + [(366, 200)]))
-# the hair: swept up from the face into a soft roll, gathered in a knot behind
-hairW = [(405, 229), (409, 222), (408, 212), (399, 204), (382, 200), (362, 199), (344, 203), (330, 212), (322, 228),
-         (320, 246), (324, 264), (332, 278), (342, 287), (348, 291), (346, 282), (342, 268), (344, 256), (352, 251), (360, 249),
-         (364, 240), (372, 232), (385, 228), (396, 227)]
-S([(405, 229), (409, 222), (408, 212), (402, 205)], w=1.6, hand=0.4)
-S([(330, 212), (322, 228), (320, 246), (324, 264), (332, 278), (342, 287), (348, 291)], w=1.8, hand=0.5)
+# the hair, Gibson-girl fashion: swept up all round into a full, soft
+# pompadour, gathered in a knot on the crown
+hairW = [(405, 229), (411, 222), (415, 212), (413, 202), (404, 195), (388, 191), (370, 190), (352, 192), (336, 198),
+         (325, 210), (319, 228), (318, 246), (324, 264), (332, 278), (342, 287), (348, 291), (346, 282), (342, 268), (344, 256),
+         (352, 251), (360, 249), (364, 240), (372, 232), (385, 228), (396, 227)]
+S([(405, 229), (411, 222), (415, 212), (413, 202), (404, 195), (388, 191), (370, 190)], w=1.6, hand=0.4)
+S([(338, 197), (325, 210), (319, 228), (318, 246), (323, 264), (332, 278), (342, 287), (348, 291)], w=1.8, hand=0.5)
 F([(405, 229), (396, 227), (385, 228), (372, 232), (364, 240), (360, 250), (353, 254)], w=1.0)   # the hairline
-for k in range(8):                                                    # drawn up and back from the face
-    t = k / 7.0
-    p0 = lerp((403, 228), (362, 246), t)
-    F([p0, (p0[0] - 2 - 3 * t, p0[1] - 12 + 2 * t), (p0[0] - 12 - 6 * t, p0[1] - 24 + 5 * t),
-       (p0[0] - 30 - 4 * t, p0[1] - 28 + 4 * t)], w=0.75, hand=0.15)
-for k in range(5):                                                    # over the temple toward the knot
-    y0 = 252 + k * 7
-    F([(352 - k * 0.6, y0), (338 - k * 1.2, y0 - 10), (330 - k * 1.5, y0 - 24 - k * 2)], w=0.72, hand=0.15)
-F([(399, 205), (392, 215), (393, 224)], w=0.8)                       # the roll's underside
-F([(382, 202), (377, 214), (380, 226)], w=0.7)
-ticks([(402, 206), (391, 214), (388, 226)], ang=10, spacing=5, maxlen=5, w=0.55, minlen=2)
+for k in range(9):                                                    # up from the face, over the roll, back
+    t = k / 8.0
+    p0 = lerp((403, 228), (361, 247), t)
+    end = lerp((354, 197), (326, 236), t)
+    c1 = (p0[0] + 5 - 4 * t, p0[1] - 11 + 2 * t)
+    c2 = lerp((400, 200), (338, 222), t)
+    pts = catmull([p0, c1, c2, end], step=1.5)
+    pen.line(pts, w=0.72, hand=0.25, lift=0.15, piece=(14, 30))
+for k in range(4):                                                    # from the nape up the back of the head
+    F([(346 - k * 2.6, 286 - k * 5), (330 + k * 1.5, 254 - k * 3), (334 + k * 2.5, 216 - k), (348, 196 + k)],
+      w=0.72, hand=0.15)
+F([(411, 208), (403, 213), (400, 224)], w=0.8)                       # the roll's underside
+ticks([(412, 210), (403, 215), (400, 225)], ang=10, spacing=5, maxlen=5, w=0.55, minlen=2)
 pen.occlude(R(hairW))
-knot = ellipse_pts(322, 211, 13, 11, -0.4, 0, TAU, step=2.0)
-pen.line(ellipse_pts(322, 211, 13, 11, -0.4, 1.3, 5.3, step=2.0), w=1.6, hand=0.3)
-F([(314, 204), (322, 212), (318, 222)], w=0.8)
-F([(325, 202), (330, 212), (326, 221)], w=0.75)
+knot = ellipse_pts(350, 189, 14, 8, -0.2, 0, TAU, step=2.0)
+pen.line(ellipse_pts(350, 189, 14, 8, -0.2, 2.6, 6.8, step=2.0), w=1.6, hand=0.3)
+F([(339, 192), (348, 184.5), (360, 185)], w=0.8)                      # its coils
+F([(342, 194.5), (351, 190), (362, 190.5)], w=0.75)
 pen.occlude(knot)
 F([(357, 254), (351, 252), (346, 257), (345, 266), (348, 276), (353, 281), (357.5, 279)], w=1.4)   # the ear
 F([(352, 258), (349, 264), (351, 272)], w=0.75)
@@ -763,11 +748,15 @@ F([(390, 308), (392, 318), (394, 328)], w=1.4)
 F([(347, 298), (346, 309), (345, 319)], w=1.1)
 for x in (356, 366, 377):
     F([(x, 303.5 + (x - 356) * 0.03), (x - 0.5, 323 + (x - 356) * 0.15)], w=0.6)
-pen.ellipse(388, 320, 3.6, 3.2, w=1.0, hand=0.0, lift=0.0)
-pen.blot(388, 320, 1.4, w=1.0)
+F([(390, 323), (383, 319), (382, 326.5), (390, 324)], w=1.0)          # a small bow tie at the collar
+F([(393, 323), (400, 319.5), (401, 327), (393, 324.5)], w=1.0)
+pen.blot(391.5, 323.7, 1.6, w=1.1)
+F([(390.5, 325.5), (388.5, 333)], w=0.85)
+F([(392.5, 325.5), (395, 333.5)], w=0.85)
+pen.occlude(R([(382, 318), (401, 318), (402, 328), (396, 335), (387, 335), (381, 327)]))
 pen.occlude(R([(390, 308), (347, 298), (345, 319), (394, 328)]))
 
-# ---- the blouse: shaped over the bust, pin tucks down the front, small
+# ---- the shirtwaist blouse: shaped over the bust, pin tucks down the front, small
 # buttons; the belt drawn in at a narrow waist
 S([(318, 324), (330, 321), (345, 319)], w=1.8)                        # near shoulder
 S([(394, 328), (405, 343), (415, 366), (419, 392), (415, 418), (410, 442), (412, 462)], w=2.0)   # the front
@@ -885,6 +874,32 @@ for k, (amp, y0, x1) in enumerate([(5, 718, 985), (6, 710, 975), (4, 726, 960)])
 for k in range(2):
     pts = [(942 + 30 * i / 20, 796 - 14 * i / 20 + 3 * math.sin(i / 3 + k)) for i in range(21)]
     pen.line(pts, w=0.62, hand=0.3, lift=0.3, piece=(8, 18))
+
+F([(961, 849), (961.5, 806)], w=0.8)                                # the factory's flag
+flag = [(962, 807), (972, 808.5), (984, 807), (984, 821), (972, 822.5), (962, 821)]
+F(flag[:4], w=0.8)
+F(flag[3:] + [(962, 821)], w=0.8)
+for k in range(1, 4):                                                 # its stripes
+    yy = 807 + k * 3.5
+    F([(962, yy), (972, yy + 1.5), (984, yy)], w=0.6, hand=0.05)
+hatch_keep(R([(962, 807), (970, 808.2), (970, 814.5), (962, 814)]), 45, 5.0, lambda p: True, w=0.6)
+
+# telegraph poles running off to the left, the wires sagging between them
+poles = [(48, 884, 776), (116, 884, 788), (180, 884, 798)]
+for (x, yb, yt) in poles:
+    F([(x, yb), (x + 0.6, yt)], w=1.0, hand=0.15)
+    F([(x - 9, yt + 5), (x + 10, yt + 5)], w=0.9, hand=0.05)          # crossarm
+    for dx in (-7, 8):
+        F([(x + dx, yt + 5), (x + dx, yt + 2)], w=0.7)                 # insulators
+for dx in (-7, 8):
+    for (a, b) in zip(poles[:-1], poles[1:]):
+        p0, p1 = (a[0] + dx, a[2] + 2), (b[0] + dx, b[2] + 2)
+        mid = (lerp(p0, p1, 0.5)[0], lerp(p0, p1, 0.5)[1] + 5)
+        pen.line(catmull([p0, mid, p1], step=2.0), w=0.6, hand=0.1, lift=0.0)
+    p0 = (poles[0][0] + dx, poles[0][2] + 2)
+    pen.line(catmull([p0, (p0[0] - 20, p0[1] + 4), (10, p0[1] + 2)], step=2.0), w=0.6, hand=0.1, lift=0.0)
+    p0 = (poles[-1][0] + dx, poles[-1][2] + 2)
+    pen.line(catmull([p0, (p0[0] + 18, p0[1] + 4), (222, p0[1] + 6)], step=2.0), w=0.6, hand=0.1, lift=0.0)
 
 # ---- the ground: their shadows fall to the right
 for (x0, x1, y) in [(470, 560, 932), (500, 590, 924), (690, 830, 940), (760, 860, 931), (520, 560, 940),

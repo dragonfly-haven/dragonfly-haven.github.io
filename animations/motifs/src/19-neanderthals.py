@@ -745,22 +745,28 @@ class Head:
             u, yb = at(bc, 0.2 + 0.6 * (k + 0.5) / 5)
             hd.add(self.C([(u, yb + 0.22), (u - 0.1, yb + 0.6), (u - 0.25, yb + 0.95)]), w=0.72, hand=0.05)
         # the eye deep under it: crease, heavy upper lid, lower lid, iris
+        # a clear, open eye, a little larger than before, with lashes on the upper lid
         ex, ey = ft['eye']
-        hd.add(self.C([(ex - 0.95, ey - 0.55), (ex, ey - 0.9), (ex + 0.85, ey - 0.6)]), w=0.9, hand=0.05)
-        hd.add(self.C([(ex - 1.05, ey - 0.05), (ex - 0.1, ey - 0.45), (ex + 0.8, ey - 0.1)]), w=1.6, hand=0.05)
-        hd.add(self.C([(ex - 0.85, ey + 0.32), (ex, ey + 0.48), (ex + 0.7, ey + 0.2)]), w=0.85, hand=0.05)
-        e = self.p(ex + 0.2, ey - 0.12)
-        hd.add(blot_pts(e[0], e[1], 0.3 * s, w=1.3), w=1.3, clip=False, hand=0, lift=0, piece=(400, 800))
-        hd.add(self.C([(ex - 0.5, ey + 1.05), (ex + 0.2, ey + 1.15), (ex + 0.9, ey + 0.9)]), w=0.75, hand=0.1)
+        k_ = 1.2
+        E_ = lambda pts: [(ex + dx * k_, ey + dy * k_) for dx, dy in pts]
+        hd.add(self.C(E_([(-0.95, -0.6), (0.0, -0.95), (0.85, -0.65)])), w=0.85, hand=0.05)
+        hd.add(self.C(E_([(-1.05, -0.05), (-0.1, -0.5), (0.8, -0.12)])), w=1.5, hand=0.05)
+        hd.add(self.C(E_([(-0.85, 0.32), (0.0, 0.5), (0.7, 0.2)])), w=0.8, hand=0.05)
+        for dx in (-0.8, -0.45):
+            hd.add(self.C(E_([(dx, -0.2 + dx * 0.25), (dx - 0.35, -0.55 + dx * 0.25)])), w=0.6, hand=0)
+        e = self.p(ex + 0.2 * k_, ey - 0.08 * k_)
+        hd.add(blot_pts(e[0], e[1], 0.34 * s, w=1.3), w=1.3, clip=False, hand=0, lift=0, piece=(400, 800))
+        hd.add(self.C(E_([(-0.4, 1.1), (0.2, 1.18), (0.8, 0.95)])), w=0.65, hand=0.1)
         # the big nose: wing, nostril, the fold down past the mouth
         hd.add(self.C(ft['ala']), w=1.25, hand=0.1)
         hd.add(self.C(ft['nostril']), w=1.0, hand=0.1)
         hd.add(self.C(ft['fold']), w=0.7, hand=0.15)
-        hd.add(self.C(ft['mouth']), w=1.2, hand=0.1)
+        hd.add(self.C(ft['mouth']), w=1.15, hand=0.1)
         m0 = ft['mouth'][-1]
         hd.add(self.C([m0, (m0[0] - 0.3, m0[1] - 0.2)]), w=0.85, hand=0)
-        if self.sex == 'M':
-            hd.add(self.C(ft['cheek']), w=0.75, hand=0.15)
+        m1 = ft['mouth'][0]                 # the lower lip, full and soft under the mouth
+        hd.add(self.C([(m1[0] - 0.35, m1[1] + 0.65), (m1[0] - 0.95, m1[1] + 0.8), (m1[0] - 1.5, m1[1] + 0.6)]), w=0.8,
+               hand=0.05)
         # the jaw's edge against the neck, and the angle of the jaw
         jaw = JAW_M if self.sex == 'M' else JAW_F
         if self.sex == 'M':
@@ -780,7 +786,7 @@ class Head:
         # modelling: the side plane of the face hatched from the ear forward to
         # the line from the brow's outer end over the cheek to the jaw's angle,
         # under the jaw, and in the hollow under the brow
-        lite = 0.18 if self.sex == 'F' else 0.6
+        lite = 0.12 if self.sex == 'F' else 0.4
 
         def prob(q):
             x, y = self.inv(q)
@@ -1428,8 +1434,8 @@ def man(ox=236):
                     edge_w=1.3, wave=0.25, tip=(0.4, 0.9), tuft=(2.4, 3.8), lock=(-0.035, 0.035), keep=0.8)
     head.beard([(3.0, -2.6), (4.2, 0.4), (6.0, 2.8), (7.6, 4.8), (9.0, 6.6), (10.6, 8.6), (11.8, 9.6), (11.2, 11.4),
                 (9.4, 12.9), (6.6, 13.6), (4.0, 13.5), (1.8, 12.4), (0.6, 10.4), (0.2, 8.0), (1.6, 3.0), (2.2, 0.0)],
-               lambda x, y: math.pi / 2 - 0.5 * max(0.0, min(1.0, (x - 2.0) / 6.0)), spacing=0.95, ln=(0.9, 1.5),
-               keep=lambda x, y: 0.45)
+               lambda x, y: math.pi / 2 - 0.5 * max(0.0, min(1.0, (x - 2.0) / 6.0)), spacing=0.95, ln=(0.8, 1.3),
+               keep=lambda x, y: 0.34)
     head.beard([(12.3, 5.1), (13.1, 5.2), (13.1, 6.6), (12.6, 7.3), (11.8, 7.0)], lambda x, y: math.pi / 2 + 0.5,
                spacing=0.6, ln=(0.8, 1.3))
 
