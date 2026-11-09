@@ -16,7 +16,7 @@
 </style>
 </head>
 <body>
-<header><a class="brand" href="../"><span class="wordmark">Dragonfly</span><div id="dragonfly" aria-hidden="true"></div></a></header>
+<header><a class="brand" href="../" aria-label="Home"><div id="dragonfly" aria-hidden="true"></div></a></header>
 <main>
 <h1>Making things go well</h1>
 <p class="muted">A rough map of what we think matters. Sketch, not doctrine.</p>
@@ -58,5 +58,9 @@
 </ul>
 </section>
 </main>
-<script type="module" src="../animations/site.js"></script>
+<script type="module">
+import { mountDragonfly } from '../animations/dragonfly.js';
+const style = new URLSearchParams(location.search).get('dragonfly') || 'crystallise';
+mountDragonfly(document.getElementById('dragonfly'), { style });
+</script>
 </body></html>

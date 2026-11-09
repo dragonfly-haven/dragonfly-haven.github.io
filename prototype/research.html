@@ -5,7 +5,7 @@
 <title>Earth, seen from outside</title>
 <link rel="stylesheet" href="../style.css">
 <style>
- main{display:block;max-width:52rem;margin:0 auto;padding:1rem 1rem 4rem}
+ main{display:block;width:100%;min-width:0;max-width:52rem;margin:0 auto;padding:1rem 1rem 4rem}
  .intro h1{font-weight:500;font-size:2rem;margin:.5rem 0 .3rem}
  .intro p{color:var(--muted)}
  .tabs{position:sticky;top:0;z-index:1;display:flex;gap:1.4rem;overflow-x:auto;scrollbar-width:none;
@@ -32,6 +32,7 @@
  section a:hover{text-decoration-thickness:2px}
  section{overflow-wrap:break-word}
  section code{font-size:.85em;overflow-wrap:anywhere}
+ section pre{overflow-x:auto;line-height:1.35}
  section hr{border:0;border-top:1px solid #d9d3c4;margin:2rem 0}
  section blockquote{padding-left:1rem;border-left:2px solid #d9d3c4;color:var(--muted)}
  .scroll{overflow-x:auto;margin:1rem 0}
@@ -43,7 +44,7 @@
 </style>
 </head>
 <body>
-<header><a class="brand" href="../"><span class="wordmark">Dragonfly</span><div id="dragonfly" aria-hidden="true"></div></a></header>
+<header><a class="brand" href="../" aria-label="Home"><div id="dragonfly" aria-hidden="true"></div></a></header>
 <main>
 <div class="intro">
 <h1>Earth, seen from outside</h1>
@@ -8675,5 +8676,9 @@ the latest I found).</li>
   route(false);
 })();
 </script>
-<script type="module" src="../animations/site.js"></script>
+<script type="module">
+import { mountDragonfly } from '../animations/dragonfly.js';
+const style = new URLSearchParams(location.search).get('dragonfly') || 'crystallise';
+mountDragonfly(document.getElementById('dragonfly'), { style });
+</script>
 </body></html>
