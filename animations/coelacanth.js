@@ -9,11 +9,14 @@
 // while its second dorsal and anal fins scull together and its tail waves.
 // With `rise`, it first lies as a fossil in the sand, and its grains lift and
 // gather into the living fish, whose fins then unfurl and begin to paddle.
+// It is laid out once on the CPU and drawn every frame on the GPU
+// (coelacanth-gl.js), or in 2D where WebGL2 isn't to be had.
 //
 //   import { mountCoelacanth } from './animations/coelacanth.js';
 //   mountCoelacanth(document.getElementById('coelacanth'));
 
 import { triangleSize, INK, TAU, random, clamp, smooth, reducedMotion, animate } from './core.js';
+import { createRenderer } from './coelacanth-gl.js';
 
 // A dash for a screen's pixel ratio, in CSS pixels: the same as the dragonfly's.
 function dashSize(ratio) {
@@ -41,6 +44,7 @@ const FORM = {
   spots: 1, // how many pale spots, as a share of the usual
   speed: 1, // of the fins' beat
   rise: false, // first rise from the sand as a fossil comes alive
+  gpu: true, // draw with WebGL2 where it is to be had; false draws in 2D
 };
 
 // ---------------------------------------------------------------------------
@@ -138,11 +142,13 @@ export function mountCoelacanth(el, options = {}) {
   const fins = makeFins(body, o);
 
   let lay = null, clock = 0, loop = null, playing = !calm;
+  const posed = []; // each lobed fin's matrices for the GPU, kept from frame to frame
   let rising = o.rise && !calm; // whether the rise is still to be seen
   const surface = mountSurface(el, (view) => {
     lay = layout(view);
+    if (surface.gpu) surface.gpu.load(forGpu(lay));
     draw();
-  });
+  }, o.gpu && !calm);
   surface.measure();
   if (!calm) loop = animate(el, (dt) => {
     if (!playing) return;
@@ -184,16 +190,25 @@ export function mountCoelacanth(el, options = {}) {
     return next;
   }
 
+  // The laid-out fish as the GPU takes it (see coelacanth-gl.js).
+  function forGpu(lay) {
+    const { at, grains, sand, n, m } = lay.rise;
+    const rise = new Float32Array((n + m) * 12);
+    for (let j = 0; j < m; j++) rise.set([sand[5 * j], sand[5 * j + 1], sand[5 * j + 2], sand[5 * j + 3], sand[5 * j + 4], 0, 0, -1], 12 * j);
+    for (let i = 0; i < n; i++) {
+      const k = 9 * i, g = 5 * i;
+      rise.set([at[k], at[k + 1], at[k + 2], at[k + 8] ? -at[k + 3] : at[k + 3], at[k + 4], at[k + 5], at[k + 6], at[k + 7], grains[g], grains[g + 1], grains[g + 2], grains[g + 3]], 12 * (m + i));
+    }
+    return {
+      width: lay.width, height: lay.height, ratio: lay.ratio,
+      proj: [lay.ox, lay.oy, lay.scale, DISTANCE], G: Float32Array.from(G),
+      body: lay.body, mask: lay.mask, grains: rise,
+      fins: fins.map((fin, i) => packFin(fin, lay.fins[i], lay.dash.width, lay.scale)),
+    };
+  }
+
   function draw() {
     if (!lay) return;
-    const { ctx, canvas, width, height, ratio } = surface.view;
-    const kx = (ratio * width) / lay.width, ky = (ratio * height) / lay.height;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.setTransform(kx, 0, 0, ky, 0, 0);
-    ctx.strokeStyle = ctx.fillStyle = INK;
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'round';
     const t = clock;
     // While it rises, its body is grains in flight, its fins unfurl one after
     // another and the beat swells.
@@ -202,6 +217,30 @@ export function mountCoelacanth(el, options = {}) {
     const amount = smooth(clamp((t - gathered) / RISE.wake, 0, 1));
     const grows = fins.map((_, i) => smooth(clamp((t - gathered + 0.5 - i * 0.07) / RISE.fins, 0, 1)));
     const poses = fins.map((fin) => fin.pose(t, G, amount));
+    if (surface.gpu) {
+      const frame = { back: [], front: [], rise: t < gathered ? { time: t, appear: smooth(clamp(t / 0.6, 0, 1)), width: lay.dash.width * o.weight, sand: SAND } : null };
+      fins.forEach((fin, i) => {
+        const pose = poses[i], grow = grows[i];
+        let at;
+        if (fin.kind === 'lobed') {
+          const M = (posed[i] ||= new Float32Array(9 * (LEVELS + 1)));
+          pose.M.forEach((m, l) => M.set(m, 9 * l));
+          at = { index: i, grow, reach: grow * LEVELS + 0.5, M, T: pose.T };
+        } else at = { index: i, grow, reach: grow, sway: [...fin.wave(pose.t), pose.amount] };
+        (fin.far ? frame.back : frame.front).push(at);
+      });
+      surface.gpu.draw(frame);
+      return;
+    }
+    const { ctx, canvas, width, height, ratio } = surface.view;
+    if (!ctx) return; // the GPU's context was lost and its renderer won't build again
+    const kx = (ratio * width) / lay.width, ky = (ratio * height) / lay.height;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(kx, 0, 0, ky, 0, 0);
+    ctx.strokeStyle = ctx.fillStyle = INK;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'round';
     // The fins on the far side, then the body over them, hiding what it covers.
     fins.forEach((fin, i) => fin.far && drawFin(ctx, lay, fin, lay.fins[i], poses[i], grows[i]));
     if (t < gathered) drawRise(ctx, lay, t, o.weight);
@@ -814,7 +853,71 @@ function fanFin(body, spec, phase) {
     }
     return { lines: Float32Array.from(lines), membrane: Float32Array.from(membrane), sway };
   };
-  return { kind: 'fan', far: false, pose, reach, sample, clear: false, bold: spec.bold };
+  // The wave now, for the GPU: its amplitude, its phase and its wave number.
+  const wave = (t) => [WAVE.amplitude * (spec.bold ? 0.25 : 1), TAU * (t / WAVE.period + phase), k];
+  return { kind: 'fan', far: false, pose, reach, sample, wave, clear: false, bold: spec.bold };
+}
+
+// A fin's dashes as the GPU takes them, 12 floats each (see coelacanth-gl.js),
+// with what a fin in front clears of the body behind it: its outline, filled
+// and stroked, and the root of its lobe.
+function packFin(fin, dashes, width, scale) {
+  const out = [];
+  const lobed = fin.kind === 'lobed';
+  const flat = (arr, w) => {
+    for (let i = 0; i < arr.length; i += 6) {
+      if (lobed) out.push(arr[i], arr[i + 1], 0, arr[i + 2], arr[i + 3], arr[i + 4], 0, arr[i + 5], 0, 0, 0, w);
+      else out.push(arr[i], arr[i + 1], arr[i + 2], 0, arr[i + 3], arr[i + 4], arr[i + 5], 0, 0, 0, 0, w);
+    }
+  };
+  flat(dashes.lines, width * (dashes.unbroken ? (fin.bold ? 1 : 0.75) : 1.1));
+  flat(dashes.membrane, width * 0.75);
+  if (!lobed) return { mode: 1, dashes: Float32Array.from(out) };
+  const lobe = dashes.lobe;
+  for (let i = 0; i < lobe.length; i += 10) out.push(lobe[i], lobe[i + 1], lobe[i + 2], lobe[i + 9], lobe[i + 3], lobe[i + 4], lobe[i + 5], lobe[i + 9], lobe[i + 6], lobe[i + 7], lobe[i + 8], width);
+  let clear = null;
+  if (fin.clear) {
+    const ring = dashes.outline, segs = [], fill = [];
+    ring.forEach(([s, c, l], i) => {
+      const [s2, c2, l2] = ring[(i + 1) % ring.length];
+      segs.push(s, c, 0, l, s2, c2, 0, l2, 0, 0, 0, -width * 2.2);
+    });
+    const [p, q] = dashes.axis;
+    segs.push(p[0], 0, 0, p[2], q[0], 0, 0, q[2], 0, 0, 0, dashes.lobeWidth * scale + width * 2);
+    for (const i of triangulate(ring)) fill.push(ring[i][0], ring[i][1], 0, ring[i][2]);
+    clear = { segs: Float32Array.from(segs), fill: Float32Array.from(fill) };
+  }
+  return { mode: 0, dashes: Float32Array.from(out), clear };
+}
+
+// Cuts a simple polygon of [x, y, …] points into triangles by clipping its
+// ears; returns the triangles' corners as indices into the points.
+function triangulate(pts) {
+  const area = pts.reduce((sum, p, i) => {
+    const q = pts[(i + 1) % pts.length];
+    return sum + p[0] * q[1] - q[0] * p[1];
+  }, 0);
+  const sign = area < 0 ? -1 : 1;
+  const turn = (a, b, c) => ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) * sign;
+  const idx = pts.map((_, i) => i), tris = [];
+  while (idx.length > 3) {
+    let cut = false;
+    for (let k = 0; k < idx.length && !cut; k++) {
+      const i0 = idx[(k + idx.length - 1) % idx.length], i1 = idx[k], i2 = idx[(k + 1) % idx.length];
+      const a = pts[i0], b = pts[i1], c = pts[i2], t = turn(a, b, c);
+      if (Math.abs(t) < 1e-9) {
+        idx.splice(k, 1); // a point on a straight run, or a repeated one
+        cut = true;
+      } else if (t > 0 && !idx.some((j) => j !== i0 && j !== i1 && j !== i2 && turn(a, b, pts[j]) > 0 && turn(b, c, pts[j]) > 0 && turn(c, a, pts[j]) > 0)) {
+        tris.push(i0, i1, i2);
+        idx.splice(k, 1);
+        cut = true;
+      }
+    }
+    if (!cut) break; // not simple after all: fan out what is left
+  }
+  for (let k = 1; k + 1 < idx.length; k++) tris.push(idx[0], idx[k], idx[k + 1]);
+  return tris;
 }
 
 // Strokes a fin as it is posed now.
@@ -915,14 +1018,23 @@ function drawFin(ctx, lay, fin, dashes, pose, grow = 1) {
 
 // Fills `el` with a canvas drawn at the screen's full pixel ratio (up to 3),
 // in whole device pixels so that nothing is resampled; as the dragonfly's.
-function mountSurface(el, onResize) {
+// With `gpu`, it draws with WebGL2 where it can (surface.gpu), else in 2D (view.ctx).
+function mountSurface(el, onResize, gpu) {
   if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
   if (el.clientHeight < 2) el.style.aspectRatio = '2';
-  const canvas = document.createElement('canvas');
-  canvas.setAttribute('aria-hidden', 'true');
-  canvas.style.cssText = 'position:absolute;left:0;top:0;display:block;pointer-events:none';
-  el.appendChild(canvas);
-  const ctx = canvas.getContext('2d');
+  const make = () => {
+    const canvas = document.createElement('canvas');
+    canvas.setAttribute('aria-hidden', 'true');
+    canvas.style.cssText = 'position:absolute;left:0;top:0;display:block;pointer-events:none';
+    return el.appendChild(canvas);
+  };
+  let canvas = make();
+  const renderer = gpu ? createRenderer(canvas, INK) : null;
+  if (gpu && !renderer) {
+    canvas.remove(); // it may hold a WebGL context, and then can't take a 2D one
+    canvas = make();
+  }
+  const ctx = renderer ? null : canvas.getContext('2d');
   const view = { canvas, ctx, width: 0, height: 0, ratio: 1 };
   let timer = 0;
   const measure = () => {
@@ -935,7 +1047,7 @@ function mountSurface(el, onResize) {
     canvas.style.width = `${w / ratio}px`;
     canvas.style.height = `${h / ratio}px`;
     Object.assign(view, { width: w / ratio, height: h / ratio, ratio });
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    if (ctx) ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     onResize(view);
   };
   const observer = new ResizeObserver(() => {
@@ -943,15 +1055,24 @@ function mountSurface(el, onResize) {
     timer = setTimeout(measure, 200);
   });
   observer.observe(el);
-  return {
+  // A lost context comes back empty: build the renderer again and redraw.
+  const surface = {
     view,
+    gpu: renderer,
     measure,
     destroy() {
       observer.disconnect();
       clearTimeout(timer);
+      surface.gpu?.destroy();
       canvas.remove();
     },
   };
+  canvas.addEventListener('webglcontextlost', (event) => event.preventDefault());
+  canvas.addEventListener('webglcontextrestored', () => {
+    surface.gpu = createRenderer(canvas, INK);
+    if (view.width) onResize(view);
+  });
+  return surface;
 }
 
 // Wraps a surface at(u, v) in rings of dashes, like the hatching of a pen
