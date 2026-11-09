@@ -207,11 +207,14 @@ uniform sampler2D u_image;
 out vec4 colour;
 void main() { colour = texture(u_image, v_uv); }`;
 
-// Returns a renderer for the canvas, or null where WebGL2 isn't to be had or
-// its shaders won't build, in which case the caller draws in 2D.
+// Returns a renderer for the canvas, or null where WebGL2 isn't to be had, runs
+// only in software (slower than drawing in 2D) or its shaders won't build, in
+// which case the caller draws in 2D.
 export function createRenderer(canvas, ink) {
-  const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false });
+  const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, failIfMajorPerformanceCaveat: true });
   if (!gl) return null;
+  const info = gl.getExtension('WEBGL_debug_renderer_info');
+  if (/swiftshader|llvmpipe|softpipe|software|basic render/i.test(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER))) return null;
   const build = (vs, fs, attributes) => {
     const program = gl.createProgram();
     const shaders = [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]].map(([type, source]) => {
