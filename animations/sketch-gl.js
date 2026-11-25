@@ -32,9 +32,12 @@ uniform float u_ripple;    // units a slow ripple moves every drawing by
 uniform float u_freq;      // swirl features per unit
 uniform float u_twist;     // radians a drawing spirals about the centre in mid change
 uniform float u_spin;      // radians per second the dust turns
+uniform float u_scatter;   // units each grain wanders its own way in mid flight
+uniform float u_lift;      // units the grains float upwards in mid flight
+uniform float u_grain;     // share of its length a dash keeps in mid flight, where it is a grain of dust
 uniform vec2 u_centre;     // CSS px
 uniform vec2 u_view;       // CSS px
-uniform float u_scale;     // CSS px per unit
+uniform float u_scale;     // CSS px per unit, zoom included
 uniform float u_length;    // half a dash's length, CSS px
 uniform float u_width;     // half a dash's width at thickness 1, CSS px
 uniform vec3 u_palette[8];
@@ -99,7 +102,6 @@ vec2 curl(vec2 p, float z) {
 }
 
 // Drawings stay put; dust keeps slowly orbiting the centre.
-// Drawings stay put; dust keeps slowly orbiting the centre.
 vec2 place(vec4 p, float clock) {
   if (p.w < 0.5) return p.xy;
   float a = p.y + u_spin * clock;
@@ -108,6 +110,7 @@ vec2 place(vec4 p, float clock) {
 
 const float PI = 3.14159265;
 const float TAU = 6.28318530718;
+const vec3 GLINT = vec3(0.89, 0.67, 0.0); // the warm gold a grain flashes when it catches the light
 
 // How far through its flight the dash is at a moment of the change.
 float flight(float local) {
@@ -128,6 +131,10 @@ vec2 at(float local, float clock) {
   vec2 p = mix(place(a_from, clock), place(a_to, clock), ease(u));
   float mid = sin(PI * u);
   p += curl(p * u_freq, clock * 0.08) * (u_breath + u_swirl * mid);
+  // and each grain drifts its own slow loop, a little upwards, like dust in a
+  // sunbeam; squared, so it leaves and settles without a jolt
+  float s = a_more.z, k = fract(s * 91.7), h = s * TAU * 7.0 + clock * (0.25 + 0.35 * k);
+  p += (vec2(cos(h), sin(h)) * u_scatter * (0.35 + 0.65 * k) - vec2(0.0, u_lift * (0.4 + fract(s * 53.3)))) * mid * mid;
   // a slow ripple runs through every drawing, so even a finished one never stands still
   p += vec2(sin(p.y * 0.11 + clock * 1.3), sin(p.x * 0.13 - clock * 1.1)) * u_ripple;
   // the middle turns further than the rim, so the change spirals like a galaxy
@@ -148,7 +155,7 @@ void main() {
     v_colour = vec4(0.0);
     return;
   }
-  float e = ease(flight(u_time));
+  float u = flight(u_time), e = ease(u), mid = sin(PI * u);
   vec2 p = at(u_time, u_clock);
   vec2 q = at(u_time - u_step, u_clock - u_step);
   float dust = step(0.5, mix(a_from.w, a_to.w, e));
@@ -159,8 +166,13 @@ void main() {
   float angle = rest + halfTurn(atan(v.y, v.x) - rest) * smoothstep(0.12, 0.7, length(v));
 
   float twinkle = 0.65 + 0.35 * sin(u_clock * (1.3 + a_more.z * 1.7) + a_more.z * TAU);
-  float len = mix(a_look.x, a_look.y, e) * mix(1.0, twinkle, dust);
-  float thick = mix(a_from.z, a_to.z, e) * step(0.02, len);
+  // In flight a dash shrinks to a grain that shimmers, and now and then one
+  // catches the light and glints, larger and brighter, like magic dust.
+  float flying = smoothstep(0.0, 0.6, mid);
+  float shimmer = 0.5 + 0.5 * sin(u_clock * (4.0 + a_more.z * 5.0) + a_more.z * 41.0);
+  float glint = pow(max(0.0, sin(u_clock * (0.9 + fract(a_more.z * 17.0) * 1.3) + a_more.z * 63.0)), 24.0) * flying;
+  float len = mix(a_look.x, a_look.y, e) * mix(1.0, twinkle, dust) * mix(1.0, u_grain, flying) * (1.0 + 1.6 * glint);
+  float thick = mix(a_from.z, a_to.z, e) * step(0.02, len) * (1.0 + 0.9 * glint);
 
   int k = gl_VertexID;
   vec2 corner = vec2(k == 1 || k == 2 || k == 4 ? 1.0 : -1.0, k == 2 || k == 4 || k == 5 ? 1.0 : -1.0);
@@ -168,8 +180,9 @@ void main() {
   vec2 px = u_centre + p * u_scale + dir * corner.x * u_length * len + vec2(-dir.y, dir.x) * corner.y * u_width * thick;
   gl_Position = vec4(px / u_view * 2.0 - 1.0, 0.0, 1.0) * vec4(1.0, -1.0, 1.0, 1.0);
 
-  vec3 colour = mix(u_palette[int(a_look.z)], u_palette[int(a_look.w)], e);
-  v_colour = vec4(colour, mix(1.0, 0.45 + 0.4 * twinkle, dust));
+  vec3 colour = mix(mix(u_palette[int(a_look.z)], u_palette[int(a_look.w)], e), GLINT, glint);
+  float alpha = mix(1.0, 0.45 + 0.4 * twinkle, dust) * mix(1.0, 0.55 + 0.45 * shimmer, flying * (1.0 - glint));
+  v_colour = vec4(colour, alpha);
 }`;
 
 const FRAGMENT = `#version 300 es
@@ -257,11 +270,19 @@ export function createRenderer(gl, palette) {
       gl.bindBuffer(gl.ARRAY_BUFFER, slots[slot].buffer);
       gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
     },
-    // Draws the changes in `batches` ({ slot, ...their own uniforms }) with the `shared` uniforms.
-    draw(view, shared, batches) {
+    // Draws the changes in `batches` ({ slot, ...their own uniforms }) with the
+    // `shared` uniforms, inside `clip` ([x, y, width, height] in CSS px) if given.
+    draw(view, shared, batches, clip) {
       gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
+      if (clip) {
+        const k = gl.drawingBufferWidth / view.width, [x, y, w, h] = clip;
+        const left = Math.max(0, Math.floor(x * k)), top = Math.max(0, Math.floor(y * k));
+        const right = Math.min(gl.drawingBufferWidth, Math.ceil((x + w) * k)), bottom = Math.min(gl.drawingBufferHeight, Math.ceil((y + h) * k));
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(left, gl.drawingBufferHeight - bottom, Math.max(0, right - left), Math.max(0, bottom - top));
+      }
       gl.useProgram(program);
       set(shared);
       for (const { slot, ...own } of batches) {
@@ -271,6 +292,7 @@ export function createRenderer(gl, palette) {
         gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, slots[slot].count);
       }
       gl.bindVertexArray(null);
+      gl.disable(gl.SCISSOR_TEST);
     },
   };
 }
