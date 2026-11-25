@@ -1,5 +1,5 @@
-// Evolution in sketches: a sequence of pen drawings, from an organic molecule
-// to a neural net, drawn in tiny dark yellow dashes laid along their strokes,
+// Evolution in sketches: a sequence of pen drawings, from a galaxy onwards,
+// drawn in tiny dark yellow dashes laid along their strokes,
 // which stream from one drawing into the next.
 //
 //   import { mountEvolution } from './animations/sketch.js';
@@ -54,22 +54,53 @@ const MIN_FLIGHT = 0.4; // shortest flight, as a share of the time between chang
 const CAP = 52000; // most dashes in one drawing; denser drawings get wider gaps
 const CROSSFADE = 1.5; // seconds, between drawings when reduced motion is preferred
 const GRID = 50; // cells across the stage, for keeping dust off the drawing
+const HEADROOM = 1.05; // spare dashes when the densest drawing's count is foreseen from the manifest
+const BLANK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"></svg>'; // stands in for a drawing that failed to load
 
-// Loads the drawings a manifest lists, in order, as [{ title, slug, hold, text }].
+// Loads the drawings a manifest lists, in order, as [{ title, slug, hold, dashes, text }].
 // Each is read (into `sketch`) by the first animation that needs it, a slice
 // per frame; a list can be passed to several animations, which share the reading.
 export async function loadMotifs(url = DEFAULTS.motifs) {
+  const { list, fetched } = await listMotifs(url);
+  await fetched;
+  return list;
+}
+
+// Lists the drawings a manifest names at once, with their `text` still null,
+// and fetches them one after another, from drawing `first` round, so that the
+// first arrives soonest and the rest follow in the order they are shown.
+// `fetched` settles once every drawing is in.
+async function listMotifs(url, first = 0) {
   const base = new URL(url, document.baseURI);
   const manifest = await (await fetch(base)).json();
   const list = (Array.isArray(manifest) ? manifest : manifest.motifs || manifest.items || [])
     .map((m, i) => ({ ...m, order: m.order ?? i + 1 }))
-    .sort((a, b) => a.order - b.order);
-  return Promise.all(list.map(async (m) => {
-    const file = m.file || m.svg || m.src || `${String(m.order).padStart(2, '0')}-${m.slug}.svg`;
-    const text = await (await fetch(new URL(file, base))).text();
-    // `hold` is how long the drawing rests, relative to the others
-    return { title: m.title || m.slug, slug: m.slug, hold: Number(m.hold) > 0 ? Number(m.hold) : 1, text, sketch: null };
+    .sort((a, b) => a.order - b.order)
+    .map((m) => ({
+      title: m.title || m.slug,
+      slug: m.slug,
+      hold: Number(m.hold) > 0 ? Number(m.hold) : 1, // how long the drawing rests, relative to the others
+      dashes: Number(m.dashes) > 0 ? Number(m.dashes) : null, // how many dashes it takes, relative to the others
+      file: new URL(m.file || m.svg || m.src || `${String(m.order).padStart(2, '0')}-${m.slug}.svg`, base),
+      text: null,
+      sketch: null,
+    }));
+  let chain = Promise.resolve();
+  const fetched = Promise.all(list.map((_, k) => {
+    const m = list[(((first + k) % list.length) + list.length) % list.length];
+    chain = chain
+      .then(() => fetch(m.file))
+      .then((response) => {
+        if (!response.ok) throw new Error(`${response.status} for ${m.file}`);
+        return response.text();
+      })
+      .then((text) => (m.text = text), (error) => {
+        console.warn('Evolution sketches: could not load a drawing.', error);
+        m.text = BLANK;
+      });
+    return chain;
   }));
+  return { list, fetched };
 }
 
 export function mountEvolution(el, options = {}) {
@@ -83,7 +114,7 @@ export function mountEvolution(el, options = {}) {
   let motifs = null;
   let frame = null; // sizes for the current canvas
   let queue = [], samples = new Map();
-  let N = 0, dust = 0, cur = null, seeds = null, moves = [], job = null, ready = null, sampler = null;
+  let N = 0, most = 0, dust = 0, cur = null, seeds = null, moves = [], job = null, ready = null, sampler = null;
   let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false;
 
   // With the GPU, its context and shaders are set up over the first frames
@@ -91,10 +122,15 @@ export function mountEvolution(el, options = {}) {
   let gpu = null, gpuAge = 0, wantGpu = !flat && o.gpu !== false;
   let surface = mountCanvas(el, build, wantGpu ? { context: 'webgl2', attributes: { antialias: true, premultipliedAlpha: true }, defer: true } : undefined);
   const loop = o.still == null ? animate(el, tick) : null;
-  const loaded = (Array.isArray(o.motifs) ? Promise.resolve(o.motifs) : loadMotifs(o.motifs)).then((list) => {
+  // The animation sets off once its first drawing is in and the rest arrive
+  // as it plays; `loaded` settles once all of them are in.
+  const listed = Array.isArray(o.motifs) ? Promise.resolve({ list: o.motifs, fetched: Promise.resolve() })
+    : o.still != null ? loadMotifs(o.motifs).then((list) => ({ list, fetched: Promise.resolve() }))
+    : listMotifs(o.motifs, o.start);
+  const loaded = listed.then(({ list, fetched }) => {
     motifs = list;
     if (frame) build(frame.view);
-    return list;
+    return fetched.then(() => list);
   });
   loaded.catch((error) => console.warn('Evolution sketches: could not load the drawings.', error));
   surface.measure();
@@ -107,7 +143,7 @@ export function mountEvolution(el, options = {}) {
     // Without the GPU, longer gaps mean fewer dashes, which keeps the frame rate up.
     frame = { view, unit, dash, width: Math.max(1 / view.ratio, dash * 0.27), gap: wantGpu || flat ? 1 : 1.6 };
     samples = new Map();
-    N = 0;
+    N = most = 0;
     moves = [];
     job = ready = sampler = null;
     phase = 'wait';
@@ -125,7 +161,7 @@ export function mountEvolution(el, options = {}) {
     const t0 = performance.now();
     do {
       if (!sampler) {
-        if (!queue.length) return;
+        if (!queue.length || motifs[queue[0]].text == null) return; // the next drawing hasn't arrived yet
         const s = queue.shift();
         sampler = { s, steps: sample(motifs[s], random(o.seed + s * 101)) };
       }
@@ -165,15 +201,17 @@ export function mountEvolution(el, options = {}) {
   }
 
   // Reads a drawing if no animation has yet, then lays dashes along every
-  // stroke; one too dense for CAP dashes is laid again with wider gaps.
+  // stroke; one too dense for CAP dashes, or once the animation has set off
+  // for the dashes it has, is laid again with wider gaps.
   // A generator that pauses between slices of the work.
   function* sample(motif, rnd) {
     if (!motif.sketch) motif.sketch = yield* parseSketch(motif.text);
     const sketch = motif.sketch, scale = 200 / Math.max(sketch.width, sketch.height);
     for (let spread = 1; ; ) {
       const p = yield* lay(sketch, scale, (frame.dash * frame.gap * spread) / frame.unit, rnd);
-      if (p.n <= CAP || spread > 8) return yield* withDust(p, rnd);
-      spread *= (p.n / CAP) * 1.02;
+      const cap = most || CAP;
+      if (p.n <= cap || spread > 8) return yield* withDust(p, rnd);
+      spread *= (p.n / cap) * 1.02;
     }
   }
 
@@ -362,9 +400,10 @@ export function mountEvolution(el, options = {}) {
       prepare(6); // read and sample drawings while the GPU gets ready
       return;
     }
-    if (queue.length || sampler) prepare(phase === 'run' ? 4 : 8);
+    // sampling runs lighter while a change plays, unless that change waits on it
+    if (queue.length || sampler) prepare(phase === 'run' && sampled(following(target)) ? 4 : 8);
     if (phase === 'wait') {
-      if (queue.length || sampler || !samples.size) return render && draw();
+      if (!capacity()) return render && draw();
       start();
     }
     if (phase === 'plan') {
@@ -384,11 +423,11 @@ export function mountEvolution(el, options = {}) {
           phase = 'hold';
           t = 0;
           if (o.onStage) o.onStage(target, motifs[target]?.title ?? '');
-        } else if (phase === 'hold' && t >= 8) startMove({ stage: following(target) }, clock);
+        } else if (phase === 'hold' && t >= 8 && sampled(following(target))) startMove({ stage: following(target) }, clock);
       } else {
         // The next change is planned while this one plays, and sets off on time.
         const current = moves[moves.length - 1];
-        if (!ready && !job) job = planning(following(target));
+        if (!ready && !job && sampled(following(target))) job = planning(following(target));
         if (job) ready = work(4);
         if (ready && clock >= current.S + period(current.stage)) {
           startMove(ready, Math.max(current.S + period(current.stage), clock - step));
@@ -414,10 +453,31 @@ export function mountEvolution(el, options = {}) {
     return o.hold * (weight > 0 ? weight : 1);
   }
 
+  // Whether stop `s` is ready to be planned: dust always is, a drawing once sampled.
+  const sampled = (s) => s >= motifs.length || samples.has(s);
+
+  // How many dashes the densest drawing will take, or 0 while that can't yet
+  // be told. Where the manifest gives every drawing's relative count, the
+  // first drawing tells it, and the animation need not wait for the rest;
+  // otherwise it waits until all are sampled.
+  function capacity() {
+    const first = samples.get(target);
+    if (!first) return 0;
+    let known = 0;
+    for (const p of samples.values()) known = Math.max(known, p.n);
+    const counts = motifs.map((m) => m.dashes);
+    if (counts.every((n) => n > 0)) return Math.max(known, Math.ceil(((first.n * Math.max(...counts)) / counts[target]) * HEADROOM));
+    return queue.length || sampler ? 0 : known;
+  }
+
   // The first move: from scattered, invisible dust into the first drawing.
   function start() {
-    let most = 0;
-    for (const p of samples.values()) most = Math.max(most, p.n);
+    most = capacity();
+    // a drawing half laid for the old cap is laid again for this one
+    if (sampler) {
+      queue.unshift(sampler.s);
+      sampler = null;
+    }
     dust = clamp(Math.round(most * 0.08), 400, 4000);
     N = most + dust;
     seeds = Float32Array.from({ length: N }, () => rand());
@@ -545,6 +605,7 @@ export function mountEvolution(el, options = {}) {
     go(index) {
       if (!N || !motifs) return;
       const s = ((index % motifs.length) + motifs.length) % motifs.length;
+      if (!samples.has(s) && motifs[s].text == null) return; // not here yet
       if (!samples.has(s)) samples.set(s, finish(sample(motifs[s], random(o.seed + s * 101))));
       ready = null;
       if (calm) return startMove({ stage: s }, clock);
