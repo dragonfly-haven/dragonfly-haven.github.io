@@ -484,22 +484,38 @@ def head_xf(o, h, facing, pitch, pivot=(0.04, 0.26)):
 
 
 # a head in profile: the back of the skull from the nape over the crown to the
-# hairline, then the face (brow, nose, lips, chin) and under the jaw to the throat
+# hairline, then the face (brow, nose, lips, chin) and back along the jaw's
+# lower edge to its angle below the ear
 SKULL = [(-0.25, 0.33), (-0.33, 0.22), (-0.41, 0.08), (-0.455, -0.07), (-0.445, -0.22), (-0.38, -0.36),
          (-0.26, -0.46), (-0.1, -0.51), (0.06, -0.505), (0.2, -0.45), (0.3, -0.35), (0.355, -0.23)]
 FACE = {
     'woman': [(0.355, -0.23), (0.373, -0.13), (0.38, -0.07), (0.372, -0.025), (0.385, 0.04), (0.408, 0.11),
               (0.428, 0.157), (0.418, 0.181), (0.392, 0.193), (0.378, 0.205), (0.392, 0.246), (0.39, 0.276),
               (0.377, 0.292), (0.39, 0.318), (0.382, 0.348), (0.362, 0.37), (0.37, 0.415), (0.35, 0.462),
-              (0.29, 0.492), (0.2, 0.49), (0.11, 0.455), (0.06, 0.44)],
+              (0.29, 0.494), (0.2, 0.494), (0.13, 0.482), (0.07, 0.465)],
     'man': [(0.355, -0.23), (0.378, -0.13), (0.398, -0.07), (0.376, -0.018), (0.392, 0.04), (0.428, 0.11),
             (0.468, 0.16), (0.455, 0.19), (0.41, 0.2), (0.38, 0.212), (0.393, 0.252), (0.382, 0.282),
             (0.366, 0.297), (0.38, 0.323), (0.364, 0.352), (0.35, 0.374), (0.37, 0.425), (0.358, 0.478),
-            (0.3, 0.508), (0.2, 0.5), (0.11, 0.462), (0.06, 0.446)],
+            (0.3, 0.508), (0.2, 0.505), (0.11, 0.487), (0.03, 0.462)],
 }
 EAR = [(0.03, -0.075), (-0.02, -0.108), (-0.085, -0.095), (-0.125, -0.035), (-0.132, 0.05), (-0.112, 0.12),
        (-0.08, 0.18), (-0.04, 0.214), (0.0, 0.208), (0.016, 0.178)]
 ANTIHELIX = [(-0.025, -0.06), (-0.075, -0.035), (-0.088, 0.04), (-0.065, 0.11)]
+# the jaw's back edge (the ramus) in each head frame: from under the ear lobe
+# straight down to the angle where the face's outline ends
+JAW = {
+    'man': [(-0.004, 0.225), (0.006, 0.34), (0.03, 0.462)],
+    'woman': [(0.005, 0.235), (0.03, 0.35), (0.07, 0.465)],
+}
+
+
+def cornered(runs, step=0.6):
+    """One polyline through smooth runs that meet at sharp corners."""
+    out = []
+    for run in runs:
+        pts = C(run, step=step)
+        out += pts[1:] if out else pts
+    return out
 
 
 def profile_head(o, h, facing, pitch, kind, hair=None):
@@ -527,9 +543,10 @@ def profile_head(o, h, facing, pitch, kind, hair=None):
              [(0.42, 0.15), (0.398, 0.176), (0.41, 0.2)]), step=0.5), w=0.8, hand=0.0)
     mouth = [(0.377, 0.293), (0.345, 0.3)] if not man else [(0.366, 0.297), (0.335, 0.303)]
     fine(C(T(mouth), step=0.5), w=0.85, hand=0.0)
-    jaw = [(-0.005, 0.24), (0.005, 0.33), (0.07, 0.405), (0.17, 0.46)] if man else [(0.0, 0.26), (0.02, 0.34),
-                                                                                    (0.08, 0.4)]
-    fine(C(T(jaw), step=0.6), w=0.95 if man else 0.75, hand=0.1)
+    # the jaw: the ramus straight down from under the ear to a clear angle,
+    # where the outline's lower edge of the jaw ends (one smooth sweep from
+    # chin to ear made the face read as a banana)
+    fine(C(T(JAW[kind]), step=0.6), w=1.05 if man else 0.9, hand=0.05)
     if man:
         # short hair: the hairline down the temple to a sideburn, round the ear
         # to the nape, and a few locks swept back from the brow
@@ -546,7 +563,7 @@ def profile_head(o, h, facing, pitch, kind, hair=None):
         hair(T)          # long hair lies over the skull's outline
     outline = C(T(SKULL + face[1:]), step=0.6)
     pen.line(outline, w=1.75, hand=0.2, lift=0.02)
-    poly = outline + T([(0.0, 0.42), (-0.15, 0.38)])
+    poly = outline + T([(0.0, 0.44), (-0.15, 0.38)])
     pen.occlude(poly)
     return T, poly
 
@@ -561,7 +578,9 @@ def lost_profile_head(o, h, pitch):
     fine(C(T([(0.16, -0.045), (0.14, 0.03), (0.152, 0.1)]), step=0.6), w=0.65, hand=0.05)
     pen.occlude(ear + T([(0.2, 0.05)]))
     fine(C(T([(0.352, 0.0), (0.378, -0.008), (0.402, -0.026)]), step=0.5), w=0.85, hand=0.0)   # lashes
-    fine(C(T([(0.2, 0.2), (0.24, 0.29), (0.3, 0.33)]), step=0.6), w=0.7, hand=0.1)    # the jaw under the cheek
+    # the jaw under the cheek: down from below the ear to a soft angle, then forward
+    fine(cornered([T([(0.168, 0.178), (0.178, 0.236), (0.196, 0.282)]), T([(0.196, 0.282), (0.214, 0.296)]),
+                   T([(0.214, 0.296), (0.26, 0.316), (0.31, 0.33)])], step=0.6), w=0.7, hand=0.05)
     # hair: the hairline at the temple and in front of the ear, the nape
     fine(C(T([(0.348, -0.25), (0.3, -0.17), (0.265, -0.09), (0.245, -0.03), (0.2, -0.09)]), step=0.6), w=0.85,
          hand=0.1)
@@ -736,7 +755,7 @@ def family(ox, oy, H):
                     fine(run, w=0.72, hand=0.15)
         pen.occlude(hair)
 
-    T, hpoly = profile_head(f.P((0.004, -0.94)), 0.142 * u, 1, 13, 'woman', hair=woman_hair)
+    T, hpoly = profile_head(f.P((0.004, -0.94)), 0.142 * u, 1, 10, 'woman', hair=woman_hair)
     neck(f, T, (0.038,), -0.885, -0.855, w=0.95, scm=T([(-0.03, 0.25), (0.06, 0.4), (0.13, 0.5)]))
     # her free left arm, hanging, and the right reaching to the child
     S = f.P((-0.094, -0.806))
