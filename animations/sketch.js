@@ -12,7 +12,11 @@
 // paired with places in the next so that each travels a short way, and the GPU
 // (sketch-gl.js) draws their whole flight. Changes overlap like a relay: each
 // sweeps across a drawing, and the next sets off before the last has quite
-// landed, so the flow never stops.
+// landed, so the flow never stops. In flight the dashes become grains of
+// glittering dust that drift apart a little and float upwards before settling.
+//
+// The drawings play once. The last one then grows a little, settles and holds
+// still; a click on it plays them all again from the first.
 
 import { random, noise3, curl, clamp, smooth, reducedMotion, triangleSize, mountCanvas, animate, insideDistance } from './core.js';
 import { parseSketch } from './svg.js';
@@ -25,9 +29,12 @@ export const YELLOW = ['#574800', '#6a5800', '#7d6700', '#907700', '#a38700', '#
 const MOTION = {
   sweep: 0.36, // share of the time between changes that one takes to sweep across a drawing
   rest: 0.8, // share of that sweep each part of a drawing rests; under 1, the next change sets off before the last has landed
-  ramp: 0.2, // share of each flight spent speeding up, and again slowing down; dashes cruise in between
-  swirl: 5.5, // units of swirl in mid flight
-  twist: 0.4, // radians a drawing spirals about the centre in mid change, each way in turn
+  ramp: 0.34, // share of each flight spent speeding up, and again slowing down; dashes cruise in between
+  swirl: 3.6, // units of swirl in mid flight
+  twist: 0.22, // radians a drawing spirals about the centre in mid change, each way in turn
+  scatter: 3.2, // units each grain wanders its own way in mid flight
+  lift: 2.6, // units the grains float upwards in mid flight
+  grain: 0.4, // share of its length a dash keeps in mid flight, where it is a grain of dust
   breath: 0.3, // units of drift at rest
   ripple: 0.45, // units a slow ripple moves every drawing by, so none ever stands still
   freq: 1 / 70, // swirl features per unit
@@ -36,7 +43,7 @@ const MOTION = {
 
 const DEFAULTS = {
   motifs: new URL('./motifs/manifest.json', import.meta.url).href, // a manifest, or motifs already loaded
-  speed: 1.4, // how fast it all plays (changes, rests, dust); the times here are at speed 1
+  speed: 1, // how fast it all plays (changes, rests, dust); the times here are at speed 1
   move: 3.6, // seconds from one change setting off to the next
   hold: 0, // extra seconds each part of a drawing rests, scaled by the drawing's own hold weight
   fit: 0.94, // share of the shorter side a drawing fills
@@ -46,7 +53,9 @@ const DEFAULTS = {
   gpu: true, // false draws on a 2D canvas, as where WebGL2 is missing
   seed: 1,
   onStage: null, // called with (index, title) as each drawing is at its fullest
-  dusk: 0, // extra seconds the dashes rest as drifting dust after the last drawing; null skips the dust
+  loop: false, // true starts again after the last drawing; otherwise it holds the last one until clicked
+  dusk: 0, // with loop, extra seconds the dashes rest as drifting dust after the last drawing; null skips the dust
+  zoom: 1.2, // how much the last drawing grows once it has formed, when the drawings don't loop
 };
 
 const STRIDE = 20; // floats per dash in a planned change, see sketch-gl.js
@@ -55,6 +64,9 @@ const CAP = 52000; // most dashes in one drawing; denser drawings get wider gaps
 const CROSSFADE = 1.5; // seconds, between drawings when reduced motion is preferred
 const GRID = 50; // cells across the stage, for keeping dust off the drawing
 const HEADROOM = 1.05; // spare dashes when the densest drawing's count is foreseen from the manifest
+const ZOOM_LEAD = 1.2; // seconds before the last drawing has fully landed that it starts to grow
+const ZOOM_TIME = 4.5; // seconds it takes to grow, and to settle still
+const UNZOOM_TIME = 3; // seconds it takes to shrink back when the drawings play again
 const BLANK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"></svg>'; // stands in for a drawing that failed to load
 
 // Loads the drawings a manifest lists, in order, as [{ title, slug, hold, dashes, text }].
@@ -117,10 +129,16 @@ export function mountEvolution(el, options = {}) {
   let N = 0, most = 0, dust = 0, cur = null, seeds = null, moves = [], job = null, ready = null, sampler = null;
   let target = o.start, last = o.start, phase = 'wait', t = 0, clock = 0, paused = false;
 
+  const ending = o.still == null && !o.loop; // whether the last drawing grows and holds
+  // How much everything is enlarged about the centre, easing between two sizes.
+  let zoom = { from: 1, to: 1, at: 0, for: 1 };
+  let ended = false, frozen = false; // the last drawing has settled; and nothing has moved since
+  const bleed = ending ? Math.max(0, (o.zoom - 1) / 2) : 0; // room around the stage for the last drawing to grow into
+
   // With the GPU, its context and shaders are set up over the first frames
   // (see setup), so mounting costs the page almost nothing.
   let gpu = null, gpuAge = 0, wantGpu = !flat && o.gpu !== false;
-  let surface = mountCanvas(el, build, wantGpu ? { context: 'webgl2', attributes: { antialias: true, premultipliedAlpha: true }, defer: true } : undefined);
+  let surface = mountCanvas(el, build, wantGpu ? { context: 'webgl2', attributes: { antialias: true, premultipliedAlpha: true }, defer: true, bleed } : { bleed });
   const loop = o.still == null ? animate(el, tick) : null;
   // The animation sets off once its first drawing is in and the rest arrive
   // as it plays; `loaded` settles once all of them are in.
@@ -138,15 +156,19 @@ export function mountEvolution(el, options = {}) {
   // Sizes everything to the canvas and queues the drawings for sampling, which
   // happens a little per frame so a fresh page stays responsive.
   function build(view) {
-    const unit = (Math.min(view.width, view.height) * o.fit) / 200; // CSS px per stage unit
+    const box = { width: view.width / (1 + bleed * 2), height: view.height / (1 + bleed * 2) }; // the element's own size, CSS px
+    const unit = (Math.min(box.width, box.height) * o.fit) / 200; // CSS px per stage unit
     const dash = o.dash || triangleSize(view.ratio) * 1.15; // dash length, CSS px
     // Without the GPU, longer gaps mean fewer dashes, which keeps the frame rate up.
-    frame = { view, unit, dash, width: Math.max(1 / view.ratio, dash * 0.27), gap: wantGpu || flat ? 1 : 1.6 };
+    frame = { view, box, unit, dash, width: Math.max(1 / view.ratio, dash * 0.27), gap: wantGpu || flat ? 1 : 1.6 };
     samples = new Map();
     N = most = 0;
     moves = [];
     job = ready = sampler = null;
     phase = 'wait';
+    frozen = false; // drawn again from the start; a drawing that had settled settles again at once
+    const size = ended ? o.zoom : 1;
+    zoom = { from: size, to: size, at: 0, for: 1 };
     if (!motifs) return;
     target = last = ((target % motifs.length) + motifs.length) % motifs.length;
     queue = o.still == null ? motifs.map((_, s) => (target + s) % motifs.length) : [o.still];
@@ -195,7 +217,7 @@ export function mountEvolution(el, options = {}) {
     wantGpu = false;
     gpu = null;
     surface.destroy();
-    surface = mountCanvas(el, build);
+    surface = mountCanvas(el, build, { bleed });
     surface.measure();
     return true;
   }
@@ -330,7 +352,8 @@ export function mountEvolution(el, options = {}) {
     // order it will set off in the next change, a little before it does: so
     // every part of a drawing rests the same short while, the next change
     // sweeps in before this one has quite landed, and the flow never stops.
-    sweep(after, following(s), rnd);
+    // The last drawing lands as if another were to follow.
+    sweep(after, following(s) ?? s + 1, rnd);
     const P = period(s), lead = pause(s);
     const data = new Float32Array(N * STRIDE), arrive = new Float32Array(N);
     for (let i = 0; i < N; i++) {
@@ -368,9 +391,11 @@ export function mountEvolution(el, options = {}) {
     if (calm) {
       phase = 'move';
       t = 0;
+      if (ending && following(target) == null) zoomTo(o.zoom, S, CROSSFADE);
       return;
     }
     const P = period(move.stage), data = move.data;
+    let end = 0;
     for (let i = 0; i < N; i++) {
       const at = i * STRIDE;
       // A dash shows in this change from when it landed in the last one, and
@@ -382,8 +407,12 @@ export function mountEvolution(el, options = {}) {
       data[at + 17] = arrive;
       data[at + 18] = shown;
       move.after.arrive[i] = S + arrive;
+      if (arrive > end) end = arrive;
     }
     move.S = S;
+    move.end = end; // seconds from its start until its last dash has landed
+    // the last drawing grows as its last dashes land
+    if (ending && following(move.stage) == null) zoomTo(o.zoom, S + end - ZOOM_LEAD, ZOOM_TIME);
     move.twist = MOTION.twist * move.swirl * (move.stage % 2 ? 1 : -1);
     // The newest change takes the buffer the oldest one used.
     const newest = moves[moves.length - 1];
@@ -395,7 +424,7 @@ export function mountEvolution(el, options = {}) {
   }
 
   function tick(dt, render = true) {
-    if (!frame || !motifs) return;
+    if (!frame || !motifs || frozen) return;
     if (!setup()) {
       prepare(6); // read and sample drawings while the GPU gets ready
       return;
@@ -410,7 +439,8 @@ export function mountEvolution(el, options = {}) {
       // A change started out of turn (the first one, or a jump) is planned a slice per frame too.
       if (job) ready = work(8);
       if (!ready) return render && draw();
-      startMove(ready, clock);
+      // a last drawing that had already settled, drawn again after a resize, is there at once
+      startMove(ready, ended && following(ready.stage) == null ? clock - 1000 : clock);
       ready = null;
     }
     if (!paused) {
@@ -424,6 +454,7 @@ export function mountEvolution(el, options = {}) {
           t = 0;
           if (o.onStage) o.onStage(target, motifs[target]?.title ?? '');
         } else if (phase === 'hold' && t >= 8 && sampled(following(target))) startMove({ stage: following(target) }, clock);
+        else if (phase === 'hold' && following(target) == null && clock >= zoom.at + zoom.for) return settle();
       } else {
         // The next change is planned while this one plays, and sets off on time.
         const current = moves[moves.length - 1];
@@ -433,17 +464,51 @@ export function mountEvolution(el, options = {}) {
           startMove(ready, Math.max(current.S + period(current.stage), clock - step));
           ready = null;
         }
+        // once the last drawing has landed and grown, it holds still
+        if (following(current.stage) == null && clock >= current.S + current.end && clock >= zoom.at + zoom.for) return settle();
       }
     }
     if (render) draw();
   }
 
-  // The stop after `s`: the next drawing, or after the last one a spell of
-  // drifting dust (stop motifs.length) from which the first gathers again.
+  // Eases the zoom from where it is now to `to`, from clock time `at` over `time` seconds.
+  function zoomTo(to, at, time) {
+    zoom = { from: zoomNow(), to, at, for: time };
+  }
+  function zoomNow() {
+    return zoom.from + (zoom.to - zoom.from) * smooth(clamp((clock - zoom.at) / zoom.for, 0, 1));
+  }
+
+  // The last drawing has formed and grown: it is drawn one last time, quite
+  // still, and stays so until clicked.
+  function settle() {
+    ended = frozen = true;
+    draw();
+    el.style.cursor = 'pointer';
+  }
+
+  // Plays the drawings again from the first, as the last one shrinks back.
+  function replay() {
+    if (!ended || !N || phase === 'wait') return;
+    ended = frozen = false;
+    el.style.cursor = '';
+    zoomTo(1, clock, calm ? CROSSFADE : UNZOOM_TIME);
+    if (calm) return startMove({ stage: 0 }, clock);
+    ready = null;
+    job = planning(0);
+    phase = 'plan';
+  }
+  if (ending) el.addEventListener('click', replay);
+
+  // The stop after `s`: the next drawing; after the last one, none, or when
+  // looping a spell of drifting dust (stop motifs.length) from which the first
+  // gathers again.
   function following(s) {
     const M = motifs.length;
     if (s >= M) return 0;
-    return s === M - 1 && o.dusk != null && !calm ? M : (s + 1) % M;
+    if (s < M - 1) return s + 1;
+    if (!o.loop) return null;
+    return o.dusk != null && !calm ? M : 0;
   }
 
   // How long stop `s` rests: the drawing's own share of the hold, or the dust's spell.
@@ -453,8 +518,8 @@ export function mountEvolution(el, options = {}) {
     return o.hold * (weight > 0 ? weight : 1);
   }
 
-  // Whether stop `s` is ready to be planned: dust always is, a drawing once sampled.
-  const sampled = (s) => s >= motifs.length || samples.has(s);
+  // Whether stop `s` is ready to be planned: dust always is, a drawing once sampled; no stop never is.
+  const sampled = (s) => s != null && (s >= motifs.length || samples.has(s));
 
   // How many dashes the densest drawing will take, or 0 while that can't yet
   // be told. Where the manifest gives every drawing's relative count, the
@@ -498,11 +563,16 @@ export function mountEvolution(el, options = {}) {
   }
 
   function draw() {
-    const { view } = frame;
+    const { view, box } = frame;
+    // Everything grows about the centre, and is clipped to the element's box grown alike.
+    const z = zoomNow(), cx = view.width / 2, cy = view.height / 2;
+    const clip = [cx - (box.width * z) / 2, cy - (box.height * z) / 2, box.width * z, box.height * z];
+    // and as the last drawing grows, its gentle ripple dies away so that it settles quite still
+    const settling = ending && o.zoom !== 1 ? clamp((z - 1) / (o.zoom - 1), 0, 1) : 0;
     if (calm) {
       if (phase === 'wait') return;
       const f = phase === 'move' ? smooth(clamp(t / CROSSFADE, 0, 1)) : 1;
-      return drawStatic(f < 1 ? [[samples.get(last), 1 - f], [samples.get(target), f]] : [[samples.get(target), 1]]);
+      return drawStatic(f < 1 ? [[samples.get(last), 1 - f], [samples.get(target), f]] : [[samples.get(target), 1]], z, clip);
     }
     // The newest change, and the one before it until its last dashes have landed.
     const batches = moves.map((m, k) => ({
@@ -517,29 +587,32 @@ export function mountEvolution(el, options = {}) {
         u_clock: clock,
         u_step: o.speed / 60,
         u_ramp: MOTION.ramp,
-        u_breath: MOTION.breath,
-        u_ripple: MOTION.ripple,
+        u_breath: MOTION.breath * (1 - settling),
+        u_ripple: MOTION.ripple * (1 - settling),
         u_freq: MOTION.freq,
         u_spin: MOTION.spin,
-        u_centre: [view.width / 2, view.height / 2],
+        u_scatter: MOTION.scatter,
+        u_lift: MOTION.lift,
+        u_grain: MOTION.grain,
+        u_centre: [cx, cy],
         u_view: [view.width, view.height],
-        u_scale: frame.unit,
+        u_scale: frame.unit * z,
         u_length: frame.dash / 2,
         u_width: frame.width / 2,
-      }, batches);
+      }, batches, clip);
       return;
     }
-    drawMoving(batches);
+    drawMoving(batches, z, clip, 1 - settling);
   }
 
   // The same flight as the GPU's, worked out here when WebGL2 isn't available.
   const cpu = { x: null, y: null, a: null, s: null, z: null, c: null, px: null, py: null };
-  function drawMoving(batches) {
+  function drawMoving(batches, zoomed, clip, alive) {
     const { ctx, width: w, height: h } = surface.view;
     ctx.clearRect(0, 0, w, h);
     if (!N || !moves.length) return;
     if (!cpu.x || cpu.x.length !== N) for (const key in cpu) cpu[key] = key === 'c' ? new Uint8Array(N) : new Float32Array(N);
-    const unit = frame.unit, cx = w / 2, cy = h / 2;
+    const unit = frame.unit * zoomed, cx = w / 2, cy = h / 2;
     cpu.s.fill(0);
     batches.forEach(({ u_time: local, u_retired: retired, u_swirl: swirl, u_twist: twist }, k) => {
       const data = moves[k].data;
@@ -552,11 +625,15 @@ export function mountEvolution(el, options = {}) {
         place(data, d + 4, clock);
         let x = fx + (at[0] - fx) * e, y = fy + (at[1] - fy) * e;
         curl(noise, x * MOTION.freq, y * MOTION.freq, clock * 0.08, c2);
-        const mid = Math.sin(Math.PI * u), amp = MOTION.breath + swirl * mid;
+        const mid = Math.sin(Math.PI * u), amp = MOTION.breath * alive + swirl * mid;
         x += c2[0] * amp;
         y += c2[1] * amp;
+        // each grain drifts its own slow loop, a little upwards, like dust in a sunbeam
+        const seed = data[d + 14], k = (seed * 91.7) % 1, turn = seed * Math.PI * 14 + clock * (0.25 + 0.35 * k), m2 = mid * mid;
+        x += Math.cos(turn) * MOTION.scatter * (0.35 + 0.65 * k) * m2;
+        y += (Math.sin(turn) * MOTION.scatter * (0.35 + 0.65 * k) - MOTION.lift * (0.4 + ((seed * 53.3) % 1))) * m2;
         // a slow ripple runs through every drawing, so even a finished one never stands still
-        const wx = Math.sin(y * 0.11 + clock * 1.3) * MOTION.ripple, wy = Math.sin(x * 0.13 - clock * 1.1) * MOTION.ripple;
+        const wx = Math.sin(y * 0.11 + clock * 1.3) * MOTION.ripple * alive, wy = Math.sin(x * 0.13 - clock * 1.1) * MOTION.ripple * alive;
         x += wx;
         y += wy;
         const a = (twist * mid) / (1 + (x * x + y * y) / 3600);
@@ -569,28 +646,42 @@ export function mountEvolution(el, options = {}) {
         cpu.a[i] = vx * vx + vy * vy > 0.04 ? cpu.a[i] + halfTurn(Math.atan2(vy, vx) - cpu.a[i]) * 0.3 : cpu.a[i] + halfTurn(rest - cpu.a[i]) * 0.1;
         cpu.px[i] = cpu.x[i] = x;
         cpu.py[i] = cpu.y[i] = y;
-        cpu.s[i] = data[d + 8] + (data[d + 9] - data[d + 8]) * e;
+        cpu.s[i] = (data[d + 8] + (data[d + 9] - data[d + 8]) * e) * (1 + (MOTION.grain - 1) * clamp(mid / 0.6, 0, 1)); // a grain in flight
         cpu.z[i] = data[d + 2] + (data[d + 6] - data[d + 2]) * e;
         cpu.c[i] = u < 0.5 ? data[d + 10] : data[d + 11];
       }
     });
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(...clip);
+    ctx.clip();
     drawDashes(ctx, N, cpu, frame.dash, frame.width);
+    ctx.restore();
   }
 
-  // Draws drawings held still, each at an opacity: [[sample, alpha], ...].
-  function drawStatic(layers) {
+  // Draws drawings held still, each at an opacity: [[sample, alpha], ...],
+  // enlarged by `zoomed` and inside `clip` if given.
+  function drawStatic(layers, zoomed = 1, clip = null) {
     const { ctx, width, height } = surface.view;
+    const unit = frame.unit * zoomed;
     ctx.clearRect(0, 0, width, height);
+    ctx.save();
+    if (clip) {
+      ctx.beginPath();
+      ctx.rect(...clip);
+      ctx.clip();
+    }
     for (const [p, alpha] of layers) {
       if (!p) continue;
       const still = {
-        x: Float32Array.from(p.x, (v) => width / 2 + v * frame.unit),
-        y: Float32Array.from(p.y, (v) => height / 2 + v * frame.unit),
+        x: Float32Array.from(p.x, (v) => width / 2 + v * unit),
+        y: Float32Array.from(p.y, (v) => height / 2 + v * unit),
         a: p.a, z: p.z, c: p.c, s: p.s,
       };
       ctx.globalAlpha = alpha;
       drawDashes(ctx, p.n, still, frame.dash, frame.width);
     }
+    ctx.restore();
     ctx.globalAlpha = 1;
   }
 
@@ -604,6 +695,11 @@ export function mountEvolution(el, options = {}) {
     },
     go(index) {
       if (!N || !motifs) return;
+      if (ended) {
+        ended = frozen = false;
+        el.style.cursor = '';
+        zoomTo(1, clock, calm ? CROSSFADE : UNZOOM_TIME);
+      }
       const s = ((index % motifs.length) + motifs.length) % motifs.length;
       if (!samples.has(s) && motifs[s].text == null) return; // not here yet
       if (!samples.has(s)) samples.set(s, finish(sample(motifs[s], random(o.seed + s * 101))));
@@ -623,6 +719,11 @@ export function mountEvolution(el, options = {}) {
       for (let s = 0; s < seconds; s += 1 / 60) tick(1 / 60, false);
       if (frame && motifs) draw();
     },
+    // Whether the last drawing has formed and holds still.
+    get ended() {
+      return ended;
+    },
+    replay,
     destroy() {
       if (loop) loop.destroy();
       surface.destroy();

@@ -98,20 +98,22 @@ export function curl(noise, x, y, z, out) {
 // which happens again by itself whenever the element's size settles. With
 // `context: 'webgl2'`, view.ctx is that context, or null where it isn't available.
 // With `defer`, the context is only created by `acquire()`, so a costly one
-// (WebGL) can wait until after the page's first paint.
-export function mountCanvas(el, onResize, { context = '2d', attributes, defer = false } = {}) {
+// (WebGL) can wait until after the page's first paint. With `bleed`, the canvas
+// reaches that share of the element's size past each of its edges, so what is
+// drawn can grow beyond the element; the view then measures the whole canvas.
+export function mountCanvas(el, onResize, { context = '2d', attributes, defer = false, bleed = 0 } = {}) {
   if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
   if (el.clientHeight < 2) el.style.aspectRatio = '1';
   const canvas = document.createElement('canvas');
   canvas.setAttribute('aria-hidden', 'true');
-  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none';
+  canvas.style.cssText = `position:absolute;inset:${-bleed * 100}%;width:${100 + bleed * 200}%;height:${100 + bleed * 200}%;display:block;pointer-events:none`;
   el.appendChild(canvas);
-  const view = { canvas, ctx: defer ? null : canvas.getContext(context, attributes), width: 0, height: 0, ratio: 1 };
+  const view = { canvas, ctx: defer ? null : canvas.getContext(context, attributes), width: 0, height: 0, ratio: 1, bleed };
   let timer = 0;
 
   const measure = () => {
     const ratio = Math.min(devicePixelRatio || 1, 2);
-    const width = el.clientWidth, height = el.clientHeight;
+    const width = el.clientWidth * (1 + bleed * 2), height = el.clientHeight * (1 + bleed * 2);
     if (!width || !height) return;
     if (width === view.width && height === view.height && ratio === view.ratio) return;
     Object.assign(view, { width, height, ratio });
